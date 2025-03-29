@@ -60,6 +60,9 @@ class CurveExtractor:
 
     def plot_curve(self):
         """ This method plots the extracted normalized curve on a xy-plane.
+
+        Returns:
+            None
         """
         # Check if the curve has already been extracted. If not, extract the curve before plotting.
         if self.curve is None:
