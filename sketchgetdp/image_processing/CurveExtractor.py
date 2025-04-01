@@ -1,15 +1,15 @@
-""" This module is used to extract the curve(s) from a given image.
+"""This module is used to extract the curve(s) from a given image.
 
 Author: Laura D'Angelo
 """
 
-from PIL import Image 
+from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 
 
 class CurveExtractor:
-    """ This class is used to extract the curve(s) from a given image.
+    """This class is used to extract the curve(s) from a given image.
 
     Attributes:
         image_path (str): The path to the image file.
@@ -19,7 +19,7 @@ class CurveExtractor:
     """
 
     def __init__(self, image_path: str) -> "CurveExtractor":
-        """ The constructor for the CurveExtractor class. Reads an image file found at the path 
+        """The constructor for the CurveExtractor class. Reads an image file found at the path
         image_path.
 
         Parameters:
@@ -30,18 +30,17 @@ class CurveExtractor:
         self.image_array = np.array(self.image)
         self.curve = None
 
-
     def extract_curve(self) -> np.array:
-        """ This method extracts the curve from the image by converting the image to a binary image,
+        """This method extracts the curve from the image by converting the image to a binary image,
         then to a binary array, from which the coordinates of the curve are extracted and normalized.
 
         Returns:
             np.array: The x- and y-coordinates of the extracted curve, normalized to [0, 1]².
         """
         # Convert the image to binary image
-        binary_image = self.image.convert('1', dither=Image.NONE)
+        binary_image = self.image.convert("1", dither=Image.NONE)
 
-        # Convert the binary image to a numpy array. Black pixels are 0 and white pixels are 1, 
+        # Convert the binary image to a numpy array. Black pixels are 0 and white pixels are 1,
         # so we need to negate the binary array.
         binary_array = np.array(binary_image)
         negated_binary_array = np.logical_not(binary_array)
@@ -56,10 +55,9 @@ class CurveExtractor:
 
         self.curve = curve
         return curve
-    
 
     def plot_curve(self):
-        """ This method plots the extracted normalized curve on a xy-plane.
+        """This method plots the extracted normalized curve on a xy-plane.
 
         Returns:
             None
@@ -69,6 +67,5 @@ class CurveExtractor:
             self.extract_curve()
 
         # Plot the curve
-        plt.plot(self.curve[:, 1], self.curve[:, 0], 'x')
+        plt.plot(self.curve[:, 1], self.curve[:, 0], "x")
         plt.show()
-        
