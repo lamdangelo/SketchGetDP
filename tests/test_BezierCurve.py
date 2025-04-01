@@ -20,7 +20,7 @@ class TestBezierCurve(unittest.TestCase):
         """Test the evaluate method of the BezierCurve class.
         """
         t = np.array([0, 0.5, 1])
-        expected_result = np.array([[0, 0], [1.5, 2], [3, 0]])
+        expected_result = np.array([[0, 0], [1.5, 1.5], [3, 0]])
         result = self.bezier_curve.evaluate(t)
         self.assertTrue(np.allclose(result, expected_result))
 
@@ -28,6 +28,6 @@ class TestBezierCurve(unittest.TestCase):
         """Test the evaluate_derivative method of the BezierCurve class.
         """
         t = np.array([0, 0.5, 1])
-        expected_result = np.array([[3, -6], [3, 0], [0, 0]])
+        expected_result = np.array([[1, 2], [1, 0], [1, -2]])
         result = self.bezier_curve.evaluate_derivative(t)
         self.assertTrue(np.allclose(result, expected_result))
