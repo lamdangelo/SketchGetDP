@@ -35,6 +35,8 @@ class BezierCurve:
             np.array: The evaluated points on the Bézier curve.
         """
         # Ensure t has the correct shape
+        if t.ndim == 1:
+            t = t[:, np.newaxis]
         if np.size(t, 0) < np.size(t, 1):
             t = np.transpose(t)
 
@@ -55,15 +57,17 @@ class BezierCurve:
             np.array: The evaluated points on the derivative of the Bézier curve.
         """
         # Ensure t has the correct shape
+        if t.ndim == 1:
+            t = t[:, np.newaxis]        
         if np.size(t, 0) < np.size(t, 1):
             t = np.transpose(t)
 
         # Evaluate the derivative of the Bézier curve 
-        value = np.zeros((np.size(t, 1), 2))
+        value = np.zeros((np.size(t, 0), 2))
         n = self.degree
         for i in range(n):
-            value += math.comb(n-1, i) * t**i * (1 - t)**(n - i - 1) * (self.control_points[:, i+1] -
-                                                                        self.control_points[:, i])
+            value += math.comb(n-1, i) * t**i * (1 - t)**(n - i - 1) * (self.control_points[i+1, :] -
+                                                                        self.control_points[i, :])
         return value
     
     def plot(self) -> None:
