@@ -4,3 +4,5 @@ numpy
 Pillow
 scipy
 setuptools
+opencv-python
+svgwrite
