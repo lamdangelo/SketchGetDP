@@ -68,6 +68,43 @@ def detect_dominant_stroke_color(contour, original_image):
     
     return None
 
+def ensure_contour_closure(contour, tolerance=5.0):
+    """
+    Ensure the contour forms a closed loop by checking if start and end points are close enough.
+    Returns a closed contour.
+    """
+    if len(contour) < 3:
+        return contour
+    
+    start_point = contour[0][0]
+    end_point = contour[-1][0]
+    
+    # Calculate distance between start and end points
+    distance = np.linalg.norm(start_point - end_point)
+    
+    # If points are not close enough, add the start point at the end to close the contour
+    if distance > tolerance:
+        # Reshape the start point to match contour dimensions: [[x, y]]
+        start_point_reshaped = contour[0].reshape(1, 1, 2)
+        closed_contour = np.vstack([contour, start_point_reshaped])
+        print(f"  🔒 Closed contour: start-end distance was {distance:.2f} pixels")
+        return closed_contour
+    
+    return contour
+
+def is_contour_closed(contour, tolerance=5.0):
+    """
+    Check if a contour is closed by verifying start and end points are sufficiently close.
+    """
+    if len(contour) < 3:
+        return False
+    
+    start_point = contour[0][0]
+    end_point = contour[-1][0]
+    distance = np.linalg.norm(start_point - end_point)
+    
+    return distance <= tolerance
+
 def smart_curve_fitting(contour, angle_threshold=25, min_curve_angle=120):
     """
     Optimized hybrid approach: uses lines for straight segments, curves for curved segments
@@ -75,6 +112,9 @@ def smart_curve_fitting(contour, angle_threshold=25, min_curve_angle=120):
     """
     if len(contour) < 3:
         return None
+    
+    # Ensure contour is closed before processing
+    contour = ensure_contour_closure(contour)
     
     # Conservative simplification to remove noise but keep important features
     contour_length = cv2.arcLength(contour, True)
@@ -86,9 +126,20 @@ def smart_curve_fitting(contour, angle_threshold=25, min_curve_angle=120):
     
     points = [point[0] for point in approx]
     
-    # Ensure we have a closed path
-    if not np.array_equal(points[0], points[-1]):
+    # Closure check and enforcement
+    start_point = points[0]
+    end_point = points[-1]
+    distance_to_close = np.linalg.norm(np.array(start_point) - np.array(end_point))
+    
+    closure_threshold = 10.0  # pixels
+    is_closed = distance_to_close <= closure_threshold
+    
+    if not is_closed:
+        print(f"  ⚠️  Simplified contour not closed, distance: {distance_to_close:.2f}")
+        # Force closure by adding start point at the end
         points.append(points[0])
+        print("  🔒 Forced closure on simplified points")
+        is_closed = True
     
     path_data = f"M {points[0][0]},{points[0][1]}"
     
@@ -96,13 +147,18 @@ def smart_curve_fitting(contour, angle_threshold=25, min_curve_angle=120):
     i = 1
     
     while i < n:
+        # Handle wrap-around for closed paths
         current_point = points[i]
+        prev_point = points[i-1]
+        next_point = points[(i+1) % n]  # Wrap around for closed paths
+        
+        # For the last segment in a closed path, ensure we connect back to start
+        if i == n-1 and is_closed:
+            path_data += f" L {points[0][0]},{points[0][1]}"
+            break
         
         # Check if we have enough points for curve analysis
-        if i < n - 1:
-            prev_point = points[i-1]
-            next_point = points[i+1]
-            
+        if i < n - 1 or (is_closed and n > 3):
             # Calculate vectors and angle
             vec1 = np.array([prev_point[0] - current_point[0], prev_point[1] - current_point[1]])
             vec2 = np.array([next_point[0] - current_point[0], next_point[1] - current_point[1]])
@@ -141,7 +197,12 @@ def smart_curve_fitting(contour, angle_threshold=25, min_curve_angle=120):
             path_data += f" L {current_point[0]},{current_point[1]}"
             i += 1
     
+    # Always close the path with Z
     path_data += " Z"
+    
+    # Final closure verification
+    print(f"  {'✅' if is_closed else '⚠️'} Path closure: {is_closed} (distance: {distance_to_close:.2f}px)")
+    
     return path_data
 
 def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg"):
@@ -194,6 +255,8 @@ def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg")
         
         kept_contours = 0
         skipped_contours = 0
+        closed_contours = 0
+        forced_closed_contours = 0
         
         for i, contour in enumerate(contours):
             area = cv2.contourArea(contour)
@@ -223,22 +286,36 @@ def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg")
                     skipped_contours += 1
                     continue
             
+            # Check initial contour closure
+            is_initially_closed = is_contour_closed(contour)
+            if is_initially_closed:
+                closed_contours += 1
+            else:
+                forced_closed_contours += 1
+                print(f"  🔧 Contour {i} requires forced closure")
+            
             # Detect and categorize the color
             stroke_color = detect_dominant_stroke_color(contour, img)
             
             if stroke_color:  # Only process if we found a valid color category
                 color_groups[stroke_color].append(contour)
                 kept_contours += 1
-                print(f"✅ Keeping contour: area {area:.0f}, Color: {stroke_color}")
+                print(f"✅ Keeping contour {i}: area {area:.0f}, Color: {stroke_color}, Closed: {is_initially_closed}")
+            else:
+                skipped_contours += 1
+                print(f"❌ Skipping contour {i}: no valid color detected")
         
         print(f"\nFiltering results: {kept_contours} kept, {skipped_contours} skipped")
+        print(f"Closure status: {closed_contours} naturally closed, {forced_closed_contours} forced closed")
         print(f"Color groups found after filtering:")
         for color, contours in color_groups.items():
             print(f"  {color}: {len(contours)} contours")
         
         # Process each color group with smart curve fitting
+        total_paths = 0
         for color, contour_list in color_groups.items():
-            for contour in contour_list:
+            for j, contour in enumerate(contour_list):
+                print(f"🔄 Processing {color} contour {j+1}/{len(contour_list)}")
                 path_data = smart_curve_fitting(contour)
                 
                 if path_data:
@@ -251,22 +328,35 @@ def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg")
                         stroke_linecap="round",
                         stroke_linejoin="round"
                     ))
+                    total_paths += 1
+                    print(f"  ✅ Successfully created path for {color} contour {j+1}")
+                else:
+                    print(f"❌ Failed to process {color} contour {j+1}")
         
         dwg.save()
         print(f"✅ Smart curve fitting SVG saved: {output_svg}")
         print(f"🎨 Final color breakdown:")
         for color, contours in color_groups.items():
             print(f"   {color}: {len(contours)} paths")
+        print(f"📊 Total paths created: {total_paths}")
+        
+        if total_paths == 0:
+            print("❌ WARNING: No paths were created in the SVG!")
+            print("   Possible issues:")
+            print("   - Color detection failing")
+            print("   - Contours too complex for curve fitting")
+            print("   - Image quality issues")
         
         print(f"\n✨ Smart curve fitting completed!")
         print(f"   - Lines used for sharp corners")
         print(f"   - Curves used for gentle bends") 
         print(f"   - Shape preservation optimized")
-        return True
+        print(f"   - Closure enforcement: {forced_closed_contours} contours were forced closed")
+        return total_paths > 0
     else:
         print("❌ No contours found")
         return False
 
 if __name__ == "__main__":
-    input_image = "../../tests/inputs/sphere.jpg"
-    create_final_svg_color_categories(input_image, "sphere.svg")
+    input_image = "../../tests/inputs/colors.jpg"
+    create_final_svg_color_categories(input_image, "colors.svg")
