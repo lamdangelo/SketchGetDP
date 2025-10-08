@@ -1,2 +1,4 @@
 # config.yaml
-red_dots: 1  # Number of red dots to keep (largest structures)
+red_dots: 0
+blue_paths: 1 
+green_paths: 0

@@ -5,23 +5,25 @@ from collections import defaultdict
 import yaml
 import os
 
-def load_red_dots_config(config_path="config.yaml"):
+def load_config(config_path="config.yaml"):
     """
-    Load the number of red dots to keep from YAML config file
+    Load the number of structures to keep for each color from YAML config file
     """
     try:
         if os.path.exists(config_path):
             with open(config_path, 'r') as file:
                 config = yaml.safe_load(file)
                 red_dots = config.get('red_dots', 0)
-                print(f"📁 Loaded config: red_dots = {red_dots}")
-                return red_dots
+                blue_paths = config.get('blue_paths', 0)
+                green_paths = config.get('green_paths', 0)
+                print(f"📁 Loaded config: red_dots={red_dots}, blue_paths={blue_paths}, green_paths={green_paths}")
+                return red_dots, blue_paths, green_paths
         else:
             print(f"❌ Config file not found: {config_path}")
-            return 0
+            return 0, 0, 0
     except Exception as e:
         print(f"❌ Error loading config: {e}")
-        return 0
+        return 0, 0, 0
 
 def detect_points(contour, max_area=100, max_perimeter=80):
     """
@@ -273,18 +275,39 @@ def smart_curve_fitting(contour, angle_threshold=25, min_curve_angle=120):
     
     return path_data
 
+def filter_structures_by_area(structures, max_count):
+    """
+    Filter structures by area, keeping only the largest max_count structures
+    structures: list of tuples (area, data)
+    max_count: maximum number of structures to keep
+    Returns: filtered list
+    """
+    if max_count <= 0:
+        return []
+    
+    # Sort by area in descending order (largest first)
+    structures.sort(key=lambda x: x[0], reverse=True)
+    
+    # Keep only the largest max_count structures
+    if max_count < len(structures):
+        print(f"   Keeping only {max_count} largest structures (discarding {len(structures) - max_count})")
+        return structures[:max_count]
+    else:
+        print(f"   Keeping all {len(structures)} structures")
+        return structures
+
 def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg", config_path="config.yaml"):
     """
     Create SVG with colors categorized into blue, red, green and white background ignored
     Using smart curve fitting for optimal shape preservation and smoothness
     RED IS RESERVED FOR POINTS ONLY - all red shapes become point markers at their center
-    Number of red dots is controlled by YAML config file
+    Number of structures for each color is controlled by YAML config file
     """
     print(f"⚡ Creating categorized color outline with smart curve fitting: {output_svg}")
     print("🎯 NOTE: Red is reserved exclusively for point markers - all red shapes become points")
     
-    # Load red dots configuration
-    max_red_dots = load_red_dots_config(config_path)
+    # Load configuration for all color categories
+    max_red_dots, max_blue_paths, max_green_paths = load_config(config_path)
     
     # Read image
     img = cv2.imread(image_path)
@@ -321,11 +344,10 @@ def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg",
         # Create SVG
         dwg = Drawing(output_svg, size=(width, height))
         
-        # Separate storage for points vs paths
-        color_paths = defaultdict(list)   # Stores contours for paths
-        
-        # Store ALL potential red points (small points + red structures) for unified sorting
-        all_red_points = []  # Will store tuples of (area, center, is_small_point)
+        # Storage for all structures by type
+        all_red_points = []    # Will store tuples of (area, center, is_small_point)
+        blue_structures = []   # Will store tuples of (area, contour)
+        green_structures = []  # Will store tuples of (area, contour)
         
         # Calculate image area for relative sizing
         total_image_area = width * height
@@ -368,7 +390,7 @@ def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg",
                     skipped_contours += 1
                     continue
             
-            # Detect and categorize the color for paths
+            # Detect and categorize the color
             stroke_color = detect_dominant_stroke_color(contour, img)
             
             if stroke_color:
@@ -381,58 +403,91 @@ def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg",
                         print(f"  🔴 Red structure found: area={area:.1f}, center=({center[0]}, {center[1]})")
                     else:
                         print(f"  ⚠️  Red shape has no center, skipping")
-                else:
-                    # For blue and green, keep as paths
-                    color_paths[stroke_color].append(contour)
-                    print(f"  🎨 Path color: {stroke_color}")
+                
+                # Store blue structures for filtering
+                elif stroke_color == "#0000FF":
+                    blue_structures.append((area, contour))
+                    print(f"  🔵 Blue structure found: area={area:.1f}")
+                
+                # Store green structures for filtering  
+                elif stroke_color == "#00FF00":
+                    green_structures.append((area, contour))
+                    print(f"  🟢 Green structure found: area={area:.1f}")
+                    
                 kept_contours += 1
             else:
                 skipped_contours += 1
         
-        # ⭐ UNIFIED RED POINTS PROCESSING: Sort ALL red points by area and keep only max_red_dots
+        # ⭐ FILTER ALL STRUCTURES BY CONFIGURED LIMITS
+        
+        # Filter red points
         if all_red_points:
-            # Sort all red points by area in descending order (largest first)
-            all_red_points.sort(key=lambda x: x[0], reverse=True)
-            
             print(f"\n🔴 Found {len(all_red_points)} total red points/structures")
             print("   Sorting by area (largest to smallest):")
             for i, (area, center, is_small_point) in enumerate(all_red_points):
                 point_type = "small point" if is_small_point else "red structure"
                 print(f"   {i+1}. Area: {area:.1f}, Type: {point_type}, Center: ({center[0]}, {center[1]})")
             
-            # Keep only the largest N red points total
-            if max_red_dots > 0 and max_red_dots < len(all_red_points):
-                print(f"   Keeping only {max_red_dots} largest red points (discarding {len(all_red_points) - max_red_dots})")
-                all_red_points = all_red_points[:max_red_dots]
-            elif max_red_dots == 0:
-                print("   Discarding all red points (red_dots = 0)")
-                all_red_points = []
-            else:
-                print(f"   Keeping all {len(all_red_points)} red points")
+            all_red_points = filter_structures_by_area(all_red_points, max_red_dots)
+        
+        # Filter blue paths
+        if blue_structures:
+            print(f"\n🔵 Found {len(blue_structures)} blue structures")
+            print("   Sorting by area (largest to smallest):")
+            for i, (area, contour) in enumerate(blue_structures):
+                print(f"   {i+1}. Area: {area:.1f}")
+            
+            blue_structures = filter_structures_by_area(blue_structures, max_blue_paths)
+        
+        # Filter green paths  
+        if green_structures:
+            print(f"\n🟢 Found {len(green_structures)} green structures")
+            print("   Sorting by area (largest to smallest):")
+            for i, (area, contour) in enumerate(green_structures):
+                print(f"   {i+1}. Area: {area:.1f}")
+            
+            green_structures = filter_structures_by_area(green_structures, max_green_paths)
         
         print(f"\n📊 Filtering results: {kept_contours} kept, {skipped_contours} skipped")
-        print(f"📍 Final red points: {len(all_red_points)} (after YAML limit)")
+        print(f"📍 Final red points: {len(all_red_points)}")
+        print(f"🔵 Final blue paths: {len(blue_structures)}") 
+        print(f"🟢 Final green paths: {len(green_structures)}")
         
-        # Process paths with smart curve fitting (only blue and green)
+        # Process blue paths with smart curve fitting
         total_paths = 0
-        for color, contour_list in color_paths.items():
-            print(f"🎨 Processing {len(contour_list)} paths for color {color}")
-            for j, contour in enumerate(contour_list):
-                path_data = smart_curve_fitting(contour)
-                
-                if path_data:
-                    dwg.add(dwg.path(
-                        d=path_data,
-                        fill="none",
-                        stroke=color,
-                        stroke_width=2,
-                        stroke_linecap="round",
-                        stroke_linejoin="round"
-                    ))
-                    total_paths += 1
+        print(f"\n🔵 Processing {len(blue_structures)} blue paths")
+        for area, contour in blue_structures:
+            path_data = smart_curve_fitting(contour)
+            
+            if path_data:
+                dwg.add(dwg.path(
+                    d=path_data,
+                    fill="none",
+                    stroke="#0000FF",
+                    stroke_width=2,
+                    stroke_linecap="round",
+                    stroke_linejoin="round"
+                ))
+                total_paths += 1
+        
+        # Process green paths with smart curve fitting
+        print(f"\n🟢 Processing {len(green_structures)} green paths")
+        for area, contour in green_structures:
+            path_data = smart_curve_fitting(contour)
+            
+            if path_data:
+                dwg.add(dwg.path(
+                    d=path_data,
+                    fill="none",
+                    stroke="#00FF00", 
+                    stroke_width=2,
+                    stroke_linecap="round",
+                    stroke_linejoin="round"
+                ))
+                total_paths += 1
         
         # Process points with custom markers - ALWAYS USE RED FOR POINTS
-        print(f"🔴 Processing {len(all_red_points)} final red points as simple dots")
+        print(f"\n🔴 Processing {len(all_red_points)} final red points as simple dots")
         total_points_added = 0
         for area, center, is_small_point in all_red_points:
             x, y = center
@@ -452,12 +507,13 @@ def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg",
         dwg.save()
         print(f"✅ SVG saved: {output_svg}")
         print(f"🎨 Final breakdown:")
-        print(f"   Paths: {total_paths} (blue and green only)")
-        print(f"   Points: {total_points_added} (all red dots)")
-        print(f"   Red dots configuration: {max_red_dots} (from YAML)")
+        print(f"   Blue paths: {len(blue_structures)}")
+        print(f"   Green paths: {len(green_structures)}")
+        print(f"   Red points: {total_points_added}")
+        print(f"   Configuration: red_dots={max_red_dots}, blue_paths={max_blue_paths}, green_paths={max_green_paths}")
         
-        if total_points_added == 0:
-            print("❕ No points were detected.")
+        if total_points_added == 0 and total_paths == 0:
+            print("❕ No structures were detected.")
         
         return total_paths + total_points_added > 0
     else:
