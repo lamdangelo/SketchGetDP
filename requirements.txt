@@ -6,3 +6,4 @@ scipy
 setuptools
 opencv-python
 svgwrite
+PyYAML

@@ -2,6 +2,74 @@ import cv2
 import numpy as np
 from svgwrite import Drawing
 from collections import defaultdict
+import yaml
+import os
+
+def load_red_dots_config(config_path="config.yaml"):
+    """
+    Load the number of red dots to keep from YAML config file
+    """
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as file:
+                config = yaml.safe_load(file)
+                red_dots = config.get('red_dots', 0)
+                print(f"📁 Loaded config: red_dots = {red_dots}")
+                return red_dots
+        else:
+            print(f"❌ Config file not found: {config_path}")
+            return 0
+    except Exception as e:
+        print(f"❌ Error loading config: {e}")
+        return 0
+
+def detect_points(contour, max_area=100, max_perimeter=80):
+    """
+    Detect if a contour represents a point (very small, compact shape)
+    Returns center coordinates if it's a point, None otherwise
+    """
+    if len(contour) < 3:
+        return None
+    
+    # Calculate contour properties
+    area = cv2.contourArea(contour)
+    perimeter = cv2.arcLength(contour, True)
+    
+    # More lenient criteria for points
+    if area < max_area and perimeter < max_perimeter:
+        # Calculate centroid
+        M = cv2.moments(contour)
+        if M["m00"] != 0:
+            center_x = int(M["m10"] / M["m00"])
+            center_y = int(M["m01"] / M["m00"])
+            print(f"  📍 Point detected: area={area:.1f}, perimeter={perimeter:.1f}, center=({center_x}, {center_y})")
+            return (center_x, center_y)
+    
+    return None
+
+def create_point_marker(center_x, center_y, radius=3):
+    """
+    Create a simple dot as a filled circle
+    Returns SVG circle element for the point marker
+    """
+    # Simple dot - filled circle
+    return {
+        'type': 'circle',
+        'cx': center_x,
+        'cy': center_y,
+        'r': radius
+    }
+
+def get_contour_center(contour):
+    """
+    Calculate the center point of any contour
+    """
+    M = cv2.moments(contour)
+    if M["m00"] != 0:
+        center_x = int(M["m10"] / M["m00"])
+        center_y = int(M["m01"] / M["m00"])
+        return (center_x, center_y)
+    return None
 
 def categorize_color(bgr_color):
     """
@@ -205,12 +273,18 @@ def smart_curve_fitting(contour, angle_threshold=25, min_curve_angle=120):
     
     return path_data
 
-def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg"):
+def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg", config_path="config.yaml"):
     """
     Create SVG with colors categorized into blue, red, green and white background ignored
     Using smart curve fitting for optimal shape preservation and smoothness
+    RED IS RESERVED FOR POINTS ONLY - all red shapes become point markers at their center
+    Number of red dots is controlled by YAML config file
     """
     print(f"⚡ Creating categorized color outline with smart curve fitting: {output_svg}")
+    print("🎯 NOTE: Red is reserved exclusively for point markers - all red shapes become points")
+    
+    # Load red dots configuration
+    max_red_dots = load_red_dots_config(config_path)
     
     # Read image
     img = cv2.imread(image_path)
@@ -247,22 +321,35 @@ def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg")
         # Create SVG
         dwg = Drawing(output_svg, size=(width, height))
         
-        # Group contours by color category
-        color_groups = defaultdict(list)
+        # Separate storage for points vs paths
+        color_paths = defaultdict(list)   # Stores contours for paths
+        
+        # Store ALL potential red points (small points + red structures) for unified sorting
+        all_red_points = []  # Will store tuples of (area, center, is_small_point)
         
         # Calculate image area for relative sizing
         total_image_area = width * height
         
         kept_contours = 0
         skipped_contours = 0
-        closed_contours = 0
-        forced_closed_contours = 0
         
         for i, contour in enumerate(contours):
             area = cv2.contourArea(contour)
+            perimeter = cv2.arcLength(contour, True)
             
-            # Filter 1: Area-based filtering (moderate threshold)
-            min_area = 150  # Balanced threshold
+            print(f"Contour {i}: area={area:.1f}, perimeter={perimeter:.1f}, points={len(contour)}")
+            
+            # First, check if this is a small point
+            point_center = detect_points(contour)
+            if point_center:
+                # Store small points with their area for unified sorting
+                all_red_points.append((area, point_center, True))
+                kept_contours += 1
+                print(f"  ✅ Small point found: area={area:.1f}")
+                continue  # Skip further processing for small points
+            
+            # For non-points, apply regular filters
+            min_area = 150
             max_area = total_image_area * 0.8
             
             if area < min_area or area > max_area:
@@ -270,56 +357,70 @@ def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg")
                 continue
             
             # Filter 2: Hierarchy-based filtering - only keep top-level contours
-            # hierarchy structure: [Next, Previous, First_Child, Parent]
             if hierarchy is not None and hierarchy[0][i][3] != -1:
-                # This contour has a parent (it's nested inside another contour)
-                # Often these are holes or internal details we don't want
                 skipped_contours += 1
                 continue
             
-            # Filter 3: Solidarity check - contours should be reasonably solid
-            perimeter = cv2.arcLength(contour, True)
+            # Filter 3: Solidarity check
             if perimeter > 0:
                 circularity = 4 * np.pi * area / (perimeter * perimeter)
-                # Very low circularity often indicates fragmented/noisy contours
                 if circularity < 0.01:  
                     skipped_contours += 1
                     continue
             
-            # Check initial contour closure
-            is_initially_closed = is_contour_closed(contour)
-            if is_initially_closed:
-                closed_contours += 1
-            else:
-                forced_closed_contours += 1
-                print(f"  🔧 Contour {i} requires forced closure")
-            
-            # Detect and categorize the color
+            # Detect and categorize the color for paths
             stroke_color = detect_dominant_stroke_color(contour, img)
             
-            if stroke_color:  # Only process if we found a valid color category
-                color_groups[stroke_color].append(contour)
+            if stroke_color:
+                # ⭐ CRITICAL: If the color is red, store for unified sorting
+                if stroke_color == "#FF0000":
+                    center = get_contour_center(contour)
+                    if center:
+                        # Store red structure with area for unified sorting
+                        all_red_points.append((area, center, False))
+                        print(f"  🔴 Red structure found: area={area:.1f}, center=({center[0]}, {center[1]})")
+                    else:
+                        print(f"  ⚠️  Red shape has no center, skipping")
+                else:
+                    # For blue and green, keep as paths
+                    color_paths[stroke_color].append(contour)
+                    print(f"  🎨 Path color: {stroke_color}")
                 kept_contours += 1
-                print(f"✅ Keeping contour {i}: area {area:.0f}, Color: {stroke_color}, Closed: {is_initially_closed}")
             else:
                 skipped_contours += 1
-                print(f"❌ Skipping contour {i}: no valid color detected")
         
-        print(f"\nFiltering results: {kept_contours} kept, {skipped_contours} skipped")
-        print(f"Closure status: {closed_contours} naturally closed, {forced_closed_contours} forced closed")
-        print(f"Color groups found after filtering:")
-        for color, contours in color_groups.items():
-            print(f"  {color}: {len(contours)} contours")
+        # ⭐ UNIFIED RED POINTS PROCESSING: Sort ALL red points by area and keep only max_red_dots
+        if all_red_points:
+            # Sort all red points by area in descending order (largest first)
+            all_red_points.sort(key=lambda x: x[0], reverse=True)
+            
+            print(f"\n🔴 Found {len(all_red_points)} total red points/structures")
+            print("   Sorting by area (largest to smallest):")
+            for i, (area, center, is_small_point) in enumerate(all_red_points):
+                point_type = "small point" if is_small_point else "red structure"
+                print(f"   {i+1}. Area: {area:.1f}, Type: {point_type}, Center: ({center[0]}, {center[1]})")
+            
+            # Keep only the largest N red points total
+            if max_red_dots > 0 and max_red_dots < len(all_red_points):
+                print(f"   Keeping only {max_red_dots} largest red points (discarding {len(all_red_points) - max_red_dots})")
+                all_red_points = all_red_points[:max_red_dots]
+            elif max_red_dots == 0:
+                print("   Discarding all red points (red_dots = 0)")
+                all_red_points = []
+            else:
+                print(f"   Keeping all {len(all_red_points)} red points")
         
-        # Process each color group with smart curve fitting
+        print(f"\n📊 Filtering results: {kept_contours} kept, {skipped_contours} skipped")
+        print(f"📍 Final red points: {len(all_red_points)} (after YAML limit)")
+        
+        # Process paths with smart curve fitting (only blue and green)
         total_paths = 0
-        for color, contour_list in color_groups.items():
+        for color, contour_list in color_paths.items():
+            print(f"🎨 Processing {len(contour_list)} paths for color {color}")
             for j, contour in enumerate(contour_list):
-                print(f"🔄 Processing {color} contour {j+1}/{len(contour_list)}")
                 path_data = smart_curve_fitting(contour)
                 
                 if path_data:
-                    # Add smooth path with categorized color
                     dwg.add(dwg.path(
                         d=path_data,
                         fill="none",
@@ -329,30 +430,36 @@ def create_final_svg_color_categories(image_path, output_svg="peanut_smart.svg")
                         stroke_linejoin="round"
                     ))
                     total_paths += 1
-                    print(f"  ✅ Successfully created path for {color} contour {j+1}")
-                else:
-                    print(f"❌ Failed to process {color} contour {j+1}")
+        
+        # Process points with custom markers - ALWAYS USE RED FOR POINTS
+        print(f"🔴 Processing {len(all_red_points)} final red points as simple dots")
+        total_points_added = 0
+        for area, center, is_small_point in all_red_points:
+            x, y = center
+            point_data = create_point_marker(x, y, radius=4)  # Simple dot with radius 4
+            
+            # Create a simple filled circle for the point
+            dwg.add(dwg.circle(
+                center=(point_data['cx'], point_data['cy']),
+                r=point_data['r'],
+                fill="#FF0000",  # Filled red
+                stroke="none"    # No border
+            ))
+            total_points_added += 1
+            point_type = "small point" if is_small_point else "red structure"
+            print(f"    ✅ Added red dot at ({x}, {y}) - {point_type}, area={area:.1f}")
         
         dwg.save()
-        print(f"✅ Smart curve fitting SVG saved: {output_svg}")
-        print(f"🎨 Final color breakdown:")
-        for color, contours in color_groups.items():
-            print(f"   {color}: {len(contours)} paths")
-        print(f"📊 Total paths created: {total_paths}")
+        print(f"✅ SVG saved: {output_svg}")
+        print(f"🎨 Final breakdown:")
+        print(f"   Paths: {total_paths} (blue and green only)")
+        print(f"   Points: {total_points_added} (all red dots)")
+        print(f"   Red dots configuration: {max_red_dots} (from YAML)")
         
-        if total_paths == 0:
-            print("❌ WARNING: No paths were created in the SVG!")
-            print("   Possible issues:")
-            print("   - Color detection failing")
-            print("   - Contours too complex for curve fitting")
-            print("   - Image quality issues")
+        if total_points_added == 0:
+            print("❕ No points were detected.")
         
-        print(f"\n✨ Smart curve fitting completed!")
-        print(f"   - Lines used for sharp corners")
-        print(f"   - Curves used for gentle bends") 
-        print(f"   - Shape preservation optimized")
-        print(f"   - Closure enforcement: {forced_closed_contours} contours were forced closed")
-        return total_paths > 0
+        return total_paths + total_points_added > 0
     else:
         print("❌ No contours found")
         return False
