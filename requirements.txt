@@ -1,3 +1,4 @@
+gmsh
 matplotlib
 numpy
 Pillow
