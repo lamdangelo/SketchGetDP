@@ -162,19 +162,6 @@ def ensure_contour_closure(contour, tolerance=5.0):
     
     return contour
 
-def is_contour_closed(contour, tolerance=5.0):
-    """
-    Check if a contour is closed by verifying start and end points are sufficiently close.
-    """
-    if len(contour) < 3:
-        return False
-    
-    start_point = contour[0][0]
-    end_point = contour[-1][0]
-    distance = np.linalg.norm(start_point - end_point)
-    
-    return distance <= tolerance
-
 def smart_curve_fitting(contour, angle_threshold=25, min_curve_angle=120):
     """
     Optimized hybrid approach: uses lines for straight segments, curves for curved segments
