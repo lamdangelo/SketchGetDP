@@ -15,6 +15,10 @@ class ClosedContour:
     is_closed: bool
     closure_gap: float
     
+    def __post_init__(self):
+        """Make a defensive copy of the points list to prevent external mutation."""
+        self.points = self.points.copy()
+    
     @property
     def area(self) -> float:
         """
