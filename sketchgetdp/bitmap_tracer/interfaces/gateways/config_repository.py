@@ -14,7 +14,7 @@ class ConfigRepository(ABC):
     """Contracts for managing application configuration state and defaults."""
     
     @abstractmethod
-    def load_config(self, config_path: str = "config.yaml") -> bool:
+    def load_config(self, config_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Load and parse configuration from persistent storage.
         
@@ -22,16 +22,15 @@ class ConfigRepository(ABC):
         and setting appropriate defaults for missing values.
         
         Args:
-            config_path: Path to configuration file in YAML format
+            config_path: Optional path to configuration file in YAML format
             
         Returns:
-            True if configuration was successfully loaded and validated,
-            False if file is missing or contains invalid data
+            Dictionary containing configuration data, or None if loading fails
         """
         pass
     
     @abstractmethod
-    def get_color_limits(self) -> Tuple[int, int, int]:
+    def get_structure_limits(self) -> Tuple[int, int, int]:
         """
         Retrieve the maximum number of structures to process for each color category.
         
@@ -71,35 +70,5 @@ class ConfigRepository(ABC):
         
         Returns:
             Dictionary containing all configuration key-value pairs
-        """
-        pass
-    
-    @abstractmethod
-    def validate_config(self) -> bool:
-        """
-        Verify that loaded configuration meets application requirements.
-        
-        Performs semantic validation beyond basic syntax checking,
-        ensuring all required parameters are present and within valid ranges.
-        
-        Returns:
-            True if configuration is complete and valid for tracing operations
-        """
-        pass
-    
-    @abstractmethod
-    def set_config_override(self, key: str, value: Any) -> None:
-        """
-        Temporarily override a configuration value at runtime.
-        
-        Primarily used for testing scenarios or dynamic configuration
-        changes without modifying persistent configuration files.
-        
-        Args:
-            key: Configuration parameter to override
-            value: New value to use for this session
-            
-        Warning:
-            Overrides are session-specific and not persisted to disk
         """
         pass

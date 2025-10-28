@@ -8,73 +8,55 @@ the ConfigRepository interface from the application core.
 
 import yaml
 import os
-from typing import Tuple, Dict, Any
-from ...interfaces.gateways.config_repository import ConfigRepository
+from typing import Tuple, Dict, Any, Optional
+from interfaces.gateways.config_repository import ConfigRepository
 
 
 class ConfigLoader(ConfigRepository):
     """
     Loads and manages application configuration from YAML files.
-    
-    This class serves as the concrete implementation of the ConfigRepository
-    interface, providing configuration data to the application while abstracting
-    the details of configuration storage and format.
-    
-    Attributes:
-        config_path: Path to the YAML configuration file
-        _config_cache: Internal cache for loaded configuration to avoid repeated file reads
     """
     
-    def __init__(self, config_path: str = "config.yaml") -> None:
-        """Initialize with the path to the configuration file.
-        
-        Args:
-            config_path: Relative or absolute path to the YAML configuration file
-        """
-        self.config_path = config_path
+    def __init__(self, default_config_path: str = "config.yaml") -> None:
+        self.default_config_path = default_config_path
         self._config_cache = None
+        self._overrides = {}  # For runtime configuration overrides
     
-    def load_config(self) -> Dict[str, Any]:
+    def load_config(self, config_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Load configuration data from the YAML file.
         
-        Uses caching to avoid repeated file system access. Subsequent calls
-        return the cached configuration unless reload_config() is called.
-        
-        Returns:
-            Dictionary containing all configuration key-value pairs
+        Args:
+            config_path: Optional path to config file, uses default if not provided
             
-        Raises:
-            FileNotFoundError: When the configuration file does not exist
-            yaml.YAMLError: When the configuration file contains invalid YAML
-            Exception: For any other file reading or parsing errors
+        Returns:
+            Dictionary containing all configuration key-value pairs, or None if loading fails
         """
         if self._config_cache is not None:
-            return self._config_cache
+            return self._apply_overrides(self._config_cache)
             
-        if not os.path.exists(self.config_path):
-            raise FileNotFoundError(f"Configuration file not found: {self.config_path}")
+        actual_config_path = config_path or self.default_config_path
+        
+        if not os.path.exists(actual_config_path):
+            print(f"⚠️ Configuration file not found: {actual_config_path}, using defaults")
+            self._config_cache = {}
+            return self._apply_overrides(self._config_cache)
         
         try:
-            with open(self.config_path, 'r') as file:
+            with open(actual_config_path, 'r') as file:
                 config = yaml.safe_load(file)
                 self._config_cache = config or {}
-                return self._config_cache
+                print(f"✅ Loaded configuration from: {actual_config_path}")
+                return self._apply_overrides(self._config_cache)
         except yaml.YAMLError as e:
-            raise yaml.YAMLError(f"Error parsing YAML configuration: {e}")
+            print(f"❌ Error parsing YAML configuration {actual_config_path}: {e}")
+            return None
         except Exception as e:
-            raise Exception(f"Error loading configuration: {e}")
+            print(f"❌ Error loading configuration {actual_config_path}: {e}")
+            return None
     
     def get_structure_limits(self) -> Tuple[int, int, int]:
-        """Get the maximum number of structures to keep for each color category.
-        
-        These limits control how many contours of each color are preserved
-        during the filtering process. Structures are kept based on area size
-        (largest first) up to these limits.
-        
-        Returns:
-            Tuple containing (red_dots_limit, blue_paths_limit, green_paths_limit)
-        """
-        config = self.load_config()
+        """Get the maximum number of structures to keep for each color category."""
+        config = self.load_config() or {}
         
         red_dots = config.get('red_dots', 0)
         blue_paths = config.get('blue_paths', 0)
@@ -82,22 +64,18 @@ class ConfigLoader(ConfigRepository):
         
         return red_dots, blue_paths, green_paths
     
+    def get_config_value(self, key: str, default: Any = None) -> Any:
+        """Retrieve a specific configuration value by key."""
+        config = self.load_config() or {}
+        return config.get(key, default)
+    
+    def get_all_config(self) -> Dict[str, Any]:
+        """Retrieve complete configuration as a dictionary."""
+        return self.load_config() or {}
+    
     def get_contour_detection_params(self) -> Dict[str, Any]:
-        """Get parameters for contour detection and filtering.
-        
-        Returns parameters that control how contours are detected from the
-        source image and which contours are considered valid for processing.
-        
-        Returns:
-            Dictionary containing:
-            - min_area: Minimum contour area to be considered valid
-            - max_area_ratio: Maximum contour area as ratio of total image area
-            - point_max_area: Maximum area for a contour to be classified as a point
-            - point_max_perimeter: Maximum perimeter for point classification
-            - closure_tolerance: Distance threshold for automatic contour closure
-            - circularity_threshold: Minimum circularity for valid contours
-        """
-        config = self.load_config()
+        """Get parameters for contour detection and filtering."""
+        config = self.load_config() or {}
         
         return {
             'min_area': config.get('min_area', 150),
@@ -109,19 +87,8 @@ class ConfigLoader(ConfigRepository):
         }
     
     def get_curve_fitting_params(self) -> Dict[str, Any]:
-        """Get parameters for curve fitting and path simplification.
-        
-        These parameters control the smart curve fitting algorithm that
-        converts pixel-based contours into smooth SVG paths.
-        
-        Returns:
-            Dictionary containing:
-            - angle_threshold: Angle below which segments are treated as straight lines
-            - min_curve_angle: Minimum angle for considering a segment as a curve
-            - epsilon_factor: Factor for contour simplification (Douglas-Peucker)
-            - closure_threshold: Maximum gap distance for considering a path closed
-        """
-        config = self.load_config()
+        """Get parameters for curve fitting and path simplification."""
+        config = self.load_config() or {}
         
         return {
             'angle_threshold': config.get('angle_threshold', 25),
@@ -131,22 +98,8 @@ class ConfigLoader(ConfigRepository):
         }
     
     def get_color_detection_params(self) -> Dict[str, Any]:
-        """Get parameters for color categorization.
-        
-        Returns thresholds and ranges used to categorize pixels into
-        blue, red, green, white, or black categories.
-        
-        Returns:
-            Dictionary containing:
-            - blue_hue_range: HSV hue range for blue color detection
-            - red_hue_range: HSV hue ranges for red color detection
-            - green_hue_range: HSV hue range for green color detection
-            - color_difference_threshold: RGB difference threshold for color dominance
-            - min_saturation: Minimum saturation to avoid classifying as white
-            - max_value_white: Maximum value above which colors are considered white
-            - min_value_black: Minimum value below which colors are considered black
-        """
-        config = self.load_config()
+        """Get parameters for color categorization."""
+        config = self.load_config() or {}
         
         return {
             'blue_hue_range': config.get('blue_hue_range', [100, 140]),
@@ -159,20 +112,8 @@ class ConfigLoader(ConfigRepository):
         }
     
     def get_svg_params(self) -> Dict[str, Any]:
-        """Get parameters for SVG generation and styling.
-        
-        Returns visual parameters that control the appearance of the
-        generated SVG output.
-        
-        Returns:
-            Dictionary containing:
-            - point_radius: Radius of point markers in the SVG
-            - stroke_width: Width of path strokes in the SVG
-            - blue_color: Hex color code for blue paths
-            - red_color: Hex color code for red points
-            - green_color: Hex color code for green paths
-        """
-        config = self.load_config()
+        """Get parameters for SVG generation and styling."""
+        config = self.load_config() or {}
         
         return {
             'point_radius': config.get('point_radius', 4),
@@ -183,21 +124,23 @@ class ConfigLoader(ConfigRepository):
         }
     
     def reload_config(self) -> None:
-        """Force reload of configuration from file.
-        
-        Clears the internal cache, ensuring that the next configuration
-        access will read from the file system. This is useful when the
-        configuration file has been modified during runtime.
-        """
+        """Force reload of configuration from file."""
         self._config_cache = None
     
     def get_limits(self) -> Tuple[int, int, int]:
-        """Get structure limits (alias for get_structure_limits).
-        
-        Provides backward compatibility with existing code that expects
-        this method name.
-        
-        Returns:
-            Tuple containing (red_dots_limit, blue_paths_limit, green_paths_limit)
-        """
+        """Get structure limits (alias for get_structure_limits)."""
         return self.get_structure_limits()
+    
+    def set_config_override(self, key: str, value: Any) -> None:
+        """Temporarily override a configuration value at runtime."""
+        self._overrides[key] = value
+        print(f"🔧 Configuration override set: {key} = {value}")
+    
+    def _apply_overrides(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply runtime overrides to the configuration."""
+        if not self._overrides:
+            return config
+        
+        result = config.copy()
+        result.update(self._overrides)
+        return result

@@ -1,19 +1,18 @@
 """
-Bitmap Tracer Application - Simplified Entry Point
+Bitmap Tracer Application - Clean Architecture Entry Point
 
-This module provides a clean command-line interface to the existing bitmap tracing
-functionality.
+This module provides a clean command-line interface to the bitmap tracing
+functionality using the clean architecture implementation.
 
 The application converts bitmap images to SVG vector graphics through a structured
 process of contour detection, color analysis, and vector path generation.
-
-@author: CellarKid
-@version: 1.0.0
 """
 
 import sys
 import os
 import argparse
+
+from interfaces.controllers.tracing_controller import TracingController
 
 
 def validate_input_file_exists(file_path: str) -> None:
@@ -86,10 +85,10 @@ def parse_command_line_arguments() -> argparse.Namespace:
 
 def execute_tracing_pipeline(input_path: str, output_path: str, config_path: str) -> bool:
     """
-    Executes the complete bitmap-to-SVG tracing pipeline.
+    Executes the complete bitmap-to-SVG tracing pipeline using clean architecture.
     
-    This function orchestrates the main workflow by calling the existing
-    tracing functionality with proper error handling and logging.
+    This function uses the TracingController to orchestrate the workflow
+    through the clean architecture layers.
     
     Args:
         input_path: Path to source bitmap image.
@@ -100,18 +99,19 @@ def execute_tracing_pipeline(input_path: str, output_path: str, config_path: str
         True if SVG was generated successfully, False otherwise.
     """
     try:
-        # Import here to avoid circular dependencies and provide cleaner error messages
-        from bitmap_tracer import create_final_svg_color_categories
+        # Create the tracing controller - this is the entry point to clean architecture
+        controller = TracingController()
         
-        return create_final_svg_color_categories(
+        # Execute the tracing workflow
+        result = controller.trace_image(
             image_path=input_path,
-            output_svg=output_path,
+            output_svg_path=output_path,
             config_path=config_path
         )
         
-    except ImportError as import_error:
-        print(f"❌ Failed to import tracing module: {import_error}")
-        return False
+        # Return success status
+        return result.get('success', False)
+        
     except Exception as processing_error:
         print(f"❌ Tracing pipeline error: {processing_error}")
         return False
@@ -127,7 +127,7 @@ def log_application_startup(arguments: argparse.Namespace) -> None:
     Args:
         arguments: Parsed command-line arguments containing execution parameters.
     """
-    print("🖼️  Bitmap Tracer Application Starting")
+    print("🖼️  Bitmap Tracer Application Starting - Clean Architecture")
     print("=" * 50)
     print(f"📁 Input Image: {arguments.input_image}")
     print(f"📁 Output SVG: {arguments.output}")
@@ -135,7 +135,7 @@ def log_application_startup(arguments: argparse.Namespace) -> None:
     print("=" * 50)
 
 
-def log_application_result(success: bool) -> None:
+def log_application_result(success: bool, output_path: str = "") -> None:
     """
     Logs the final result of the tracing operation.
     
@@ -144,9 +144,10 @@ def log_application_result(success: bool) -> None:
     
     Args:
         success: True if tracing completed successfully, False otherwise.
+        output_path: Path to the generated SVG file (on success).
     """
     if success:
-        print("✅ Tracing completed successfully - SVG file generated!")
+        print(f"✅ Tracing completed successfully - SVG file generated: {output_path}")
     else:
         print("❌ Tracing failed - check error messages above for details.")
 
@@ -155,10 +156,11 @@ def main() -> None:
     """
     Main entry point for the Bitmap Tracer command-line application.
     
-    This function orchestrates the complete application workflow:
+    This function orchestrates the complete application workflow using
+    the clean architecture implementation:
     1. Parse and validate command-line arguments
     2. Verify input file existence and accessibility
-    3. Execute the tracing pipeline
+    3. Execute the tracing pipeline via TracingController
     4. Provide clear success/failure feedback
     5. Return appropriate exit codes
     
@@ -166,10 +168,6 @@ def main() -> None:
         0: Success - SVG file generated successfully
         1: Failure - Invalid input, processing error, or file issues
         2: System error - Unexpected application failure
-    
-    The function follows the Single Responsibility Principle by focusing
-    exclusively on command-line interface concerns and delegating business
-    logic to specialized functions.
     """
     try:
         arguments = parse_command_line_arguments()
@@ -182,7 +180,7 @@ def main() -> None:
             config_path=arguments.config
         )
         
-        log_application_result(tracing_success)
+        log_application_result(tracing_success, arguments.output)
         exit_code = 0 if tracing_success else 1
         sys.exit(exit_code)
         

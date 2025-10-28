@@ -7,19 +7,20 @@
 ## Structure Limits
 # Maximum number of structures to keep for each color category after filtering.
 # Structures are sorted by area (largest first) and only the top N are kept.
-red_dots: 10    # Maximum red points to preserve
-blue_paths: 5   # Maximum blue paths to preserve  
-green_paths: 5  # Maximum green paths to preserve
+red_dots: 1    # Maximum red points to preserve
+blue_paths: 1   # Maximum blue paths to preserve  
+green_paths: 1  # Maximum green paths to preserve
 
 ## Contour Detection Parameters
 # Control how contours are detected and filtered from the source image.
 min_area: 150           # Minimum area in pixels for a valid contour
 max_area_ratio: 0.8     # Maximum contour area as ratio of total image area (0.0-1.0)
-point_max_area: 100     # Maximum area for a contour to be classified as a point
-point_max_perimeter: 80 # Maximum perimeter for point classification
+point_max_area: 2000     # Maximum area for a contour to be classified as a point
+point_max_perimeter: 1000 # Maximum perimeter for point classification
 closure_tolerance: 5.0  # Maximum gap distance for automatic contour closure (pixels)
 circularity_threshold: 0.01  # Minimum circularity (4πA/P²) for valid contours
 
+# TODO: Check if the parameters starting from here are actually used in the code
 ## Curve Fitting Parameters  
 # Control the conversion of pixel contours to smooth SVG paths.
 angle_threshold: 25     # Angle in degrees below which segments are treated as straight lines

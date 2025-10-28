@@ -6,7 +6,7 @@ This layer is the outermost in Clean Architecture and depends inward toward the 
 
 Responsibilities:
 - Image processing with OpenCV
-- SVG document generation  
+- Shape processing  
 - Configuration file management
 - Point detection and curve fitting algorithms
 
@@ -17,7 +17,7 @@ Dependencies:
 """
 
 from .image_processing import *
-from .svg_generation import *
+from .shape_processing import *
 from .configuration import *
 from .point_detection import *
 
@@ -27,8 +27,7 @@ __all__ = [
     "ColorAnalyzer", 
     "ContourClosureService",
     
-    # SVG generation components
-    "SVGGenerator",
+    # Shape processing components
     "ShapeProcessor",
     
     # Configuration components

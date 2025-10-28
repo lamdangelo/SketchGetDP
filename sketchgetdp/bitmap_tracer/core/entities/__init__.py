@@ -10,13 +10,13 @@ are interpreted and converted to vector graphics.
 """
 
 from .point import Point, PointData
-from .contour import ClosedContour
+from .contour import Contour
 from .color import Color, ColorCategory
 
 __all__ = [
     'Point',
     'PointData', 
-    'ClosedContour',
+    'Contour',
     'Color',
     'ColorCategory'
 ]

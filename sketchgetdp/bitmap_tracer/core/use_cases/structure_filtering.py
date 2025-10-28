@@ -1,10 +1,73 @@
-from typing import List, Tuple, Any
+from typing import List, Tuple, Any, Dict
 from core.entities.contour import Contour
-from core.entities.point import Point
 
 
 class StructureFilteringUseCase:
     """Applies business rules for filtering and prioritizing image structures."""
+
+    def __init__(self, shape_processor=None):
+        """
+        Initialize use case with required dependencies.
+        
+        Args:
+            shape_processor: Service for processing and filtering shapes
+        """
+        self.shape_processor = shape_processor
+
+    def execute(self, structures: Dict[str, Any], config: Dict) -> Dict[str, Any]:
+        """
+        Main execution method for the structure filtering use case.
+        """
+        try:
+            print("🎯 Filtering structures based on configuration limits...")
+            
+            red_points = structures.get('red_points', [])
+            blue_structures = structures.get('blue_structures', [])
+            green_structures = structures.get('green_structures', [])
+            
+            # Apply configuration limits
+            max_red_dots = config.get('red_dots', 0)
+            max_blue_paths = config.get('blue_paths', 0) 
+            max_green_paths = config.get('green_paths', 0)
+            
+            print(f"📊 Configuration limits: {max_red_dots} red, {max_blue_paths} blue, {max_green_paths} green")
+            
+            # Filter red points
+            if max_red_dots > 0 and len(red_points) > max_red_dots:
+                print(f"  🔴 Limiting red points from {len(red_points)} to {max_red_dots}")
+                red_points = red_points[:max_red_dots]
+            
+            # Filter blue structures
+            if max_blue_paths > 0 and len(blue_structures) > max_blue_paths:
+                print(f"  🔵 Limiting blue paths from {len(blue_structures)} to {max_blue_paths}")
+                blue_structures = blue_structures[:max_blue_paths]
+            
+            # Filter green structures  
+            if max_green_paths > 0 and len(green_structures) > max_green_paths:
+                print(f"  🟢 Limiting green paths from {len(green_structures)} to {max_green_paths}")
+                green_structures = green_structures[:max_green_paths]
+            
+            # TEMPORARY: Skip shape processing entirely to get basic SVG output
+            print("  ⏭️  Skipping shape processing (using raw contours)")
+            
+            # Just use the raw contours without processing
+            filtered_structures = {
+                'red_points': red_points,
+                'blue_structures': blue_structures,  # Raw contours
+                'green_structures': green_structures  # Raw contours
+            }
+            
+            total_filtered = len(red_points) + len(blue_structures) + len(green_structures)
+            print(f"✅ Filtering complete: {total_filtered} structures remaining")
+            
+            return filtered_structures
+            
+        except Exception as error:
+            print(f"❌ Structure filtering error: {error}")
+            import traceback
+            traceback.print_exc()
+            # Return original structures on error
+            return structures
 
     def filter_structures_by_area(self, 
                                 structures: List[Tuple[float, Any]], 

@@ -1,8 +1,7 @@
 import cv2
 import numpy as np
-from typing import List, Optional, Tuple
-from ...core.entities.contour import Contour
-from ...core.entities.point import Point
+from typing import List, Optional, Tuple, Any
+from core.entities.contour import Contour
 
 
 class ShapeProcessor:
@@ -108,7 +107,7 @@ class ShapeProcessor:
     
     def _is_valid_contour(self, contour: Contour) -> bool:
         """Check if contour has enough points for processing."""
-        return len(contour.points) >= 3
+        return contour is not None and len(contour.points) >= 3
     
     def _ensure_contour_closure(self, contour: Contour, tolerance: float = 5.0) -> Contour:
         """
@@ -133,7 +132,12 @@ class ShapeProcessor:
         
         if start_end_distance > tolerance:
             closed_points = contour.points + [start_point]
-            closed_contour = Contour(closed_points)
+            # Create new contour with proper parameters
+            closed_contour = Contour(
+                points=closed_points,
+                is_closed=True,
+                closure_gap=start_end_distance
+            )
             print(f"Closed contour gap: {start_end_distance:.2f} pixels")
             return closed_contour
         

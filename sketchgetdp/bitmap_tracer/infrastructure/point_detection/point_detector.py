@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-from typing import Optional, Tuple
-from ...core.entities.point import Point
+from typing import Optional
+from core.entities.point import Point
 
 
 class PointDetector:
@@ -24,6 +24,18 @@ class PointDetector:
         self.max_area = max_area
         self.max_perimeter = max_perimeter
     
+    def set_config(self, config: dict):
+        """
+        Update detection thresholds from configuration.
+        
+        Args:
+            config: Dictionary containing point_max_area and point_max_perimeter
+        """
+        if config:
+            self.max_area = config.get('point_max_area', self.max_area)
+            self.max_perimeter = config.get('point_max_perimeter', self.max_perimeter)
+            print(f"🔧 PointDetector configured - max_area: {self.max_area}, max_perimeter: {self.max_perimeter}")
+    
     def is_point(self, contour: np.ndarray) -> bool:
         """
         Determine if a contour represents a point-like shape.
@@ -43,7 +55,12 @@ class PointDetector:
         area = cv2.contourArea(contour)
         perimeter = cv2.arcLength(contour, True)
         
-        return area < self.max_area and perimeter < self.max_perimeter
+        is_point = area < self.max_area and perimeter < self.max_perimeter
+        
+        if not is_point:
+            print(f"  ❌ Point criteria failed: area {area:.1f} >= {self.max_area} OR perimeter {perimeter:.1f} >= {self.max_perimeter}")
+        
+        return is_point
     
     def get_center(self, contour: np.ndarray) -> Optional[Point]:
         """

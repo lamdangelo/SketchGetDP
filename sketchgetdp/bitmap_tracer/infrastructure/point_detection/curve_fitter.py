@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 from typing import Optional
-from ...core.entities.contour import Contour
 
 
 class CurveFitter:

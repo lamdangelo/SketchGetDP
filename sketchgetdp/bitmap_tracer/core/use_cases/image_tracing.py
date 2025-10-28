@@ -1,42 +1,114 @@
+import numpy as np
 from typing import List, Tuple, Optional, Dict
 from core.entities.point import Point
 from core.entities.contour import Contour
-from core.entities.color import Color
+from core.entities.color import ColorCategory
 
 
 class ImageTracingUseCase:
     """Coordinates the image tracing workflow from bitmap contours to vector paths."""
 
+    def __init__(self, contour_detector=None, color_analyzer=None, point_detector=None):
+        """
+        Initialize use case with required dependencies.
+        
+        Args:
+            contour_detector: Service for detecting contours in images
+            color_analyzer: Service for analyzing contour colors  
+            point_detector: Service for identifying point structures
+        """
+        self.contour_detector = contour_detector
+        self.color_analyzer = color_analyzer
+        self.point_detector = point_detector
+
+    def execute(self, image_data: dict, config: dict) -> dict:
+        """
+        Main execution method for the image tracing use case.
+        """
+        try:
+            print("🔍 Detecting contours...")
+            # Detect contours from the image - this now returns a List[Contour]
+            contours = self.detect_contours(image_data)
+            print(f"📐 Found {len(contours)} contours")
+            
+            red_points = []
+            blue_structures = []
+            green_structures = []
+            
+            # Process each contour
+            for i, contour in enumerate(contours):
+                print(f"  Processing contour {i+1}/{len(contours)}...")
+                
+                # Categorize contour color
+                color_category = self.color_analyzer.categorize(contour, image_data['image_array'])
+                
+                # Check if it's a point
+                point = self.detect_points(contour, config)
+                
+                if point and color_category == 'red':
+                    red_points.append(point)
+                    print(f"    🔴 Contour {i+1}: RED POINT")
+                elif color_category == 'blue':
+                    blue_structures.append(contour)
+                    print(f"    🔵 Contour {i+1}: BLUE PATH")
+                elif color_category == 'green':
+                    green_structures.append(contour)
+                    print(f"    🟢 Contour {i+1}: GREEN PATH")
+                else:
+                    print(f"    ⚫ Contour {i+1}: UNCATEGORIZED (color: {color_category})")
+            
+            return {
+                'success': True,
+                'structures': {
+                    'red_points': red_points,
+                    'blue_structures': blue_structures,
+                    'green_structures': green_structures
+                },
+                'total_contours': len(contours),
+                'processed_contours': len(red_points) + len(blue_structures) + len(green_structures)
+            }
+            
+        except Exception as error:
+            print(f"❌ Image tracing error: {error}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'success': False,
+                'error': str(error),
+                'structures': {
+                    'red_points': [],
+                    'blue_structures': [],
+                    'green_structures': []
+                },
+                'total_contours': 0,
+                'processed_contours': 0
+            }
+
     def detect_contours(self, image_data) -> List[Contour]:
         """
         Extracts contours from image data for vectorization.
-        
-        The detection process identifies distinct shapes in the bitmap image that 
-        will be converted to vector paths. Only meaningful contours that represent
-        actual structures should be returned.
-        
-        Returns:
-            List of detected contours ready for vectorization. Empty list if no 
-            meaningful contours found.
         """
-        return []
-
-    def categorize_contour_color(self, contour: Contour, original_image) -> Optional[Color]:
-        """
-        Determines the dominant color category of a contour's stroke.
-        
-        Color categorization follows business rules for identifying primary colors
-        (red, blue, green) while ignoring background colors like white and black.
-        This classification drives how different structures are processed.
-        
-        Args:
-            contour: The shape whose color needs categorization
-            original_image: Source image for color sampling
+        if self.contour_detector:
+            contours_tuple, hierarchy = self.contour_detector.detect(image_data)
             
-        Returns:
-            Color entity if categorized, None for background or unclassified colors
-        """
-        return None
+            if contours_tuple is None:
+                return []
+            
+            print(f"🔍 DEBUG: contours_tuple type: {type(contours_tuple)}, length: {len(contours_tuple)}")
+            
+            # Convert the tuple to a list for iteration
+            raw_contours_list = list(contours_tuple)
+            
+            if not raw_contours_list:
+                return []
+            
+            # Convert all raw contours to Contour entities
+            contours = [self._convert_to_contour_entity(contour) for contour in raw_contours_list]
+            print(f"✅ Converted {len(contours)} contours to entities")
+            return contours
+        
+        print("⚠️  No contour detector available - returning empty list")
+        return []
 
     def ensure_contour_closure(self, contour: Contour, tolerance: float = 5.0) -> Contour:
         """
@@ -79,34 +151,51 @@ class ImageTracingUseCase:
         closed_contour = self.ensure_contour_closure(contour)
         return None
 
-    def detect_points(self, contour: Contour, 
-                     max_area: float = 100, 
-                     max_perimeter: float = 80) -> Optional[Point]:
+    def detect_points(self, contour: Contour, config: dict = None) -> Optional[Point]:
         """
         Identifies if a contour represents a point marker rather than a path.
-        
-        Points are small, compact shapes that should be rendered as circle markers
-        instead of paths. The detection uses area and perimeter thresholds to
-        distinguish points from larger structures.
-        
-        Args:
-            contour: The contour to evaluate as a potential point
-            max_area: Maximum area in pixels² to qualify as a point
-            max_perimeter: Maximum perimeter in pixels to qualify as a point
-            
-        Returns:
-            Point entity if contour qualifies as a point, None otherwise
         """
+        if self.point_detector:
+            # Pass configuration to the point detector
+            if config and hasattr(self.point_detector, 'set_config'):
+                self.point_detector.set_config(config)
+            
+            # Convert our Contour entity to numpy format for the point detector
+            numpy_contour = np.array([[[point.x, point.y]] for point in contour.points], dtype=np.int32)
+            
+            # Use the correct method name: detect_point
+            point = self.point_detector.detect_point(numpy_contour)
+            
+            if point:
+                print(f"  📍 Point detected at ({point.x}, {point.y})")
+            else:
+                print(f"  ❌ Point NOT detected - area: {contour.area:.1f}, perimeter: {contour.perimeter:.1f}, points: {len(contour.points)}")
+            
+            return point
+        
+        # Fallback logic (shouldn't be needed if point_detector is working)
+        print("⚠️  Using fallback point detection")
         if len(contour.points) < 3:
             return None
         
         area = contour.area
         perimeter = contour.perimeter
         
-        if area < max_area and perimeter < max_perimeter:
-            center = contour.center
+        # Use config thresholds if provided, otherwise use defaults
+        if config:
+            point_max_area = config.get('point_max_area', 2000)
+            point_max_perimeter = config.get('point_max_perimeter', 165)
+        else:
+            point_max_area = 2000
+            point_max_perimeter = 165
+        
+        print(f"  🔍 Point detection fallback - area: {area:.1f}, perimeter: {perimeter:.1f}, thresholds: area<{point_max_area}, perimeter<{point_max_perimeter}")
+        
+        if area < point_max_area and perimeter < point_max_perimeter:
+            center = contour.get_center()
             if center:
-                return Point(x=center[0], y=center[1], radius=3, is_small_point=True)
+                print(f"  ✅ Point detected via fallback at ({center.x}, {center.y})")
+                return Point(x=center.x, y=center.y)
         
         return None
 
@@ -121,3 +210,16 @@ class ImageTracingUseCase:
             (x, y) coordinates of the center, or None if cannot be calculated
         """
         return contour.center
+    
+    def _convert_to_contour_entity(self, raw_contour) -> Contour:
+        """
+        Convert raw OpenCV contour to our domain Contour entity.
+        
+        Args:
+            raw_contour: Raw contour from OpenCV's findContours()
+            
+        Returns:
+            Contour entity with points and calculated properties
+        """
+        # Use the existing class method that properly handles closure detection
+        return Contour.from_numpy_contour(raw_contour)

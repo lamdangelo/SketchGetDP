@@ -6,9 +6,10 @@ Converts contours and points into SVG vector graphics elements.
 from svgwrite import Drawing
 from typing import List, Dict, Any, Tuple, Optional
 import numpy as np
-from ...core.entities.contour import Contour
-from ...core.entities.point import Point
-from ...core.entities.color import Color
+from core.entities.contour import Contour
+from core.entities.point import Point
+from core.entities.color import Color
+from core.entities.color import ColorCategory
 
 
 class SVGPresenter:
@@ -48,7 +49,8 @@ class SVGPresenter:
             color: Color classification for styling
             radius: Circle radius in pixels
         """
-        if color.is_red():
+        category, _ = color.categorize()
+        if category == ColorCategory.RED:
             fill_color = "#FF0000"
             self.elements_count['red_points'] += 1
         else:
@@ -92,10 +94,13 @@ class SVGPresenter:
         Returns:
             Hex color code for SVG stroke
         """
-        if color.is_blue():
+        category, hex_color = color.categorize()
+        if category == ColorCategory.BLUE:
             return "#0000FF"
-        elif color.is_green():
+        elif category == ColorCategory.GREEN:
             return "#00FF00"
+        elif category == ColorCategory.RED:
+            return "#FF0000"
         return color.to_hex()
     
     def _increment_path_counter(self, color: Color) -> None:
@@ -104,9 +109,10 @@ class SVGPresenter:
         Args:
             color: Color classification for counter selection
         """
-        if color.is_blue():
+        category, _ = color.categorize()
+        if category == ColorCategory.BLUE:
             self.elements_count['blue_paths'] += 1
-        elif color.is_green():
+        elif category == ColorCategory.GREEN:
             self.elements_count['green_paths'] += 1
     
     def add_contour_as_path(self, contour: Contour, color: Color, stroke_width: int = 2) -> None:
