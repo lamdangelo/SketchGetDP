@@ -13,35 +13,14 @@ green_paths: 1  # Maximum green paths to preserve
 
 ## Contour Detection Parameters
 # Control how contours are detected and filtered from the source image.
-min_area: 150           # Minimum area in pixels for a valid contour
-max_area_ratio: 0.8     # Maximum contour area as ratio of total image area (0.0-1.0)
 point_max_area: 2000     # Maximum area for a contour to be classified as a point
 point_max_perimeter: 1000 # Maximum perimeter for point classification
-closure_tolerance: 5.0  # Maximum gap distance for automatic contour closure (pixels)
-circularity_threshold: 0.01  # Minimum circularity (4πA/P²) for valid contours
-
-# TODO: Check if the parameters starting from here are actually used in the code
-## Curve Fitting Parameters  
-# Control the conversion of pixel contours to smooth SVG paths.
-angle_threshold: 25     # Angle in degrees below which segments are treated as straight lines
-min_curve_angle: 120    # Minimum angle for considering a segment as a curve
-epsilon_factor: 0.0015  # Simplification factor for Douglas-Peucker algorithm
-closure_threshold: 10.0 # Maximum gap distance for considering a path closed (pixels)
 
 ## Color Detection Parameters
 # Define thresholds for categorizing colors in the source image.
 blue_hue_range: [100, 140]         # HSV hue range for blue color detection
 red_hue_range: [[0, 10], [170, 180]] # HSV hue ranges for red color detection
 green_hue_range: [35, 85]          # HSV hue range for green color detection
-color_difference_threshold: 20     # Minimum RGB channel difference for color dominance
 min_saturation: 50                 # Minimum saturation to avoid classifying as white
 max_value_white: 200               # Maximum value above which colors are considered white
 min_value_black: 50                # Minimum value below which colors are considered black
-
-## SVG Generation Parameters
-# Control the visual appearance of the generated SVG output.
-point_radius: 4        # Radius of point markers in pixels
-stroke_width: 2        # Width of path strokes in pixels
-blue_color: "#0000FF"  # Hex color code for blue paths
-red_color: "#FF0000"   # Hex color code for red points  
-green_color: "#00FF00" # Hex color code for green paths

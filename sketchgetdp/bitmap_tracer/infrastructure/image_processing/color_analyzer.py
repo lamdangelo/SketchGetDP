@@ -2,15 +2,7 @@ import cv2
 import numpy as np
 from collections import defaultdict
 from typing import Tuple, Optional, Dict, List
-from enum import Enum
-
-class ColorCategory(Enum):
-    BLUE = "blue"
-    RED = "red" 
-    GREEN = "green"
-    WHITE = "white"
-    BLACK = "black"
-    OTHER = "other"
+from core.entities.color import ColorCategory
 
 class ColorAnalyzer:
     """
