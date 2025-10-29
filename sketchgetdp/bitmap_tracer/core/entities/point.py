@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 
-@dataclass
+@dataclass(frozen=True)
 class Point:
     """
     Represents a coordinate in 2D space. 
@@ -25,7 +25,7 @@ class Point:
         return cls(x=point_tuple[0], y=point_tuple[1])
 
 
-@dataclass
+@dataclass(frozen=True)
 class PointData:
     """
     Enhanced point information for the tracing algorithm.
