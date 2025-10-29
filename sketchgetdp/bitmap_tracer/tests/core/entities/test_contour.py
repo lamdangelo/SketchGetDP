@@ -7,11 +7,11 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../../..'))
 
 from core.entities.point import Point
-from core.entities.contour import ClosedContour
+from core.entities.contour import Contour
 
 
-class TestClosedContour:
-    """Unit tests for ClosedContour entity."""
+class TestContour:
+    """Unit tests for Contour entity."""
     
     @pytest.fixture
     def square_points(self):
@@ -24,24 +24,24 @@ class TestClosedContour:
     
     @pytest.fixture
     def empty_contour(self):
-        return ClosedContour(points=[], is_closed=True, closure_gap=0.0)
+        return Contour(points=[], is_closed=True, closure_gap=0.0)
 
     def test_initialization(self, square_points):
-        contour = ClosedContour(points=square_points, is_closed=True, closure_gap=0.5)
+        contour = Contour(points=square_points, is_closed=True, closure_gap=0.5)
         
         assert contour.points == square_points
         assert contour.is_closed is True
         assert contour.closure_gap == 0.5
 
     def test_area_triangle(self, triangle_points):
-        contour = ClosedContour(points=triangle_points, is_closed=True, closure_gap=0.0)
+        contour = Contour(points=triangle_points, is_closed=True, closure_gap=0.0)
         
         # 3*4/2 = 6.0
         expected_area = 6.0
         assert contour.area == expected_area
 
     def test_area_square(self, square_points):
-        contour = ClosedContour(points=square_points, is_closed=True, closure_gap=0.0)
+        contour = Contour(points=square_points, is_closed=True, closure_gap=0.0)
         
         assert contour.area == 4.0
 
@@ -51,11 +51,11 @@ class TestClosedContour:
         ([Point(0, 0), Point(1, 1)], 0.0),
     ])
     def test_area_insufficient_points(self, points, expected_area):
-        contour = ClosedContour(points=points, is_closed=True, closure_gap=0.0)
+        contour = Contour(points=points, is_closed=True, closure_gap=0.0)
         assert contour.area == expected_area
 
     def test_perimeter_square(self, square_points):
-        contour = ClosedContour(points=square_points, is_closed=True, closure_gap=0.0)
+        contour = Contour(points=square_points, is_closed=True, closure_gap=0.0)
         
         assert contour.perimeter == 8.0
 
@@ -64,7 +64,7 @@ class TestClosedContour:
         ([Point(0, 0)], 0.0),
     ])
     def test_perimeter_insufficient_points(self, points, expected_perimeter):
-        contour = ClosedContour(points=points, is_closed=True, closure_gap=0.0)
+        contour = Contour(points=points, is_closed=True, closure_gap=0.0)
         assert contour.perimeter == expected_perimeter
 
     def test_circularity_perfect_circle_approximation(self):
@@ -79,13 +79,13 @@ class TestClosedContour:
             y = radius * np.sin(angle)
             points.append(Point(x, y))
         
-        contour = ClosedContour(points=points, is_closed=True, closure_gap=0.0)
+        contour = Contour(points=points, is_closed=True, closure_gap=0.0)
         
         # Should be close to 1.0 for a circle
         assert 0.9 < contour.circularity < 1.1
 
     def test_circularity_square(self, square_points):
-        contour = ClosedContour(points=square_points, is_closed=True, closure_gap=0.0)
+        contour = Contour(points=square_points, is_closed=True, closure_gap=0.0)
         
         # 4πA/P² = 4π*4/64 = π/4 ≈ 0.785
         expected_circularity = np.pi / 4
@@ -95,7 +95,7 @@ class TestClosedContour:
         assert empty_contour.circularity == 0.0
 
     def test_get_center(self, square_points):
-        contour = ClosedContour(points=square_points, is_closed=True, closure_gap=0.0)
+        contour = Contour(points=square_points, is_closed=True, closure_gap=0.0)
         
         # Centroid of square from (0,0) to (2,2) is at (1.0, 1.0)
         assert contour.get_center() == Point(1.0, 1.0)
@@ -104,14 +104,14 @@ class TestClosedContour:
         assert empty_contour.get_center() is None
 
     def test_from_numpy_contour_empty(self):
-        result = ClosedContour.from_numpy_contour(np.array([]))
+        result = Contour.from_numpy_contour(np.array([]))
         
         assert result.points == []
         assert result.is_closed is True
         assert result.closure_gap == 0.0
 
     def test_from_numpy_contour_single_point(self):
-        result = ClosedContour.from_numpy_contour(np.array([[[0, 0]]]))
+        result = Contour.from_numpy_contour(np.array([[[0, 0]]]))
         
         assert len(result.points) == 1
         assert result.points[0] == Point(0, 0)
@@ -122,7 +122,7 @@ class TestClosedContour:
         # Closing point matches start - should be detected as closed
         triangle_contour = np.array([[[0, 0]], [[4, 0]], [[0, 3]], [[0, 0]]])
         
-        result = ClosedContour.from_numpy_contour(triangle_contour, tolerance=1.0)
+        result = Contour.from_numpy_contour(triangle_contour, tolerance=1.0)
         
         assert len(result.points) == 4
         assert result.is_closed is True
@@ -132,7 +132,7 @@ class TestClosedContour:
         # Ends far from start point - should be detected as open
         open_contour = np.array([[[0, 0]], [[4, 0]], [[4, 3]], [[8, 3]]])
         
-        result = ClosedContour.from_numpy_contour(open_contour, tolerance=1.0)
+        result = Contour.from_numpy_contour(open_contour, tolerance=1.0)
         
         assert len(result.points) == 4
         assert result.is_closed is False
@@ -148,11 +148,11 @@ class TestClosedContour:
             [[0, 0]], [[2, 0]], [[2, 2]], [[0, 2]], [[0.1, 0.1]]
         ])
         
-        result = ClosedContour.from_numpy_contour(almost_closed_contour, tolerance=tolerance)
+        result = Contour.from_numpy_contour(almost_closed_contour, tolerance=tolerance)
         assert result.is_closed is expected_closed
 
     def test_property_consistency(self, triangle_points):
-        contour = ClosedContour(points=triangle_points, is_closed=True, closure_gap=0.0)
+        contour = Contour(points=triangle_points, is_closed=True, closure_gap=0.0)
         
         # For triangle with points (0,0), (3,0), (3,4)
         expected_area = 6.0      # 3*4/2
@@ -168,7 +168,7 @@ class TestClosedContour:
     def test_immutability_of_points(self):
         """Test that external changes to points list don't affect the contour."""
         original_points = [Point(0, 0), Point(1, 0), Point(1, 1)]
-        contour = ClosedContour(points=original_points, is_closed=True, closure_gap=0.0)
+        contour = Contour(points=original_points, is_closed=True, closure_gap=0.0)
         
         original_point_count = len(contour.points)
         original_area = contour.area
@@ -180,7 +180,7 @@ class TestClosedContour:
         assert contour.area == original_area
         
         # New contour with modified list should be different
-        new_contour = ClosedContour(points=original_points, is_closed=True, closure_gap=0.0)
+        new_contour = Contour(points=original_points, is_closed=True, closure_gap=0.0)
         assert len(new_contour.points) == 4
         assert new_contour.area != original_area
 
@@ -189,7 +189,37 @@ class TestClosedContour:
         ([Point(0, 0), Point(1, 0), Point(1, 1)], False, 0.0),
     ])
     def test_closure_properties(self, points, expected_closed, expected_gap):
-        contour = ClosedContour(points=points, is_closed=expected_closed, closure_gap=expected_gap)
+        contour = Contour(points=points, is_closed=expected_closed, closure_gap=expected_gap)
         
         assert contour.is_closed == expected_closed
         assert contour.closure_gap == expected_gap
+
+    def test_is_empty(self):
+        empty_contour = Contour(points=[], is_closed=True, closure_gap=0.0)
+        non_empty_contour = Contour(points=[Point(0, 0)], is_closed=False, closure_gap=0.0)
+        
+        assert empty_contour.is_empty() is True
+        assert non_empty_contour.is_empty() is False
+
+    def test_get_bounding_box(self, square_points):
+        contour = Contour(points=square_points, is_closed=True, closure_gap=0.0)
+        bbox = contour.get_bounding_box()
+        
+        assert bbox == (0.0, 0.0, 2.0, 2.0)
+
+    def test_get_bounding_box_empty(self, empty_contour):
+        assert empty_contour.get_bounding_box() is None
+
+    def test_len(self, square_points):
+        contour = Contour(points=square_points, is_closed=True, closure_gap=0.0)
+        assert len(contour) == 4
+
+    def test_repr(self, square_points):
+        contour = Contour(points=square_points, is_closed=True, closure_gap=0.5)
+        repr_str = repr(contour)
+        
+        assert "Contour" in repr_str
+        assert "points=4" in repr_str
+        assert "CLOSED" in repr_str
+        assert "area=4.0" in repr_str
+        assert "gap=0.50" in repr_str
