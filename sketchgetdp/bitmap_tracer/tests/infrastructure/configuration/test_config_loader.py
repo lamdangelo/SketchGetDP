@@ -312,7 +312,3 @@ class TestConfigLoader:
         assert config['setting1'] == 'value1'
         assert config['setting2'] == 'value2'
         assert config['custom_setting'] == 'final_value'
-
-
-if __name__ == '__main__':
-    pytest.main([__file__])
