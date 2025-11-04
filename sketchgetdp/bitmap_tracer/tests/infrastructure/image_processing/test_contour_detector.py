@@ -163,7 +163,3 @@ class TestContourDetector:
                     assert mock_ensure.called
                     assert mock_is_closed.called
                     assert mock_gap.called
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
