@@ -12,8 +12,7 @@ class BezierFitter:
     Fits piecewise Bézier curves to boundary points using least-squares approach.
     Based on the methodology from "Simulating on Sketches: Uniting Numerics & Design"
     
-    This infrastructure service implements the curve fitting algorithm described
-    in Section III of the paper, converting ordered point sets into smooth
+    This infrastructure service implements the curve fitting algorithm converting ordered point sets into smooth
     piecewise Bézier representations.
     """
     
@@ -48,7 +47,7 @@ class BezierFitter:
             # If we removed too many duplicates, use original points
             cleaned_points = points[:3]  # Use first 3 points
         
-        # Scale points to unit square as mentioned in the paper
+        # Scale points to unit square
         scaled_points, scale_info = self._scale_to_unit_square(cleaned_points)
         
         # Convert corners to scaled coordinates
