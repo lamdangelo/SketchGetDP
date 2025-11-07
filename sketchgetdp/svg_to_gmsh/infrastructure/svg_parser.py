@@ -8,8 +8,8 @@ import re
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
-from core.entities.point import Point
-from core.entities.color import Color
+from ..core.entities.point import Point
+from ..core.entities.color import Color
 
 
 @dataclass

@@ -4,7 +4,7 @@ Detects corners by analyzing direction changes in batches of boundary points.
 
 from typing import List
 import math
-from core.entities.point import Point
+from ..core.entities.point import Point
 
 
 class CornerDetector:

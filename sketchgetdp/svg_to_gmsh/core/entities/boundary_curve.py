@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import List, Tuple
-from core.entities.bezier_segment import BezierSegment
-from core.entities.color import Color
-from core.entities.point import Point
+from ...core.entities.bezier_segment import BezierSegment
+from ...core.entities.color import Color
+from ...core.entities.point import Point
 
 
 @dataclass

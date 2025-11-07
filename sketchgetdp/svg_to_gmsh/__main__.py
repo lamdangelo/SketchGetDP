@@ -1,11 +1,20 @@
-from interfaces.arg_parser import ArgParser
-from core.use_cases.convert_svg_to_geometry import ConvertSVGToGeometry
-from infrastructure.svg_parser import SVGParser
-from infrastructure.corner_detector import CornerDetector
-from infrastructure.bezier_fitter import BezierFitter
+# __main__.py
+"""
+SVG to Gmsh Geometry Converter - Package Entry Point
+
+This module allows the package to be executed as:
+python -m svg_to_gmsh [arguments]
+"""
 
 def main():
     """Main entry point for the SVG to Geometry converter"""
+    
+    # Import here to ensure path is set correctly
+    from .interfaces.arg_parser import ArgParser
+    from .core.use_cases.convert_svg_to_geometry import ConvertSVGToGeometry
+    from .infrastructure.svg_parser import SVGParser
+    from .infrastructure.corner_detector import CornerDetector
+    from .infrastructure.bezier_fitter import BezierFitter
     
     # Parse command line arguments
     arg_parser = ArgParser()
@@ -43,6 +52,7 @@ def main():
     
     return 0
 
+
 def save_results(boundary_curves, output_path: str):
     """Save conversion results to file (basic implementation)"""
     with open(output_path, 'w') as f:
@@ -54,6 +64,7 @@ def save_results(boundary_curves, output_path: str):
             f.write(f"  Segments: {len(curve.bezier_segments)}\n")
             f.write(f"  Corners: {len(curve.corners)}\n")
             f.write(f"  Closed: {curve.is_closed}\n\n")
+
 
 if __name__ == "__main__":
     exit(main())

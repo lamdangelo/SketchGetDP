@@ -1,6 +1,6 @@
 import math
 from typing import List
-from core.entities.point import Point
+from ...core.entities.point import Point
 
 
 class BezierSegment:

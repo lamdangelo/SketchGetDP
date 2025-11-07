@@ -3,10 +3,10 @@ Core use case: Convert SVG to Geometry
 """
 
 from typing import List
-from core.entities.boundary_curve import BoundaryCurve
-from infrastructure.svg_parser import SVGParser, RawBoundary
-from infrastructure.corner_detector import CornerDetector
-from infrastructure.bezier_fitter import BezierFitter
+from ...core.entities.boundary_curve import BoundaryCurve
+from ...infrastructure.svg_parser import SVGParser, RawBoundary
+from ...infrastructure.corner_detector import CornerDetector
+from ...infrastructure.bezier_fitter import BezierFitter
 
 
 class ConvertSVGToGeometry:

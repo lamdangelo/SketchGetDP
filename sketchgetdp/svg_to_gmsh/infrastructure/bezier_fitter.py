@@ -2,9 +2,9 @@ import numpy as np
 from typing import List, Tuple
 import math
 
-from core.entities.bezier_segment import BezierSegment
-from core.entities.boundary_curve import BoundaryCurve
-from core.entities.point import Point
+from ..core.entities.bezier_segment import BezierSegment
+from ..core.entities.boundary_curve import BoundaryCurve
+from ..core.entities.point import Point
 
 
 class BezierFitter:
