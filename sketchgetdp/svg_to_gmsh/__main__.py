@@ -1,4 +1,3 @@
-# __main__.py
 """
 SVG to Gmsh Geometry Converter - Package Entry Point
 
