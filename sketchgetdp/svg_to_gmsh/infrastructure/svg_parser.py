@@ -24,8 +24,11 @@ class RawBoundary:
     
     def __post_init__(self):
         """Validate the raw boundary data."""
-        if len(self.points) < 3:
-            raise ValueError("Raw boundary must have at least 3 points")
+        # Allow single points for red dots, but require >=3 points for other colors
+        if self.color != Color.RED and len(self.points) < 3:
+            raise ValueError(f"Raw boundary must have at least 3 points for color {self.color.name}, got {len(self.points)}")
+        elif self.color == Color.RED and len(self.points) < 1:
+            raise ValueError("Red dot must have at least 1 point")
 
 
 class SVGParser:
@@ -71,11 +74,13 @@ class SVGParser:
             boundaries = []
             for element in elements:
                 points = self._element_to_points(element, viewbox, svg_width, svg_height)
-                if len(points) >= 3:  # Need at least 3 points for a meaningful boundary
+                
+                # Allow red elements with only 1 point (dots), but require >=3 points for other colors
+                if len(points) >= 3 or (color == Color.RED and len(points) == 1):
                     raw_boundary = RawBoundary(
                         points=points,
                         color=color,
-                        is_closed=self._is_element_closed(element)
+                        is_closed=self._is_element_closed(element) if color != Color.RED else True
                     )
                     boundaries.append(raw_boundary)
             
@@ -137,39 +142,63 @@ class SVGParser:
     
     def _extract_color(self, element: ET.Element) -> Color:
         """
-        Extract color from SVG element's stroke attribute.
+        Extract color from SVG element's stroke or fill attribute.
         """
+        # First check stroke, then fill, then style attribute
         stroke = element.get('stroke')
+        fill = element.get('fill')
+        style = element.get('style')
         
-        if not stroke or stroke == 'none':
+        color_str = None
+        
+        # Priority: stroke -> fill -> style attribute
+        if stroke and stroke != 'none':
+            color_str = stroke
+        elif fill and fill != 'none':
+            color_str = fill
+        elif style:
+            # Parse style attribute for stroke or fill
+            style_parts = style.split(';')
+            for part in style_parts:
+                if part.strip().startswith('stroke:'):
+                    color_str = part.split(':')[1].strip()
+                    break
+                elif part.strip().startswith('fill:'):
+                    color_str = part.split(':')[1].strip()
+                    break
+        
+        if not color_str or color_str == 'none':
             return Color.RED  # Default color
         
         # Handle different color formats
-        stroke_lower = stroke.lower().strip()
+        color_lower = color_str.lower().strip()
         
         # Map common colors to our three electrode colors
-        if (stroke_lower == '#ff0000' or stroke_lower == 'red' or 
-            stroke_lower == 'rgb(255,0,0)' or stroke_lower == 'rgb(255, 0, 0)'):
+        if (color_lower == '#ff0000' or color_lower == 'red' or 
+            color_lower == 'rgb(255,0,0)' or color_lower == 'rgb(255, 0, 0)' or
+            color_lower == '#f00'):
             return Color.RED
-        elif (stroke_lower == '#00ff00' or stroke_lower == 'green' or 
-              stroke_lower == 'rgb(0,255,0)' or stroke_lower == 'rgb(0, 255, 0)'):
+        elif (color_lower == '#00ff00' or color_lower == 'green' or 
+            color_lower == 'rgb(0,255,0)' or color_lower == 'rgb(0, 255, 0)' or
+            color_lower == '#0f0'):
             return Color.GREEN
-        elif (stroke_lower == '#0000ff' or stroke_lower == 'blue' or 
-              stroke_lower == 'rgb(0,0,255)' or stroke_lower == 'rgb(0, 0, 255)'):
+        elif (color_lower == '#0000ff' or color_lower == 'blue' or 
+            color_lower == 'rgb(0,0,255)' or color_lower == 'rgb(0, 0, 255)' or
+            color_lower == '#00f'):
             return Color.BLUE
-        elif stroke_lower.startswith('#'):
+        elif color_lower.startswith('#'):
             # For other hex colors, map to closest primary color
-            return self._hex_to_primary_color(stroke_lower)
-        elif stroke_lower.startswith('rgb'):
+            return self._hex_to_primary_color(color_lower)
+        elif color_lower.startswith('rgb'):
             # Handle rgb format with spaces
-            return self._parse_rgb_color(stroke_lower)
+            return self._parse_rgb_color(color_lower)
         else:
             # Try to match color names more broadly
-            if 'red' in stroke_lower:
+            if 'red' in color_lower:
                 return Color.RED
-            elif 'green' in stroke_lower:
+            elif 'green' in color_lower:
                 return Color.GREEN
-            elif 'blue' in stroke_lower:
+            elif 'blue' in color_lower:
                 return Color.BLUE
             else:
                 return Color.RED  # Default
@@ -231,26 +260,98 @@ class SVGParser:
         return tag in ['rect', 'circle', 'ellipse', 'polygon']
     
     def _element_to_points(self, element: ET.Element, viewbox: Optional[Tuple[float, float, float, float]], 
-                          svg_width: float, svg_height: float) -> List[Point]:
+                      svg_width: float, svg_height: float) -> List[Point]:
         """
         Convert SVG element to ordered list of points.
+        For red elements: return a single point (the center)
+        For other elements: return the full boundary points
         """
         tag = element.tag.replace(self.namespace, '')
         
+        # Check if this is a red element that should be treated as a dot
+        color = self._extract_color(element)
+        if color == Color.RED:
+            # For red elements, return a single point (the center)
+            center = self._get_element_center(element, viewbox, svg_width, svg_height)
+            if center:
+                return [center]  # Return single point instead of boundary
+            else:
+                return []
+        
+        # Existing logic for non-red elements...
         if tag == 'path':
-            return self._parse_path(element.get('d', ''), viewbox, svg_width, svg_height)
+            points = self._parse_path(element.get('d', ''), viewbox, svg_width, svg_height)
         elif tag == 'rect':
-            return self._parse_rect(element, viewbox, svg_width, svg_height)
+            points = self._parse_rect(element, viewbox, svg_width, svg_height)
         elif tag == 'circle':
-            return self._parse_circle(element, viewbox, svg_width, svg_height)
+            points = self._parse_circle(element, viewbox, svg_width, svg_height)
         elif tag == 'ellipse':
-            return self._parse_ellipse(element, viewbox, svg_width, svg_height)
+            points = self._parse_ellipse(element, viewbox, svg_width, svg_height)
         elif tag == 'polygon':
-            return self._parse_polygon(element.get('points', ''), viewbox, svg_width, svg_height)
+            points = self._parse_polygon(element.get('points', ''), viewbox, svg_width, svg_height)
         elif tag == 'polyline':
-            return self._parse_polyline(element.get('points', ''), viewbox, svg_width, svg_height)
+            points = self._parse_polyline(element.get('points', ''), viewbox, svg_width, svg_height)
         else:
-            return []
+            points = []
+        
+        return points
+        
+    def _get_element_center(self, element: ET.Element, viewbox: Optional[Tuple[float, float, float, float]], 
+                           svg_width: float, svg_height: float) -> Optional[Point]:
+        """Get the center point of an SVG element for dot creation."""
+        tag = element.tag.replace(self.namespace, '')
+        
+        try:
+            if tag == 'circle':
+                cx = float(element.get('cx', 0))
+                cy = float(element.get('cy', 0))
+                return self._scale_point(Point(cx, cy), viewbox, svg_width, svg_height)
+            
+            elif tag == 'ellipse':
+                cx = float(element.get('cx', 0))
+                cy = float(element.get('cy', 0))
+                return self._scale_point(Point(cx, cy), viewbox, svg_width, svg_height)
+            
+            elif tag == 'rect':
+                x = float(element.get('x', 0))
+                y = float(element.get('y', 0))
+                width = float(element.get('width', 0))
+                height = float(element.get('height', 0))
+                center_x = x + width / 2
+                center_y = y + height / 2
+                return self._scale_point(Point(center_x, center_y), viewbox, svg_width, svg_height)
+            
+            elif tag == 'path':
+                # Extract first point from path as center
+                path_data = element.get('d', '')
+                commands = re.findall(r'([ML])\s*([-\d.]+)\s*([-\d.]+)', path_data, re.IGNORECASE)
+                if commands:
+                    x = float(commands[0][1])
+                    y = float(commands[0][2])
+                    return self._scale_point(Point(x, y), viewbox, svg_width, svg_height)
+            
+            elif tag in ['polygon', 'polyline']:
+                # Calculate centroid of polygon
+                points_str = element.get('points', '')
+                points = self._parse_poly_points(points_str, viewbox, svg_width, svg_height)
+                if points:
+                    avg_x = sum(p.x for p in points) / len(points)
+                    avg_y = sum(p.y for p in points) / len(points)
+                    return Point(avg_x, avg_y)
+        
+        except (ValueError, TypeError, ZeroDivisionError):
+            pass
+        
+        return None
+    
+    def _create_dot_boundary(self, center: Point, viewbox: Optional[Tuple[float, float, float, float]], 
+                            svg_width: float, svg_height: float) -> List[Point]:
+        """
+        Create a small circular boundary for a dot.
+        This ensures dots have proper boundary representation but remain small.
+        """
+        dot_radius = 0.005  # Small radius for dots in normalized coordinates
+        return self._approximate_circle(center.x, center.y, dot_radius, viewbox, svg_width, svg_height)
     
     def _parse_path(self, path_data: str, viewbox: Optional[Tuple[float, float, float, float]], 
                    svg_width: float, svg_height: float) -> List[Point]:
