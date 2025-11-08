@@ -1,8 +1,15 @@
-from interfaces.arg_parser import ArgParser
-from core.use_cases.convert_svg_to_geometry import ConvertSVGToGeometry
-from infrastructure.svg_parser import SVGParser
-from infrastructure.corner_detector import CornerDetector
-from infrastructure.bezier_fitter import BezierFitter
+import os
+import sys
+
+# Add the parent directory to Python path so svg_to_gmsh package can be found
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
+
+from svg_to_gmsh.interfaces.arg_parser import ArgParser
+from svg_to_gmsh.core.use_cases.convert_svg_to_geometry import ConvertSVGToGeometry
+from svg_to_gmsh.infrastructure.svg_parser import SVGParser
+from svg_to_gmsh.infrastructure.corner_detector import CornerDetector
+from svg_to_gmsh.infrastructure.bezier_fitter import BezierFitter
 
 def main():
     """Main entry point for the SVG to Geometry converter"""
