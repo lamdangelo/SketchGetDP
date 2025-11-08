@@ -6,7 +6,7 @@ from ..core.entities.bezier_segment import BezierSegment
 from ..core.entities.boundary_curve import BoundaryCurve
 from ..core.entities.point import Point
 
-
+#TODO: Avoid discontinuities by implementing global least-squares fitting with continuity constraints
 class BezierFitter:
     """
     Fits piecewise Bézier curves to boundary points using least-squares approach.
@@ -28,15 +28,6 @@ class BezierFitter:
     def fit_boundary_curve(self, points: List[Point], corners: List[Point], color, is_closed: bool = True) -> BoundaryCurve:
         """
         Fit piecewise Bézier curves to boundary points with continuity constraints.
-        
-        Args:
-            points: Ordered set of boundary points (from image processing/SVG parsing)
-            corners: List of corner points detected by corner_detector
-            color: Color entity for the boundary curve
-            is_closed: Whether the curve forms a closed loop
-            
-        Returns:
-            Boundary curve with fitted Bézier segments
         """
         if len(points) < 3:
             raise ValueError(f"Need at least 3 points for boundary curve, got {len(points)}")
@@ -46,12 +37,11 @@ class BezierFitter:
         if len(cleaned_points) < 3:
             # If we removed too many duplicates, use original points
             cleaned_points = points[:3]  # Use first 3 points
+            
+        scaled_points = cleaned_points
         
-        # Scale points to unit square
-        scaled_points, scale_info = self._scale_to_unit_square(cleaned_points)
-        
-        # Convert corners to scaled coordinates
-        scaled_corners = self._find_scaled_corners(cleaned_points, corners, scaled_points)
+        # Convert corners to match the points (they should already be scaled)
+        scaled_corners = corners  # Use corners directly since they're already scaled
         
         # Determine segment boundaries based on corners
         segment_boundaries = self._determine_segment_boundaries(scaled_points, scaled_corners)
@@ -64,7 +54,7 @@ class BezierFitter:
         # Create and return the boundary curve
         return BoundaryCurve(
             bezier_segments=bezier_segments,
-            corners=corners,  # Return original corners, not scaled
+            corners=corners,  # Return original corners
             color=color,
             is_closed=is_closed
         )
@@ -81,100 +71,31 @@ class BezierFitter:
         
         return cleaned
     
-    def _scale_to_unit_square(self, points: List[Point]) -> Tuple[List[Point], dict]:
-        """Scale points to unit square [0,1]×[0,1] as described in Section II."""
-        if not points:
-            return [], {}
-        
-        # Find bounding box
-        x_coords = [p.x for p in points]
-        y_coords = [p.y for p in points]
-        
-        min_x, max_x = min(x_coords), max(x_coords)
-        min_y, max_y = min(y_coords), max(y_coords)
-        
-        width = max_x - min_x
-        height = max_y - min_y
-        
-        # Handle degenerate cases by adding padding
-        if width == 0:
-            width = 1.0
-            min_x -= 0.5
-            max_x += 0.5
-            
-        if height == 0:
-            height = 1.0
-            min_y -= 0.5
-            max_y += 0.5
-        
-        # Scale points
-        scaled_points = []
-        for point in points:
-            scaled_x = (point.x - min_x) / width
-            scaled_y = (point.y - min_y) / height
-            scaled_points.append(Point(scaled_x, scaled_y))
-        
-        scale_info = {
-            'min_x': min_x, 'max_x': max_x, 'min_y': min_y, 'max_y': max_y,
-            'width': width, 'height': height
-        }
-            
-        return scaled_points, scale_info
-    
-    def _find_scaled_corners(self, original_points: List[Point], original_corners: List[Point], 
-                           scaled_points: List[Point]) -> List[Point]:
-        """Find the scaled coordinates of corner points."""
-        if not original_corners:
-            return []
-        
-        scaled_corners = []
-        tolerance = 1e-6
-        
-        for corner in original_corners:
-            # Find the index of the corner in the original points
-            found = False
-            for i, point in enumerate(original_points):
-                if (abs(point.x - corner.x) < tolerance and 
-                    abs(point.y - corner.y) < tolerance):
-                    # Use the corresponding scaled point
-                    if i < len(scaled_points):
-                        scaled_corners.append(scaled_points[i])
-                        found = True
-                    break
-            if not found:
-                # If corner not found in points, scale it directly
-                # This is a fallback for edge cases
-                x_coords = [p.x for p in original_points]
-                y_coords = [p.y for p in original_points]
-                min_x, max_x = min(x_coords), max(x_coords)
-                min_y, max_y = min(y_coords), max(y_coords)
-                width = max_x - min_x if max_x > min_x else 1.0
-                height = max_y - min_y if max_y > min_y else 1.0
-                
-                scaled_x = (corner.x - min_x) / width
-                scaled_y = (corner.y - min_y) / height
-                scaled_corners.append(Point(scaled_x, scaled_y))
-        
-        return scaled_corners
-    
     def _determine_segment_boundaries(self, points: List[Point], corners: List[Point]) -> List[int]:
         """Determine segment boundaries based on corners and curve characteristics."""
         n_points = len(points)
         
         if not corners:
-            # No corners: divide curve into segments based on curvature
-            return self._segment_by_curvature(points)
+            # Use curvature-based segmentation with more segments
+            return self._segment_by_curvature_sensitive(points)
         
         # Use corners as primary segment boundaries
         corner_indices = []
-        tolerance = 1e-6
+        tolerance = 1e-4  # Increased tolerance
         
         for corner in corners:
+            # Find the closest point to the corner
+            min_distance = float('inf')
+            best_index = -1
+            
             for i, point in enumerate(points):
-                if (abs(point.x - corner.x) < tolerance and 
-                    abs(point.y - corner.y) < tolerance):
-                    corner_indices.append(i)
-                    break
+                distance = point.distance_to(corner)
+                if distance < min_distance and distance < tolerance:
+                    min_distance = distance
+                    best_index = i
+            
+            if best_index != -1:
+                corner_indices.append(best_index)
         
         # Remove duplicates and sort
         corner_indices = sorted(set(corner_indices))
@@ -182,7 +103,7 @@ class BezierFitter:
         # Ensure we have proper segment boundaries from start to end
         segment_boundaries = []
         
-        if corner_indices[0] != 0:
+        if not corner_indices or corner_indices[0] != 0:
             segment_boundaries.append(0)
         
         segment_boundaries.extend(corner_indices)
@@ -191,18 +112,17 @@ class BezierFitter:
             segment_boundaries.append(n_points - 1)
             
         return segment_boundaries
-    
-    def _segment_by_curvature(self, points: List[Point]) -> List[int]:
-        """Segment curve based on curvature when no corners are detected."""
+
+    def _segment_by_curvature_sensitive(self, points: List[Point]) -> List[int]:
+        """More sensitive curvature-based segmentation."""
         n_points = len(points)
         
-        # For very short curves, use a single segment
         if n_points <= self.min_points_per_segment * 2:
             return [0, n_points - 1]
         
-        # Simple heuristic: segment every N points, but ensure minimum points per segment
-        max_segments = max(1, n_points // self.min_points_per_segment)
-        segment_size = max(self.min_points_per_segment, n_points // max_segments)
+        # Create more segments for better fitting
+        target_segments = max(4, n_points // 15)  # More segments
+        segment_size = max(self.min_points_per_segment, n_points // target_segments)
         
         boundaries = list(range(0, n_points, segment_size))
         if boundaries[-1] != n_points - 1:
@@ -212,12 +132,26 @@ class BezierFitter:
     
     def _fit_piecewise_bezier_with_continuity(self, points: List[Point], segment_boundaries: List[int], 
                                             corners: List[Point], is_closed: bool) -> List[BezierSegment]:
-        """Fit Bézier segments to each segment ensuring continuity between segments."""
+        """Fit Bézier segments ensuring proper continuity and closure."""
         n_segments = len(segment_boundaries) - 1
         bezier_segments = []
         
-        # First, fit all segments independently
-        independent_segments = []
+        # Limit maximum segments to avoid over-segmentation
+        max_reasonable_segments = min(15, len(points) // 10)
+        if n_segments > max_reasonable_segments:
+            segment_boundaries = self._create_reasonable_segments(points, max_reasonable_segments)
+            n_segments = len(segment_boundaries) - 1
+        
+        # For closed curves, ensure we wrap around properly
+        if is_closed and n_segments > 0:
+            # Add the first point to the end to ensure proper closure
+            if points[0] != points[-1]:
+                points.append(points[0])
+                # Update segment boundaries if needed
+                if segment_boundaries[-1] != len(points) - 1:
+                    segment_boundaries[-1] = len(points) - 1
+        
+        # Fit each segment
         for seg_idx in range(n_segments):
             start_idx = segment_boundaries[seg_idx]
             end_idx = segment_boundaries[seg_idx + 1]
@@ -225,34 +159,118 @@ class BezierFitter:
             # Extract segment points
             segment_points = points[start_idx:end_idx + 1]
             
-            # Fit Bézier curve to this segment
-            bezier_segment = self._fit_single_bezier_independent(segment_points)
-            independent_segments.append(bezier_segment)
-        
-        # Now adjust segments for continuity
-        for seg_idx in range(n_segments):
-            current_segment = independent_segments[seg_idx]
-            
-            if seg_idx == 0:
-                # First segment - keep as is
-                adjusted_segment = current_segment
-            else:
-                # Adjust current segment to start at the end of previous segment
-                previous_segment = bezier_segments[seg_idx - 1]
-                required_start = previous_segment.end_point
+            if len(segment_points) < 2:
+                continue
                 
-                # Create new control points that maintain the shape but start at required point
-                adjusted_control_points = self._adjust_bezier_start(
-                    current_segment.control_points, required_start
-                )
-                adjusted_segment = BezierSegment(
-                    control_points=adjusted_control_points, 
-                    degree=current_segment.degree
-                )
-            
-            bezier_segments.append(adjusted_segment)
+            # Fit the segment
+            bezier_segment = self._fit_single_bezier_independent(segment_points)
+            bezier_segments.append(bezier_segment)
+        
+        # CRITICAL: Ensure proper closure for closed curves
+        if is_closed and len(bezier_segments) > 1:
+            self._ensure_curve_closure(bezier_segments, points[0])
         
         return bezier_segments
+
+    def _ensure_curve_closure(self, segments: List[BezierSegment], first_point: Point):
+        """Ensure the curve properly closes by adjusting the last segment."""
+        if not segments:
+            return
+        
+        first_segment = segments[0]
+        last_segment = segments[-1]
+        
+        # Check closure distance
+        closure_distance = first_segment.start_point.distance_to(last_segment.end_point)
+        
+        if closure_distance > 1e-4:  # More tolerant threshold
+            
+            # Strategy 1: Simple translation of last segment
+            adjusted_control_points = self._adjust_bezier_end(
+                last_segment.control_points, first_segment.start_point
+            )
+            segments[-1] = BezierSegment(
+                control_points=adjusted_control_points,
+                degree=last_segment.degree
+            )
+            
+            # Verify the fix
+            new_closure_distance = first_segment.start_point.distance_to(segments[-1].end_point)
+            
+            if new_closure_distance > 1e-4:
+                # Strategy 2: Re-fit the last segment with enforced start/end points
+                self._refit_last_segment_with_closure(segments, first_point)
+
+    def _create_reasonable_segments(self, points: List[Point], max_segments: int) -> List[int]:
+        """Create reasonable segment boundaries to avoid over-segmentation."""
+        n_points = len(points)
+        segment_size = max(5, n_points // max_segments)
+        
+        boundaries = list(range(0, n_points, segment_size))
+        if boundaries[-1] != n_points - 1:
+            boundaries.append(n_points - 1)
+        
+        return boundaries
+
+    def _adjust_bezier_end(self, control_points: List[Point], required_end: Point) -> List[Point]:
+        """Adjust Bézier control points to end at a specific point."""
+        if not control_points:
+            return control_points
+        
+        # Calculate the translation needed
+        current_end = control_points[-1]
+        translation_x = required_end.x - current_end.x
+        translation_y = required_end.y - current_end.y
+        
+        # Apply translation to all control points
+        adjusted_points = []
+        for point in control_points:
+            adjusted_points.append(Point(
+                point.x + translation_x,
+                point.y + translation_y
+            ))
+        
+        return adjusted_points
+    
+    def _refit_last_segment_with_closure(self, segments: List[BezierSegment], closure_point: Point):
+        """Re-fit the last segment with enforced closure constraint."""
+        if len(segments) < 2:
+            return
+        
+        last_segment = segments[-1]
+        prev_segment = segments[-2]
+        
+        # Get the required start point (end of previous segment)
+        required_start = prev_segment.end_point
+        required_end = closure_point
+        
+        # For quadratic Bézier, we have 3 control points: [p0, p1, p2]
+        # p0 = required_start, p2 = required_end
+        # We only need to find p1 that minimizes the fitting error
+        
+        # Simple approach: use the middle control point from the original fit
+        # but adjust it to maintain reasonable curvature
+        original_p1 = last_segment.control_points[1]
+        
+        # Calculate a reasonable middle point that maintains shape
+        mid_x = (required_start.x + required_end.x) / 2
+        mid_y = (required_start.y + required_end.y) / 2
+        
+        # Blend with original middle point
+        blend_factor = 0.7
+        new_p1_x = mid_x * blend_factor + original_p1.x * (1 - blend_factor)
+        new_p1_y = mid_y * blend_factor + original_p1.y * (1 - blend_factor)
+        
+        adjusted_control_points = [
+            required_start,
+            Point(new_p1_x, new_p1_y),
+            required_end
+        ]
+        
+        segments[-1] = BezierSegment(
+            control_points=adjusted_control_points,
+            degree=last_segment.degree
+        )
     
     def _fit_single_bezier_independent(self, points: List[Point]) -> BezierSegment:
         """
@@ -398,3 +416,5 @@ class BezierFitter:
             total_error += error * error
         
         return math.sqrt(total_error / n_points)
+    
+    

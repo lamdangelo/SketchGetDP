@@ -354,45 +354,38 @@ class SVGParser:
         return self._approximate_circle(center.x, center.y, dot_radius, viewbox, svg_width, svg_height)
     
     def _parse_path(self, path_data: str, viewbox: Optional[Tuple[float, float, float, float]], 
-                   svg_width: float, svg_height: float) -> List[Point]:
-        """
-        Parse SVG path data into points.
-        For simple paths with only 2 points, we'll create a triangle to make it a valid boundary.
-        """
+                    svg_width: float, svg_height: float) -> List[Point]:
+        """Parse SVG path data into points with proper command handling."""
         points = []
         
-        # Extract move-to (M) and line-to (L) commands with coordinates
-        commands = re.findall(r'([ML])\s*([-\d.]+)\s*([-\d.]+)', path_data, re.IGNORECASE)
+        # Parse all path commands
+        commands = re.findall(r'([ML])\s*([-\d.]+)[,\s]+([-\d.]+)', path_data, re.IGNORECASE)
         
+        # Process all commands
         for cmd, x_str, y_str in commands:
             try:
                 x = float(x_str)
                 y = float(y_str)
-                points.append(self._scale_point(Point(x, y), viewbox, svg_width, svg_height))
+                raw_point = Point(x, y)
+                scaled_point = self._scale_point(raw_point, viewbox, svg_width, svg_height)
+                points.append(scaled_point)
             except ValueError:
                 continue
         
-        # If we only have 2 points, create a third point to make a triangle
-        if len(points) == 2:
-            # Create a third point to form a triangle
-            p1, p2 = points[0], points[1]
-            # Calculate midpoint and offset perpendicularly
-            mid_x = (p1.x + p2.x) / 2
-            mid_y = (p1.y + p2.y) / 2
-            # Calculate perpendicular vector
-            dx = p2.x - p1.x
-            dy = p2.y - p1.y
-            # Rotate 90 degrees and scale
-            perp_x = -dy * 0.1  # Small offset
-            perp_y = dx * 0.1
-            # Add the third point
-            points.append(Point(mid_x + perp_x, mid_y + perp_y))
-            # Close the triangle
-            points.append(points[0])
-        
-        # If path is closed (z command), ensure last point connects to first
-        elif 'z' in path_data.lower() and len(points) > 1:
-            points.append(points[0])
+        #Handle path closure
+        if len(points) > 2:
+            # Check if path should be closed (has 'z' command)
+            has_close_command = 'z' in path_data.lower()
+            
+            if has_close_command:
+                # Ensure first and last points are the same for closed paths
+                first_point = points[0]
+                last_point = points[-1]
+                
+                # If last point doesn't match first point, add first point at the end
+                if (abs(first_point.x - last_point.x) > 1e-6 or 
+                    abs(first_point.y - last_point.y) > 1e-6):
+                    points.append(first_point)
         
         return points
     
@@ -518,8 +511,7 @@ class SVGParser:
     def _scale_point(self, point: Point, viewbox: Optional[Tuple[float, float, float, float]], 
                     svg_width: float, svg_height: float) -> Point:
         """
-        Scale point to unit square [0,1]×[0,1].
-        This ensures diam(Ω) < 1 condition for BEM functionality.
+        Scale point to unit square [0,1]×[0,1] and flip Y-axis.
         """
         if viewbox:
             vx, vy, vw, vh = viewbox
@@ -527,13 +519,21 @@ class SVGParser:
                 # Normalize to [0,1] range using viewBox
                 x_norm = (point.x - vx) / vw
                 y_norm = (point.y - vy) / vh
+                # FLIP Y-AXIS: Convert from SVG (top-left) to mathematical (bottom-left)
+                y_norm = 1.0 - y_norm
                 return Point(x_norm, y_norm)
         
         # Fallback: use SVG dimensions or default scaling
         if svg_width > 0 and svg_height > 0:
             x_norm = point.x / svg_width
             y_norm = point.y / svg_height
+            # FLIP Y-AXIS
+            y_norm = 1.0 - y_norm
             return Point(x_norm, y_norm)
         
-        # Final fallback: assume reasonable default bounds
-        return Point(point.x / 100.0, point.y / 100.0)
+        # Final fallback
+        x_norm = point.x / 100.0
+        y_norm = point.y / 100.0
+        # FLIP Y-AXIS
+        y_norm = 1.0 - y_norm
+        return Point(x_norm, y_norm)
