@@ -48,13 +48,9 @@ class CurveVisualizer:
     def _plot_single_curve(curve: BoundaryCurve, curve_index: int, 
                         show_control_points: bool, show_corners: bool):
         """Plot a single boundary curve."""
-        color_map = {
-            'BLUE': 'blue',
-            'GREEN': 'green', 
-            'RED': 'red'
-        }
-        color_name = curve.color.name
-        plot_color = color_map.get(color_name, 'black')
+        # Use the actual RGB values from the Color object
+        rgb = curve.color.rgb
+        plot_color = (rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)  # Normalize to 0-1 for matplotlib
         
         # Sample points along the entire curve
         t_values = [i/200 for i in range(201)]  # High resolution for smooth curves
@@ -65,7 +61,7 @@ class CurveVisualizer:
         
         # Plot the curve itself
         plt.plot(x_curve, y_curve, color=plot_color, linewidth=2, 
-                label=f'{color_name} Curve {curve_index+1}')
+                label=f'{curve.color.name} Curve {curve_index+1}')
         
         # Plot control points if requested
         if show_control_points:
@@ -89,19 +85,16 @@ class CurveVisualizer:
             corner_y = [c.y for c in curve.corners]
             plt.plot(corner_x, corner_y, 's', color=plot_color, 
                     markersize=10, markerfacecolor='none', markeredgewidth=2,
-                    label=f'{color_name} Corners')
+                    label=f'{curve.color.name} Corners')
     
     @staticmethod
     def _plot_point_electrodes(point_electrodes: List[tuple]):
-        """Plot point electrodes."""
-        color_map = {
-            'RED': 'red',
-            'GREEN': 'green',
-            'BLUE': 'blue'
-        }
-        
+        """Plot point electrodes."""        
         for point, color in point_electrodes:
-            plot_color = color_map.get(color.name, 'black')
+            # Use the actual RGB values from the Color object
+            rgb = color.rgb
+            plot_color = (rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)  # Normalize to 0-1 for matplotlib
+    
             plt.plot(point.x, point.y, 'X', color=plot_color, markersize=12,
                     markeredgewidth=3, label=f'{color.name} Electrode')
     
