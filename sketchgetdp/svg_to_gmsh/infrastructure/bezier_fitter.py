@@ -46,14 +46,14 @@ class BezierFitter:
         """Determine optimal number of segments."""
         n_points = len(points)
         
-        # Moderate segmentation
+        # Increase base segments significantly
         if corners:
-            base_segments = max(3, len(corners))
+            base_segments = max(8, len(corners) * 3)  # More segments for corners
         else:
-            base_segments = max(4, n_points // 50)
+            base_segments = max(12, n_points // 20)  # More segments in general
             
-        min_segments = 3
-        max_segments = min(8, n_points // 25)  # Reduced maximum
+        min_segments = 8
+        max_segments = min(20, n_points // 10)  # Increased maximum
         
         return min(max_segments, max(min_segments, base_segments))
     
