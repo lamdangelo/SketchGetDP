@@ -55,7 +55,6 @@ def main():
                         show_control_points=True,
                         show_corners=True
                     )
-                    print(f"Plot saved to {args.output_plot}")
                 elif args.visualize:
                     # Display interactive plot
                     print("\nGenerating visualization...")

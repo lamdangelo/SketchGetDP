@@ -23,17 +23,15 @@ class BoundaryCurve:
         if len(self.bezier_segments) < 1:
             raise ValueError("Boundary curve must have at least one Bézier segment")
         
-        # Verify continuity at segment interfaces with tolerance
+        # Very tolerant check - only warn for significant gaps
         for i in range(len(self.bezier_segments) - 1):
             current_segment = self.bezier_segments[i]
             next_segment = self.bezier_segments[i + 1]
             
-            # End point of current should match start point of next (with tolerance)
             distance = current_segment.end_point.distance_to(next_segment.start_point)
-            if distance > 1e-4:  # Increased tolerance
+            if distance > 1e-5:  # Only warn for gaps > 0.00001
                 print(f"WARNING: Small discontinuity between segments {i} and {i+1}: {distance:.6f}")
-                # Don't raise error for small discontinuities
-    
+                
     @property
     def control_points(self) -> List[Point]:
         """Get all control points from all Bézier segments (including duplicates at interfaces)."""
