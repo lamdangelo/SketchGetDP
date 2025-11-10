@@ -160,10 +160,11 @@ class SVGParser:
             # Parse style attribute for stroke or fill
             style_parts = style.split(';')
             for part in style_parts:
-                if part.strip().startswith('stroke:'):
+                part = part.strip()
+                if part.startswith('stroke:'):
                     color_str = part.split(':')[1].strip()
                     break
-                elif part.strip().startswith('fill:'):
+                elif part.startswith('fill:'):
                     color_str = part.split(':')[1].strip()
                     break
         
@@ -176,21 +177,21 @@ class SVGParser:
         # Map common colors to our three electrode colors
         if (color_lower == '#ff0000' or color_lower == 'red' or 
             color_lower == 'rgb(255,0,0)' or color_lower == 'rgb(255, 0, 0)' or
-            color_lower == '#f00'):
+            color_lower == '#f00' or color_lower == '#ff0000ff'):  # Added RGBA format
             return Color.RED
         elif (color_lower == '#00ff00' or color_lower == 'green' or 
             color_lower == 'rgb(0,255,0)' or color_lower == 'rgb(0, 255, 0)' or
-            color_lower == '#0f0'):
+            color_lower == '#0f0' or color_lower == '#00ff00ff'):  # Added RGBA format
             return Color.GREEN
         elif (color_lower == '#0000ff' or color_lower == 'blue' or 
             color_lower == 'rgb(0,0,255)' or color_lower == 'rgb(0, 0, 255)' or
-            color_lower == '#00f'):
+            color_lower == '#00f' or color_lower == '#0000ffff'):  # Added RGBA format
             return Color.BLUE
         elif color_lower.startswith('#'):
             # For other hex colors, map to closest primary color
             return self._hex_to_primary_color(color_lower)
         elif color_lower.startswith('rgb'):
-            # Handle rgb format with spaces
+            # Handle rgb format with spaces and rgba
             return self._parse_rgb_color(color_lower)
         else:
             # Try to match color names more broadly
@@ -201,20 +202,35 @@ class SVGParser:
             elif 'blue' in color_lower:
                 return Color.BLUE
             else:
+                print(f"WARNING: Unknown color format: {color_str}, defaulting to red")
                 return Color.RED  # Default
-    
+
     def _parse_rgb_color(self, rgb_str: str) -> Color:
         """Parse rgb color string with various formats."""
         # Match rgb(r, g, b) with optional spaces
-        match = re.match(r'rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)', rgb_str)
+        match = re.match(r'rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)', rgb_str)
         if match:
             r, g, b = map(int, match.groups())
-            if r == 255 and g == 0 and b == 0:
+            if r > 200 and g < 50 and b < 50:
                 return Color.RED
-            elif r == 0 and g == 255 and b == 0:
+            elif g > 200 and r < 50 and b < 50:
                 return Color.GREEN
-            elif r == 0 and g == 0 and b == 255:
+            elif b > 200 and r < 50 and g < 50:
                 return Color.BLUE
+            # For other colors, find closest primary
+            colors = {
+                Color.RED: (255, 0, 0),
+                Color.GREEN: (0, 255, 0),
+                Color.BLUE: (0, 0, 255)
+            }
+            min_distance = float('inf')
+            closest_color = Color.RED
+            for color, (cr, cg, cb) in colors.items():
+                distance = math.sqrt((r - cr)**2 + (g - cg)**2 + (b - cb)**2)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_color = color
+            return closest_color
         return Color.RED  # Default
     
     def _hex_to_primary_color(self, hex_str: str) -> Color:
@@ -260,7 +276,7 @@ class SVGParser:
         return tag in ['rect', 'circle', 'ellipse', 'polygon']
     
     def _element_to_points(self, element: ET.Element, viewbox: Optional[Tuple[float, float, float, float]], 
-                      svg_width: float, svg_height: float) -> List[Point]:
+                    svg_width: float, svg_height: float) -> List[Point]:
         """
         Convert SVG element to ordered list of points.
         For red elements: return a single point (the center)
@@ -280,7 +296,8 @@ class SVGParser:
         
         # Existing logic for non-red elements...
         if tag == 'path':
-            points = self._parse_path(element.get('d', ''), viewbox, svg_width, svg_height)
+            path_data = element.get('d', '')
+            points = self._parse_path(path_data, viewbox, svg_width, svg_height)
         elif tag == 'rect':
             points = self._parse_rect(element, viewbox, svg_width, svg_height)
         elif tag == 'circle':
@@ -355,38 +372,101 @@ class SVGParser:
     
     def _parse_path(self, path_data: str, viewbox: Optional[Tuple[float, float, float, float]], 
                     svg_width: float, svg_height: float) -> List[Point]:
-        """Parse SVG path data into points with proper command handling."""
+        """Parse SVG path data into points with proper command handling including sampling Bézier curves."""
         points = []
         
-        # Parse all path commands
-        commands = re.findall(r'([ML])\s*([-\d.]+)[,\s]+([-\d.]+)', path_data, re.IGNORECASE)
+        # Parse commands more comprehensively
+        commands = re.findall(r'([MLCQZmlcqz])([^MLCQZmlcqz]*)', path_data, re.IGNORECASE)
         
-        # Process all commands
-        for cmd, x_str, y_str in commands:
+        current_point = Point(0, 0)
+        start_point = None
+        last_control = None
+        
+        for cmd, param_str in commands:
+            # Extract all numbers from parameters
+            coords = [float(x) for x in re.findall(r'[-\d.]+', param_str)]
+            
+            if not coords:
+                continue
+                
             try:
-                x = float(x_str)
-                y = float(y_str)
-                raw_point = Point(x, y)
-                scaled_point = self._scale_point(raw_point, viewbox, svg_width, svg_height)
-                points.append(scaled_point)
-            except ValueError:
+                if cmd.upper() == 'M':  # Move to (absolute)
+                    for i in range(0, len(coords), 2):
+                        x, y = coords[i], coords[i+1]
+                        current_point = Point(x, y)
+                        if start_point is None:
+                            start_point = current_point
+                        points.append(current_point)
+                        
+                elif cmd == 'm':  # Move to (relative)
+                    for i in range(0, len(coords), 2):
+                        x, y = coords[i], coords[i+1]
+                        current_point = Point(current_point.x + x, current_point.y + y)
+                        if start_point is None:
+                            start_point = current_point
+                        points.append(current_point)
+                        
+                elif cmd.upper() == 'L':  # Line to (absolute)
+                    for i in range(0, len(coords), 2):
+                        x, y = coords[i], coords[i+1]
+                        current_point = Point(x, y)
+                        points.append(current_point)
+                        
+                elif cmd == 'l':  # Line to (relative)
+                    for i in range(0, len(coords), 2):
+                        x, y = coords[i], coords[i+1]
+                        current_point = Point(current_point.x + x, current_point.y + y)
+                        points.append(current_point)
+                        
+                elif cmd.upper() == 'C':  # Cubic Bézier (absolute)
+                    for i in range(0, len(coords), 6):
+                        x1, y1, x2, y2, x, y = coords[i:i+6]
+                        # Sample the Bézier curve
+                        bezier_points = self._sample_cubic_bezier(
+                            current_point, Point(x1, y1), Point(x2, y2), Point(x, y)
+                        )
+                        points.extend(bezier_points[1:])  # Skip first point (already added)
+                        current_point = Point(x, y)
+                        last_control = Point(x2, y2)
+                        
+                elif cmd == 'c':  # Cubic Bézier (relative)
+                    for i in range(0, len(coords), 6):
+                        dx1, dy1, dx2, dy2, dx, dy = coords[i:i+6]
+                        x1, y1 = current_point.x + dx1, current_point.y + dy1
+                        x2, y2 = current_point.x + dx2, current_point.y + dy2
+                        x, y = current_point.x + dx, current_point.y + dy
+                        # Sample the Bézier curve
+                        bezier_points = self._sample_cubic_bezier(
+                            current_point, Point(x1, y1), Point(x2, y2), Point(x, y)
+                        )
+                        points.extend(bezier_points[1:])  # Skip first point (already added)
+                        current_point = Point(x, y)
+                        last_control = Point(x2, y2)
+                        
+                elif cmd.upper() == 'Z' or cmd == 'z':  # Close path
+                    if start_point and points and current_point != start_point:
+                        # Add line back to start point
+                        points.append(start_point)
+                        current_point = start_point
+                        
+            except (ValueError, IndexError) as e:
+                print(f"WARNING: Error parsing command {cmd} with params {param_str}: {e}")
                 continue
         
-        #Handle path closure
-        if len(points) > 2:
-            # Check if path should be closed (has 'z' command)
-            has_close_command = 'z' in path_data.lower()
-            
-            if has_close_command:
-                # Ensure first and last points are the same for closed paths
-                first_point = points[0]
-                last_point = points[-1]
-                
-                # If last point doesn't match first point, add first point at the end
-                if (abs(first_point.x - last_point.x) > 1e-6 or 
-                    abs(first_point.y - last_point.y) > 1e-6):
-                    points.append(first_point)
+        # Scale all points
+        scaled_points = [self._scale_point(p, viewbox, svg_width, svg_height) for p in points]
         
+        return scaled_points
+
+    def _sample_cubic_bezier(self, p0: Point, p1: Point, p2: Point, p3: Point, num_samples: int = 10) -> List[Point]:
+        """Sample a cubic Bézier curve to get multiple points along the curve."""
+        points = []
+        for i in range(num_samples + 1):
+            t = i / num_samples
+            # Cubic Bézier formula
+            x = (1-t)**3 * p0.x + 3*(1-t)**2*t * p1.x + 3*(1-t)*t**2 * p2.x + t**3 * p3.x
+            y = (1-t)**3 * p0.y + 3*(1-t)**2*t * p1.y + 3*(1-t)*t**2 * p2.y + t**3 * p3.y
+            points.append(Point(x, y))
         return points
     
     def _parse_rect(self, element: ET.Element, viewbox: Optional[Tuple[float, float, float, float]], 
