@@ -7,6 +7,7 @@ import math
 import re
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
+from svgpathtools import svg2paths, Path, Line, CubicBezier, QuadraticBezier, Arc
 
 from ..core.entities.point import Point
 from ..core.entities.color import Color
@@ -33,13 +34,15 @@ class RawBoundary:
 
 class SVGParser:
     """
-    Parses SVG files to extract colored boundary curves as ordered point sets.
+    SVG parser that uses svgpathtools for all path parsing
+    while adding custom logic for color extraction, scaling, and shape handling.
     """
     
-    def __init__(self):
+    def __init__(self, samples_per_segment: int = 20):
         self.namespace = '{http://www.w3.org/2000/svg}'
+        self.samples_per_segment = samples_per_segment
     
-    def parse(self, svg_file_path: str) -> Dict[Color, List[RawBoundary]]:
+    def extract_boundaries_by_color(self, svg_file_path: str) -> Dict[Color, List[RawBoundary]]:
         """
         Parse SVG file and extract boundary curves grouped by color.
         
@@ -53,101 +56,145 @@ class SVGParser:
             ValueError: If the SVG file is invalid or cannot be parsed
         """
         try:
+            # Parse all paths with their attributes
+            paths, attributes = svg2paths(svg_file_path)
             tree = ET.parse(svg_file_path)
             root = tree.getroot()
-        except ET.ParseError as e:
+        except Exception as e:
             raise ValueError(f"Invalid SVG file: {e}")
-        except FileNotFoundError:
-            raise ValueError(f"SVG file not found: {svg_file_path}")
         
-        # Extract viewBox for scaling to unit square
-        # Also get width/height as fallback
         viewbox = self._parse_viewbox(root.get('viewBox'))
-        svg_width, svg_height = self._parse_svg_dimensions(root)
+        svg_width, svg_height = self._get_svg_dimensions(root)
         
-        # Group elements by color
-        colored_elements = self._group_elements_by_color(root)
+        return self._convert_paths_to_boundaries(
+            paths, attributes, viewbox, svg_width, svg_height
+        )
+    
+    def _convert_paths_to_boundaries(self, paths: List[Path], attributes: List[dict],
+                                   viewbox: Optional[Tuple[float, float, float, float]],
+                                   svg_width: float, svg_height: float) -> Dict[Color, List[RawBoundary]]:
+        """
+        Convert all SVG paths to boundary objects grouped by color.
+        """
+        boundaries_by_color = {}
         
-        # Convert elements to raw boundaries
-        colored_boundaries = {}
-        for color, elements in colored_elements.items():
-            boundaries = []
-            for element in elements:
-                points = self._element_to_points(element, viewbox, svg_width, svg_height)
+        for path_index, (path, attr) in enumerate(zip(paths, attributes)):
+            try:
+                boundary = self._create_boundary_from_path(path, attr, viewbox, svg_width, svg_height)
                 
-                # Allow red elements with only 1 point (dots), but require >=3 points for other colors
-                if len(points) >= 3 or (color == Color.RED and len(points) == 1):
-                    raw_boundary = RawBoundary(
-                        points=points,
-                        color=color,
-                        is_closed=self._is_element_closed(element) if color != Color.RED else True
-                    )
-                    boundaries.append(raw_boundary)
-            
-            if boundaries:
-                colored_boundaries[color] = boundaries
+                if boundary.color not in boundaries_by_color:
+                    boundaries_by_color[boundary.color] = []
+                boundaries_by_color[boundary.color].append(boundary)
+                
+            except Exception as e:
+                print(f"WARNING: Failed to process path {path_index}: {e}")
+                continue
         
-        return colored_boundaries
+        return boundaries_by_color
     
-    def _parse_viewbox(self, viewbox_str: str) -> Optional[Tuple[float, float, float, float]]:
+    def _create_boundary_from_path(self, path: Path, attributes: dict,
+                                 viewbox: Optional[Tuple[float, float, float, float]],
+                                 svg_width: float, svg_height: float) -> RawBoundary:
         """
-        Parse SVG viewBox attribute to get scaling parameters.
-        Returns (min_x, min_y, width, height)
+        Create a RawBoundary from an SVG path and its attributes.
         """
-        if not viewbox_str:
-            return None
+        color = self._extract_color_from_attributes(attributes)
+        points = self._convert_path_to_points(path, viewbox, svg_width, svg_height)
+        
+        if not points:
+            raise ValueError("Path contains no valid points")
+        
+        if color == Color.RED:
+            center_point = self._calculate_center_point(points)
+            points = [center_point]
+            is_closed = True
+        else:
+            is_closed = self._is_path_closed(path)
+        
+        return RawBoundary(
+            points=points,
+            color=color,
+            is_closed=is_closed
+        )
+    
+    def _convert_path_to_points(self, path: Path, viewbox: Optional[Tuple[float, float, float, float]],
+                              svg_width: float, svg_height: float) -> List[Point]:
+        """
+        Convert svgpathtools Path object to list of scaled points.
+        """
+        points = []
+        
+        for segment in path:
+            segment_points = self._sample_segment_points(segment, self.samples_per_segment)
+            points.extend(segment_points)
+        
+        points = self._remove_duplicate_points(points)
+        return [self._scale_to_unit_coordinates(p, viewbox, svg_width, svg_height) for p in points]
+    
+    def _sample_segment_points(self, segment, samples_per_segment: int) -> List[Point]:
+        """
+        Sample multiple points from a path segment.
+        """
+        points = []
+        
+        if isinstance(segment, (Line, CubicBezier, QuadraticBezier, Arc)):
+            for sample_index in range(samples_per_segment + 1):
+                parameter = sample_index / samples_per_segment
+                try:
+                    complex_point = segment.point(parameter)
+                    points.append(Point(complex_point.real, complex_point.imag))
+                except Exception as e:
+                    print(f"WARNING: Failed to sample segment at parameter={parameter}: {e}")
+                    continue
+        
+        return points
+    
+    def _remove_duplicate_points(self, points: List[Point]) -> List[Point]:
+        """Remove consecutive duplicate points while preserving order."""
+        if not points:
+            return points
+        
+        unique_points = [points[0]]
+        for current_point in points[1:]:
+            if current_point != unique_points[-1]:
+                unique_points.append(current_point)
+        
+        return unique_points
+    
+    def _is_path_closed(self, path: Path) -> bool:
+        """
+        Determine if a path forms a closed shape.
+        """
+        if len(path) == 0:
+            return False
         
         try:
-            coords = [float(x) for x in viewbox_str.split()]
-            if len(coords) == 4:
-                return tuple(coords)
-            else:
-                return None
-        except ValueError:
-            return None
-    
-    def _parse_svg_dimensions(self, root: ET.Element) -> Tuple[float, float]:
-        """Parse SVG width and height attributes as fallback for scaling."""
-        try:
-            # Remove units if present (e.g., "100px" -> 100.0)
-            width_str = root.get('width', '100')
-            height_str = root.get('height', '100')
+            start_point = path[0].point(0)
+            end_point = path[-1].point(1)
             
-            width = float(re.sub(r'[^\d.]', '', width_str))
-            height = float(re.sub(r'[^\d.]', '', height_str))
-            return width, height
-        except (ValueError, TypeError):
-            return 100.0, 100.0  # Default fallback
+            tolerance = 1e-6
+            distance = abs(start_point - end_point)
+            return distance < tolerance
+        except:
+            return False
     
-    def _group_elements_by_color(self, root: ET.Element) -> Dict[Color, List[ET.Element]]:
-        """
-        Group SVG elements by their stroke color
-        """
-        colored_elements = {}
+    def _calculate_center_point(self, points: List[Point]) -> Point:
+        """Calculate the center point of a set of points."""
+        if not points:
+            raise ValueError("Cannot calculate center of empty point list")
         
-        # Find all path and basic shape elements that represent boundaries
-        elements = []
-        for tag in ['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline']:
-            # Search at all levels
-            found_elements = root.findall(f'.//{self.namespace}{tag}')
-            elements.extend(found_elements)
-        
-        for element in elements:
-            color = self._extract_color(element)
-            if color not in colored_elements:
-                colored_elements[color] = []
-            colored_elements[color].append(element)
-        
-        return colored_elements
+        avg_x = sum(p.x for p in points) / len(points)
+        avg_y = sum(p.y for p in points) / len(points)
+        return Point(avg_x, avg_y)
     
-    def _extract_color(self, element: ET.Element) -> Color:
+    def _extract_color_from_attributes(self, attributes: dict) -> Color:
         """
-        Extract color from SVG element's stroke or fill attribute.
+        Extract color from svgpathtools attributes dictionary.
         """
-        # First check stroke, then fill, then style attribute
-        stroke = element.get('stroke')
-        fill = element.get('fill')
-        style = element.get('style')
+        # Check stroke, fill, and style attributes
+        stroke = attributes.get('stroke')
+        fill = attributes.get('fill')
+        style = attributes.get('style')
         
         color_str = None
         
@@ -157,16 +204,13 @@ class SVGParser:
         elif fill and fill != 'none':
             color_str = fill
         elif style:
-            # Parse style attribute for stroke or fill more carefully
+            # Parse style attribute
             style_parts = [part.strip() for part in style.split(';')]
-
             for part in style_parts:
                 if part.startswith('stroke:'):
-                    # Split on first colon only and take the rest as the value
                     color_parts = part.split(':', 1)
                     if len(color_parts) == 2:
                         potential_color = color_parts[1].strip()
-                        # Check if this looks like a color value (not empty, not 'none')
                         if potential_color and potential_color != 'none':
                             color_str = potential_color
                             break
@@ -179,461 +223,162 @@ class SVGParser:
                             break
         
         if not color_str or color_str == 'none':
-            raise ValueError(f"No valid color found for SVG element. stroke: {stroke}, fill: {fill}, style: {style}")
+            raise ValueError(f"No valid color found in attributes: {attributes}")
         
-        # Handle different color formats
-        color_lower = color_str.lower().strip()
-        
-        # Map common colors to our three electrode colors
-        if (color_lower == '#ff0000' or color_lower == 'red' or 
-            color_lower == 'rgb(255,0,0)' or color_lower == 'rgb(255, 0, 0)' or
-            color_lower == '#f00' or color_lower == '#ff0000ff'):
-            return Color.RED
-        elif (color_lower == '#00ff00' or color_lower == 'green' or 
-            color_lower == 'rgb(0,255,0)' or color_lower == 'rgb(0, 255, 0)' or
-            color_lower == '#0f0' or color_lower == '#00ff00ff'):
-            return Color.GREEN
-        elif (color_lower == '#0000ff' or color_lower == 'blue' or 
-            color_lower == 'rgb(0,0,255)' or color_lower == 'rgb(0, 0, 255)' or
-            color_lower == '#00f' or color_lower == '#0000ffff'):
-            return Color.BLUE
-        elif color_lower.startswith('#'):
-            # For other hex colors, map to closest primary color
-            return self._hex_to_primary_color(color_lower)
-        elif color_lower.startswith('rgb'):
-            # Handle rgb format with spaces and rgba
-            return self._parse_rgb_color(color_lower)
-        else:
-            # Try to match color names more broadly
-            if 'red' in color_lower:
-                return Color.RED
-            elif 'green' in color_lower:
-                return Color.GREEN
-            elif 'blue' in color_lower:
-                return Color.BLUE
-            else:
-                raise ValueError(f"Unknown color format: '{color_str}' (normalized: '{color_lower}'). Expected #rrggbb, rgb(r,g,b), or color names red/green/blue")
-
-    def _parse_rgb_color(self, rgb_str: str) -> Color:
-        """Parse rgb color string with various formats."""
-        # Match rgb(r, g, b) with optional spaces
-        match = re.match(r'rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)', rgb_str)
-        if match:
-            r, g, b = map(int, match.groups())
-            if r > 200 and g < 50 and b < 50:
-                return Color.RED
-            elif g > 200 and r < 50 and b < 50:
-                return Color.GREEN
-            elif b > 200 and r < 50 and g < 50:
-                return Color.BLUE
-            # For other colors, find closest primary
-            colors = {
-                Color.RED: (255, 0, 0),
-                Color.GREEN: (0, 255, 0),
-                Color.BLUE: (0, 0, 255)
-            }
-            min_distance = float('inf')
-            closest_color = None
-            for color, (cr, cg, cb) in colors.items():
-                distance = math.sqrt((r - cr)**2 + (g - cg)**2 + (b - cb)**2)
-                if distance < min_distance:
-                    min_distance = distance
-                    closest_color = color
-            
-            if closest_color is None:
-                raise ValueError(f"Could not determine closest primary color for rgb({r},{g},{b})")
-            return closest_color
-        
-        raise ValueError(f"Invalid RGB color format: '{rgb_str}'. Expected rgb(r,g,b) or rgba(r,g,b,a)")
+        return self._parse_color_string(color_str)
     
-    def _hex_to_primary_color(self, hex_str: str) -> Color:
-        """Convert arbitrary hex color to closest primary color."""
-        hex_str = hex_str.lstrip('#')
+    def _parse_color_string(self, color_string: str) -> Color:
+        """Convert color string to Color enum."""
+        normalized_color = color_string.lower().strip()
+        
+        if self._is_red_color(normalized_color):
+            return Color.RED
+        elif self._is_green_color(normalized_color):
+            return Color.GREEN
+        elif self._is_blue_color(normalized_color):
+            return Color.BLUE
+        elif normalized_color.startswith('#'):
+            return self._convert_hex_to_primary_color(normalized_color)
+        elif normalized_color.startswith('rgb'):
+            return self._parse_rgb_color_string(normalized_color)
+        else:
+            return self._infer_color_from_name(normalized_color)
+    
+    def _is_red_color(self, color_string: str) -> bool:
+        """Check if color string represents a red color."""
+        red_representations = {
+            '#ff0000', 'red', '#f00', '#ff0000ff',
+            'rgb(255,0,0)', 'rgb(255, 0, 0)'
+        }
+        return color_string in red_representations
+    
+    def _is_green_color(self, color_string: str) -> bool:
+        """Check if color string represents a green color."""
+        green_representations = {
+            '#00ff00', 'green', '#0f0', '#00ff00ff',
+            'rgb(0,255,0)', 'rgb(0, 255, 0)'
+        }
+        return color_string in green_representations
+    
+    def _is_blue_color(self, color_string: str) -> bool:
+        """Check if color string represents a blue color."""
+        blue_representations = {
+            '#0000ff', 'blue', '#00f', '#0000ffff',
+            'rgb(0,0,255)', 'rgb(0, 0, 255)'
+        }
+        return color_string in blue_representations
+    
+    def _infer_color_from_name(self, color_name: str) -> Color:
+        """Infer color from color name containing color hint."""
+        if 'red' in color_name:
+            return Color.RED
+        elif 'green' in color_name:
+            return Color.GREEN
+        elif 'blue' in color_name:
+            return Color.BLUE
+        else:
+            raise ValueError(f"Unknown color format: '{color_name}'")
+    
+    def _parse_rgb_color_string(self, rgb_string: str) -> Color:
+        """Parse RGB color string and find closest primary color."""
+        match = re.match(r'rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)', rgb_string)
+        if not match:
+            raise ValueError(f"Invalid RGB color format: '{rgb_string}'")
+        
+        red, green, blue = map(int, match.groups())
+        return self._find_closest_primary_color(red, green, blue)
+    
+    def _convert_hex_to_primary_color(self, hex_string: str) -> Color:
+        """Convert hex color to closest primary color."""
+        hex_digits = hex_string.lstrip('#')
         
         try:
-            if len(hex_str) == 6:
-                r = int(hex_str[0:2], 16)
-                g = int(hex_str[2:4], 16)
-                b = int(hex_str[4:6], 16)
-            elif len(hex_str) == 3:
-                r = int(hex_str[0] * 2, 16)
-                g = int(hex_str[1] * 2, 16)
-                b = int(hex_str[2] * 2, 16)
+            if len(hex_digits) == 6:
+                red = int(hex_digits[0:2], 16)
+                green = int(hex_digits[2:4], 16)
+                blue = int(hex_digits[4:6], 16)
+            elif len(hex_digits) == 3:
+                red = int(hex_digits[0] * 2, 16)
+                green = int(hex_digits[1] * 2, 16)
+                blue = int(hex_digits[2] * 2, 16)
             else:
-                raise ValueError(f"Invalid hex color length: {len(hex_str)} (expected 3 or 6 characters)")
+                raise ValueError(f"Invalid hex color length: {len(hex_digits)}")
             
-            # Find closest primary color by Euclidean distance in RGB space
-            colors = {
-                Color.RED: (255, 0, 0),
-                Color.GREEN: (0, 255, 0),
-                Color.BLUE: (0, 0, 255)
-            }
-            
-            min_distance = float('inf')
-            closest_color = None
-            
-            for color, (cr, cg, cb) in colors.items():
-                distance = math.sqrt((r - cr)**2 + (g - cg)**2 + (b - cb)**2)
-                if distance < min_distance:
-                    min_distance = distance
-                    closest_color = color
-            
-            if closest_color is None:
-                raise ValueError(f"Could not determine closest primary color for hex #{hex_str}")
-                
-            return closest_color
+            return self._find_closest_primary_color(red, green, blue)
             
         except ValueError as e:
-            raise ValueError(f"Invalid hex color format '#{hex_str}': {e}")
+            raise ValueError(f"Invalid hex color format '#{hex_digits}': {e}")
 
-    def _is_element_closed(self, element: ET.Element) -> bool:
-        """Determine if an SVG element represents a closed shape."""
-        tag = element.tag.replace(self.namespace, '')
-        if tag == 'path':
-            # Check if path has 'z' or 'Z' command
-            path_data = element.get('d', '')
-            return 'z' in path_data.lower()
-        return tag in ['rect', 'circle', 'ellipse', 'polygon']
-    
-    def _element_to_points(self, element: ET.Element, viewbox: Optional[Tuple[float, float, float, float]], 
-                    svg_width: float, svg_height: float) -> List[Point]:
-        """
-        Convert SVG element to ordered list of points.
-        For red elements: return a single point (the center)
-        For other elements: return the full boundary points
-        """
-        tag = element.tag.replace(self.namespace, '')
+    def _find_closest_primary_color(self, red: int, green: int, blue: int) -> Color:
+        """Find the closest primary color using Euclidean distance in RGB space."""
+        primary_colors = {
+            Color.RED: (255, 0, 0),
+            Color.GREEN: (0, 255, 0),
+            Color.BLUE: (0, 0, 255)
+        }
         
-        # Check if this is a red element that should be treated as a dot
-        color = self._extract_color(element)
-        if color == Color.RED:
-            # For red elements, return a single point (the center)
-            center = self._get_element_center(element, viewbox, svg_width, svg_height)
-            if center:
-                return [center]  # Return single point instead of boundary
-            else:
-                return []
+        min_distance = float('inf')
+        closest_color = None
         
-        # Existing logic for non-red elements...
-        if tag == 'path':
-            path_data = element.get('d', '')
-            points = self._parse_path(path_data, viewbox, svg_width, svg_height)
-        elif tag == 'rect':
-            points = self._parse_rect(element, viewbox, svg_width, svg_height)
-        elif tag == 'circle':
-            points = self._parse_circle(element, viewbox, svg_width, svg_height)
-        elif tag == 'ellipse':
-            points = self._parse_ellipse(element, viewbox, svg_width, svg_height)
-        elif tag == 'polygon':
-            points = self._parse_polygon(element.get('points', ''), viewbox, svg_width, svg_height)
-        elif tag == 'polyline':
-            points = self._parse_polyline(element.get('points', ''), viewbox, svg_width, svg_height)
-        else:
-            points = []
+        for color, (target_red, target_green, target_blue) in primary_colors.items():
+            distance = math.sqrt(
+                (red - target_red)**2 + 
+                (green - target_green)**2 + 
+                (blue - target_blue)**2
+            )
+            if distance < min_distance:
+                min_distance = distance
+                closest_color = color
         
-        return points
+        if closest_color is None:
+            raise ValueError(f"Could not determine closest primary color for RGB({red},{green},{blue})")
         
-    def _get_element_center(self, element: ET.Element, viewbox: Optional[Tuple[float, float, float, float]], 
-                           svg_width: float, svg_height: float) -> Optional[Point]:
-        """Get the center point of an SVG element for dot creation."""
-        tag = element.tag.replace(self.namespace, '')
-        
-        try:
-            if tag == 'circle':
-                cx = float(element.get('cx', 0))
-                cy = float(element.get('cy', 0))
-                return self._scale_point(Point(cx, cy), viewbox, svg_width, svg_height)
-            
-            elif tag == 'ellipse':
-                cx = float(element.get('cx', 0))
-                cy = float(element.get('cy', 0))
-                return self._scale_point(Point(cx, cy), viewbox, svg_width, svg_height)
-            
-            elif tag == 'rect':
-                x = float(element.get('x', 0))
-                y = float(element.get('y', 0))
-                width = float(element.get('width', 0))
-                height = float(element.get('height', 0))
-                center_x = x + width / 2
-                center_y = y + height / 2
-                return self._scale_point(Point(center_x, center_y), viewbox, svg_width, svg_height)
-            
-            elif tag == 'path':
-                # Extract first point from path as center
-                path_data = element.get('d', '')
-                commands = re.findall(r'([ML])\s*([-\d.]+)\s*([-\d.]+)', path_data, re.IGNORECASE)
-                if commands:
-                    x = float(commands[0][1])
-                    y = float(commands[0][2])
-                    return self._scale_point(Point(x, y), viewbox, svg_width, svg_height)
-            
-            elif tag in ['polygon', 'polyline']:
-                # Calculate centroid of polygon
-                points_str = element.get('points', '')
-                points = self._parse_poly_points(points_str, viewbox, svg_width, svg_height)
-                if points:
-                    avg_x = sum(p.x for p in points) / len(points)
-                    avg_y = sum(p.y for p in points) / len(points)
-                    return Point(avg_x, avg_y)
-        
-        except (ValueError, TypeError, ZeroDivisionError):
-            pass
-        
-        return None
-    
-    def _create_dot_boundary(self, center: Point, viewbox: Optional[Tuple[float, float, float, float]], 
-                            svg_width: float, svg_height: float) -> List[Point]:
-        """
-        Create a small circular boundary for a dot.
-        This ensures dots have proper boundary representation but remain small.
-        """
-        dot_radius = 0.005  # Small radius for dots in normalized coordinates
-        return self._approximate_circle(center.x, center.y, dot_radius, viewbox, svg_width, svg_height)
-    
-    def _parse_path(self, path_data: str, viewbox: Optional[Tuple[float, float, float, float]], 
-                    svg_width: float, svg_height: float) -> List[Point]:
-        """Parse SVG path data into points with proper command handling including sampling Bézier curves."""
-        points = []
-        
-        # Parse commands more comprehensively
-        commands = re.findall(r'([MLCQZmlcqz])([^MLCQZmlcqz]*)', path_data, re.IGNORECASE)
-        
-        current_point = Point(0, 0)
-        start_point = None
-        last_control = None
-        
-        for cmd, param_str in commands:
-            # Extract all numbers from parameters
-            coords = [float(x) for x in re.findall(r'[-\d.]+', param_str)]
-            
-            if not coords:
-                continue
-                
-            try:
-                if cmd.upper() == 'M':  # Move to (absolute)
-                    for i in range(0, len(coords), 2):
-                        x, y = coords[i], coords[i+1]
-                        current_point = Point(x, y)
-                        if start_point is None:
-                            start_point = current_point
-                        points.append(current_point)
-                        
-                elif cmd == 'm':  # Move to (relative)
-                    for i in range(0, len(coords), 2):
-                        x, y = coords[i], coords[i+1]
-                        current_point = Point(current_point.x + x, current_point.y + y)
-                        if start_point is None:
-                            start_point = current_point
-                        points.append(current_point)
-                        
-                elif cmd.upper() == 'L':  # Line to (absolute)
-                    for i in range(0, len(coords), 2):
-                        x, y = coords[i], coords[i+1]
-                        current_point = Point(x, y)
-                        points.append(current_point)
-                        
-                elif cmd == 'l':  # Line to (relative)
-                    for i in range(0, len(coords), 2):
-                        x, y = coords[i], coords[i+1]
-                        current_point = Point(current_point.x + x, current_point.y + y)
-                        points.append(current_point)
-                        
-                elif cmd.upper() == 'C':  # Cubic Bézier (absolute)
-                    for i in range(0, len(coords), 6):
-                        x1, y1, x2, y2, x, y = coords[i:i+6]
-                        # Sample the Bézier curve
-                        bezier_points = self._sample_cubic_bezier(
-                            current_point, Point(x1, y1), Point(x2, y2), Point(x, y)
-                        )
-                        points.extend(bezier_points[1:])  # Skip first point (already added)
-                        current_point = Point(x, y)
-                        last_control = Point(x2, y2)
-                        
-                elif cmd == 'c':  # Cubic Bézier (relative)
-                    for i in range(0, len(coords), 6):
-                        dx1, dy1, dx2, dy2, dx, dy = coords[i:i+6]
-                        x1, y1 = current_point.x + dx1, current_point.y + dy1
-                        x2, y2 = current_point.x + dx2, current_point.y + dy2
-                        x, y = current_point.x + dx, current_point.y + dy
-                        # Sample the Bézier curve
-                        bezier_points = self._sample_cubic_bezier(
-                            current_point, Point(x1, y1), Point(x2, y2), Point(x, y)
-                        )
-                        points.extend(bezier_points[1:])  # Skip first point (already added)
-                        current_point = Point(x, y)
-                        last_control = Point(x2, y2)
-                        
-                elif cmd.upper() == 'Z' or cmd == 'z':  # Close path
-                    if start_point and points and current_point != start_point:
-                        # Add line back to start point
-                        points.append(start_point)
-                        current_point = start_point
-                        
-            except (ValueError, IndexError) as e:
-                print(f"WARNING: Error parsing command {cmd} with params {param_str}: {e}")
-                continue
-        
-        # Scale all points
-        scaled_points = [self._scale_point(p, viewbox, svg_width, svg_height) for p in points]
-        
-        return scaled_points
+        return closest_color
 
-    def _sample_cubic_bezier(self, p0: Point, p1: Point, p2: Point, p3: Point, num_samples: int = 10) -> List[Point]:
-        """Sample a cubic Bézier curve to get multiple points along the curve."""
-        points = []
-        for i in range(num_samples + 1):
-            t = i / num_samples
-            # Cubic Bézier formula
-            x = (1-t)**3 * p0.x + 3*(1-t)**2*t * p1.x + 3*(1-t)*t**2 * p2.x + t**3 * p3.x
-            y = (1-t)**3 * p0.y + 3*(1-t)**2*t * p1.y + 3*(1-t)*t**2 * p2.y + t**3 * p3.y
-            points.append(Point(x, y))
-        return points
-    
-    def _parse_rect(self, element: ET.Element, viewbox: Optional[Tuple[float, float, float, float]], 
-                   svg_width: float, svg_height: float) -> List[Point]:
-        """Convert rectangle to boundary points."""
+    def _parse_viewbox(self, viewbox_string: str) -> Optional[Tuple[float, float, float, float]]:
+        """Parse SVG viewBox attribute."""
+        if not viewbox_string:
+            return None
+        
         try:
-            x = float(element.get('x', 0))
-            y = float(element.get('y', 0))
-            width = float(element.get('width', 0))
-            height = float(element.get('height', 0))
-            
-            points = [
-                Point(x, y),
-                Point(x + width, y),
-                Point(x + width, y + height),
-                Point(x, y + height),
-                Point(x, y)  # Close the rectangle
-            ]
-            
-            return [self._scale_point(p, viewbox, svg_width, svg_height) for p in points]
-        except (ValueError, TypeError):
-            return []
+            coordinates = [float(coord) for coord in viewbox_string.split()]
+            return tuple(coordinates) if len(coordinates) == 4 else None
+        except ValueError:
+            return None
     
-    def _parse_circle(self, element: ET.Element, viewbox: Optional[Tuple[float, float, float, float]], 
-                     svg_width: float, svg_height: float) -> List[Point]:
-        """Convert circle to boundary points (approximated as polygon)."""
+    def _get_svg_dimensions(self, root_element: ET.Element) -> Tuple[float, float]:
+        """Extract SVG width and height as fallback for scaling."""
         try:
-            cx = float(element.get('cx', 0))
-            cy = float(element.get('cy', 0))
-            r = float(element.get('r', 0))
+            width_string = root_element.get('width', '100')
+            height_string = root_element.get('height', '100')
             
-            return self._approximate_circle(cx, cy, r, viewbox, svg_width, svg_height)
+            width = float(re.sub(r'[^\d.]', '', width_string))
+            height = float(re.sub(r'[^\d.]', '', height_string))
+            return width, height
         except (ValueError, TypeError):
-            return []
+            return 100.0, 100.0
     
-    def _parse_ellipse(self, element: ET.Element, viewbox: Optional[Tuple[float, float, float, float]], 
-                      svg_width: float, svg_height: float) -> List[Point]:
-        """Convert ellipse to boundary points (approximated as polygon)."""
-        try:
-            cx = float(element.get('cx', 0))
-            cy = float(element.get('cy', 0))
-            rx = float(element.get('rx', 0))
-            ry = float(element.get('ry', 0))
-            
-            return self._approximate_ellipse(cx, cy, rx, ry, viewbox, svg_width, svg_height)
-        except (ValueError, TypeError):
-            return []
-    
-    def _parse_polygon(self, points_str: str, viewbox: Optional[Tuple[float, float, float, float]], 
-                      svg_width: float, svg_height: float) -> List[Point]:
-        """Parse polygon points string (automatically closed)."""
-        points = self._parse_poly_points(points_str, viewbox, svg_width, svg_height)
-        if points and len(points) > 2:
-            # Ensure polygon is closed by adding first point at the end
-            # Only if it's not already closed
-            if points[0] != points[-1]:
-                points.append(points[0])
-        return points
-    
-    def _parse_polyline(self, points_str: str, viewbox: Optional[Tuple[float, float, float, float]], 
-                       svg_width: float, svg_height: float) -> List[Point]:
-        """Parse polyline points string (not automatically closed)."""
-        points = self._parse_poly_points(points_str, viewbox, svg_width, svg_height)
-        # For polylines with only 2 points, create a third point
-        if len(points) == 2:
-            p1, p2 = points[0], points[1]
-            mid_x = (p1.x + p2.x) / 2
-            mid_y = (p1.y + p2.y) / 2
-            dx = p2.x - p1.x
-            dy = p2.y - p1.y
-            perp_x = -dy * 0.1
-            perp_y = dx * 0.1
-            points.append(Point(mid_x + perp_x, mid_y + perp_y))
-        return points
-    
-    def _parse_poly_points(self, points_str: str, viewbox: Optional[Tuple[float, float, float, float]], 
-                          svg_width: float, svg_height: float) -> List[Point]:
-        """Parse points string for polygon/polyline."""
-        points = []
-        coords = re.findall(r'[-\d.]+', points_str)
-        
-        for i in range(0, len(coords) - 1, 2):
-            try:
-                x = float(coords[i])
-                y = float(coords[i + 1])
-                points.append(self._scale_point(Point(x, y), viewbox, svg_width, svg_height))
-            except (ValueError, IndexError):
-                continue
-        
-        return points
-    
-    def _approximate_circle(self, cx: float, cy: float, r: float, 
-                           viewbox: Optional[Tuple[float, float, float, float]], 
-                           svg_width: float, svg_height: float) -> List[Point]:
-        """Approximate circle as polygon with 32 segments."""
-        points = []
-        num_segments = 32
-        
-        for i in range(num_segments + 1):
-            angle = 2 * math.pi * i / num_segments
-            x = cx + r * math.cos(angle)
-            y = cy + r * math.sin(angle)
-            points.append(self._scale_point(Point(x, y), viewbox, svg_width, svg_height))
-        
-        return points
-    
-    def _approximate_ellipse(self, cx: float, cy: float, rx: float, ry: float, 
-                            viewbox: Optional[Tuple[float, float, float, float]], 
-                            svg_width: float, svg_height: float) -> List[Point]:
-        """Approximate ellipse as polygon with 32 segments."""
-        points = []
-        num_segments = 32
-        
-        for i in range(num_segments + 1):
-            angle = 2 * math.pi * i / num_segments
-            x = cx + rx * math.cos(angle)
-            y = cy + ry * math.sin(angle)
-            points.append(self._scale_point(Point(x, y), viewbox, svg_width, svg_height))
-        
-        return points
-    
-    def _scale_point(self, point: Point, viewbox: Optional[Tuple[float, float, float, float]], 
-                    svg_width: float, svg_height: float) -> Point:
+    def _scale_to_unit_coordinates(self, point: Point, viewbox: Optional[Tuple[float, float, float, float]], 
+                                 svg_width: float, svg_height: float) -> Point:
         """
         Scale point to unit square [0,1]×[0,1] and flip Y-axis.
         """
         if viewbox:
-            vx, vy, vw, vh = viewbox
-            if vw > 0 and vh > 0:
-                # Normalize to [0,1] range using viewBox
-                x_norm = (point.x - vx) / vw
-                y_norm = (point.y - vy) / vh
-                # FLIP Y-AXIS: Convert from SVG (top-left) to mathematical (bottom-left)
-                y_norm = 1.0 - y_norm
-                return Point(x_norm, y_norm)
+            viewbox_x, viewbox_y, viewbox_width, viewbox_height = viewbox
+            if viewbox_width > 0 and viewbox_height > 0:
+                normalized_x = (point.x - viewbox_x) / viewbox_width
+                normalized_y = (point.y - viewbox_y) / viewbox_height
+                flipped_y = 1.0 - normalized_y
+                return Point(normalized_x, flipped_y)
         
-        # Fallback: use SVG dimensions or default scaling
         if svg_width > 0 and svg_height > 0:
-            x_norm = point.x / svg_width
-            y_norm = point.y / svg_height
-            # FLIP Y-AXIS
-            y_norm = 1.0 - y_norm
-            return Point(x_norm, y_norm)
+            normalized_x = point.x / svg_width
+            normalized_y = point.y / svg_height
+            flipped_y = 1.0 - normalized_y
+            return Point(normalized_x, flipped_y)
         
-        # Final fallback
-        x_norm = point.x / 100.0
-        y_norm = point.y / 100.0
-        # FLIP Y-AXIS
-        y_norm = 1.0 - y_norm
-        return Point(x_norm, y_norm)
+        # Fallback to default scaling
+        normalized_x = point.x / 100.0
+        normalized_y = point.y / 100.0
+        flipped_y = 1.0 - normalized_y
+        return Point(normalized_x, flipped_y)

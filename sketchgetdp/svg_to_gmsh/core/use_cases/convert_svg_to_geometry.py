@@ -26,7 +26,7 @@ class ConvertSVGToGeometry:
         Convert SVG file to boundary curves with Bézier representations and point electrodes.
         """
         # Step 1: Parse SVG to get raw boundaries grouped by color
-        colored_boundaries = self.svg_parser.parse(svg_file_path)
+        colored_boundaries = self.svg_parser.extract_boundaries_by_color(svg_file_path)
         
         boundary_curves = []
         point_electrodes = []
