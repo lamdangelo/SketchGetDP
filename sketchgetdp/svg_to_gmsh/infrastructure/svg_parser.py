@@ -157,19 +157,29 @@ class SVGParser:
         elif fill and fill != 'none':
             color_str = fill
         elif style:
-            # Parse style attribute for stroke or fill
-            style_parts = style.split(';')
+            # Parse style attribute for stroke or fill more carefully
+            style_parts = [part.strip() for part in style.split(';')]
+
             for part in style_parts:
-                part = part.strip()
                 if part.startswith('stroke:'):
-                    color_str = part.split(':')[1].strip()
-                    break
+                    # Split on first colon only and take the rest as the value
+                    color_parts = part.split(':', 1)
+                    if len(color_parts) == 2:
+                        potential_color = color_parts[1].strip()
+                        # Check if this looks like a color value (not empty, not 'none')
+                        if potential_color and potential_color != 'none':
+                            color_str = potential_color
+                            break
                 elif part.startswith('fill:'):
-                    color_str = part.split(':')[1].strip()
-                    break
+                    color_parts = part.split(':', 1)
+                    if len(color_parts) == 2:
+                        potential_color = color_parts[1].strip()
+                        if potential_color and potential_color != 'none':
+                            color_str = potential_color
+                            break
         
         if not color_str or color_str == 'none':
-            return Color.RED  # Default color
+            raise ValueError(f"No valid color found for SVG element. stroke: {stroke}, fill: {fill}, style: {style}")
         
         # Handle different color formats
         color_lower = color_str.lower().strip()
@@ -177,15 +187,15 @@ class SVGParser:
         # Map common colors to our three electrode colors
         if (color_lower == '#ff0000' or color_lower == 'red' or 
             color_lower == 'rgb(255,0,0)' or color_lower == 'rgb(255, 0, 0)' or
-            color_lower == '#f00' or color_lower == '#ff0000ff'):  # Added RGBA format
+            color_lower == '#f00' or color_lower == '#ff0000ff'):
             return Color.RED
         elif (color_lower == '#00ff00' or color_lower == 'green' or 
             color_lower == 'rgb(0,255,0)' or color_lower == 'rgb(0, 255, 0)' or
-            color_lower == '#0f0' or color_lower == '#00ff00ff'):  # Added RGBA format
+            color_lower == '#0f0' or color_lower == '#00ff00ff'):
             return Color.GREEN
         elif (color_lower == '#0000ff' or color_lower == 'blue' or 
             color_lower == 'rgb(0,0,255)' or color_lower == 'rgb(0, 0, 255)' or
-            color_lower == '#00f' or color_lower == '#0000ffff'):  # Added RGBA format
+            color_lower == '#00f' or color_lower == '#0000ffff'):
             return Color.BLUE
         elif color_lower.startswith('#'):
             # For other hex colors, map to closest primary color
@@ -202,8 +212,7 @@ class SVGParser:
             elif 'blue' in color_lower:
                 return Color.BLUE
             else:
-                print(f"WARNING: Unknown color format: {color_str}, defaulting to red")
-                return Color.RED  # Default
+                raise ValueError(f"Unknown color format: '{color_str}' (normalized: '{color_lower}'). Expected #rrggbb, rgb(r,g,b), or color names red/green/blue")
 
     def _parse_rgb_color(self, rgb_str: str) -> Color:
         """Parse rgb color string with various formats."""
@@ -224,48 +233,59 @@ class SVGParser:
                 Color.BLUE: (0, 0, 255)
             }
             min_distance = float('inf')
-            closest_color = Color.RED
+            closest_color = None
             for color, (cr, cg, cb) in colors.items():
                 distance = math.sqrt((r - cr)**2 + (g - cg)**2 + (b - cb)**2)
                 if distance < min_distance:
                     min_distance = distance
                     closest_color = color
+            
+            if closest_color is None:
+                raise ValueError(f"Could not determine closest primary color for rgb({r},{g},{b})")
             return closest_color
-        return Color.RED  # Default
+        
+        raise ValueError(f"Invalid RGB color format: '{rgb_str}'. Expected rgb(r,g,b) or rgba(r,g,b,a)")
     
     def _hex_to_primary_color(self, hex_str: str) -> Color:
         """Convert arbitrary hex color to closest primary color."""
         hex_str = hex_str.lstrip('#')
         
-        if len(hex_str) == 6:
-            r = int(hex_str[0:2], 16)
-            g = int(hex_str[2:4], 16)
-            b = int(hex_str[4:6], 16)
-        elif len(hex_str) == 3:
-            r = int(hex_str[0] * 2, 16)
-            g = int(hex_str[1] * 2, 16)
-            b = int(hex_str[2] * 2, 16)
-        else:
-            return Color.RED
-        
-        # Find closest primary color by Euclidean distance in RGB space
-        colors = {
-            Color.RED: (255, 0, 0),
-            Color.GREEN: (0, 255, 0),
-            Color.BLUE: (0, 0, 255)
-        }
-        
-        min_distance = float('inf')
-        closest_color = Color.RED
-        
-        for color, (cr, cg, cb) in colors.items():
-            distance = math.sqrt((r - cr)**2 + (g - cg)**2 + (b - cb)**2)
-            if distance < min_distance:
-                min_distance = distance
-                closest_color = color
-        
-        return closest_color
-    
+        try:
+            if len(hex_str) == 6:
+                r = int(hex_str[0:2], 16)
+                g = int(hex_str[2:4], 16)
+                b = int(hex_str[4:6], 16)
+            elif len(hex_str) == 3:
+                r = int(hex_str[0] * 2, 16)
+                g = int(hex_str[1] * 2, 16)
+                b = int(hex_str[2] * 2, 16)
+            else:
+                raise ValueError(f"Invalid hex color length: {len(hex_str)} (expected 3 or 6 characters)")
+            
+            # Find closest primary color by Euclidean distance in RGB space
+            colors = {
+                Color.RED: (255, 0, 0),
+                Color.GREEN: (0, 255, 0),
+                Color.BLUE: (0, 0, 255)
+            }
+            
+            min_distance = float('inf')
+            closest_color = None
+            
+            for color, (cr, cg, cb) in colors.items():
+                distance = math.sqrt((r - cr)**2 + (g - cg)**2 + (b - cb)**2)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_color = color
+            
+            if closest_color is None:
+                raise ValueError(f"Could not determine closest primary color for hex #{hex_str}")
+                
+            return closest_color
+            
+        except ValueError as e:
+            raise ValueError(f"Invalid hex color format '#{hex_str}': {e}")
+
     def _is_element_closed(self, element: ET.Element) -> bool:
         """Determine if an SVG element represents a closed shape."""
         tag = element.tag.replace(self.namespace, '')
