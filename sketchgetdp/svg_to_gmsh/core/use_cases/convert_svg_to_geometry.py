@@ -6,7 +6,7 @@ from typing import List, Tuple
 from ...core.entities.boundary_curve import BoundaryCurve
 from ...core.entities.point import Point
 from ...core.entities.color import Color
-from ...infrastructure.svg_parser import SVGParser, RawBoundary
+from ...infrastructure.svg_parser import SVGParser
 from ...infrastructure.corner_detector import CornerDetector
 from ...infrastructure.bezier_fitter import BezierFitter
 
@@ -48,12 +48,12 @@ class ConvertSVGToGeometry:
                     points = self._ensure_proper_closure(raw_boundary.points, raw_boundary.is_closed)
                     
                     # Step 2: Detect corners in the boundary
-                    corners = self.corner_detector.detect_corners(points)
+                    corner_indices = self.corner_detector.detect_corners(points)
                     
                     # Step 3: Fit piecewise Bézier curves
                     boundary_curve = self.bezier_fitter.fit_boundary_curve(
                         points=points,
-                        corners=corners,
+                        corner_indices=corner_indices,
                         color=color,
                         is_closed=raw_boundary.is_closed
                     )

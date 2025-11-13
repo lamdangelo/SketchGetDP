@@ -2,7 +2,7 @@
 Robust corner detection for freehand drawings.
 """
 
-from typing import List, Tuple
+from typing import List
 import math
 from ..core.entities.point import Point
 
@@ -28,9 +28,12 @@ class CornerDetector:
         self.min_corner_angle_rad = math.radians(min_corner_angle)
         self.min_distance = min_distance
     
-    def detect_corners(self, boundary_points: List[Point]) -> List[Point]:
+    def detect_corners(self, boundary_points: List[Point]) -> List[int]:
         """
         Detect corners in freehand boundary curves using robust multi-scale approach.
+        
+        Returns:
+            List of indices of corner points in the original boundary_points list
         """
         if len(boundary_points) < 10:
             return []
@@ -47,7 +50,44 @@ class CornerDetector:
         combined_curvature = self._combine_curvature_maps(curvature_maps)
         corner_indices = self._find_significant_corners(combined_curvature, cleaned_points)
         
-        return [cleaned_points[i] for i in corner_indices]
+        # Map cleaned point indices back to original point indices
+        original_indices = self._map_to_original_indices(boundary_points, cleaned_points, corner_indices)
+        
+        return original_indices
+    
+    def _map_to_original_indices(self, original_points: List[Point], cleaned_points: List[Point], 
+                               cleaned_indices: List[int]) -> List[int]:
+        """
+        Map indices from cleaned points back to original points.
+        
+        Since preprocessing may remove duplicates and apply smoothing, we need to find
+        the closest matching points in the original list.
+        """
+        original_indices = []
+        
+        for cleaned_idx in cleaned_indices:
+            if cleaned_idx >= len(cleaned_points):
+                continue
+                
+            cleaned_point = cleaned_points[cleaned_idx]
+            
+            # Find the closest point in the original list
+            min_distance = float('inf')
+            best_index = -1
+            
+            for i, original_point in enumerate(original_points):
+                distance = math.sqrt((original_point.x - cleaned_point.x) ** 2 + 
+                                   (original_point.y - cleaned_point.y) ** 2)
+                if distance < min_distance:
+                    min_distance = distance
+                    best_index = i
+            
+            if best_index != -1 and best_index not in original_indices:
+                original_indices.append(best_index)
+        
+        # Sort indices to maintain order along the boundary
+        original_indices.sort()
+        return original_indices
     
     def _preprocess_points(self, points: List[Point]) -> List[Point]:
         """Remove duplicates and apply light smoothing."""
@@ -201,34 +241,3 @@ class CornerDetector:
         is_significant = combined_curvature[index] > neighbor_avg * 1.5
         
         return is_sharp and is_significant
-    
-    def debug_corner_detection(self, boundary_points: List[Point]):
-        """Debug corner detection process."""
-        if len(boundary_points) < 10:
-            print("Not enough points for meaningful corner detection")
-            return
-        
-        cleaned_points = self._preprocess_points(boundary_points)
-        print(f"Processing {len(cleaned_points)} points for corner detection")
-        
-        # Multi-scale analysis
-        curvature_maps = self._multi_scale_curvature_analysis(cleaned_points)
-        combined_curvature = self._combine_curvature_maps(curvature_maps)
-        
-        # Find and show top curvature points
-        top_indices = sorted(range(len(combined_curvature)), 
-                           key=lambda i: combined_curvature[i], reverse=True)[:10]
-        
-        print("Top curvature points:")
-        for idx in top_indices:
-            if combined_curvature[idx] > 0.05:  # Only show significant ones
-                point = cleaned_points[idx]
-                curvature_val = combined_curvature[idx]
-                angle_deg = curvature_val * 180  # Convert to degrees for readability
-                print(f"  Point {idx}: ({point.x:.3f}, {point.y:.3f}) - curvature: {curvature_val:.3f} ({angle_deg:.1f}°)")
-        
-        # Show detected corners
-        corners = self.detect_corners(boundary_points)
-        print(f"Detected {len(corners)} corners:")
-        for i, corner in enumerate(corners):
-            print(f"  Corner {i}: ({corner.x:.3f}, {corner.y:.3f})")

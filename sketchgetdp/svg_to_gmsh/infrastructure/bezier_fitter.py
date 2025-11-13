@@ -15,7 +15,7 @@ class BezierFitter:
         self.degree = degree
         self.min_points_per_segment = min_points_per_segment
         
-    def fit_boundary_curve(self, points: List[Point], corners: List[Point], color, is_closed: bool = True) -> BoundaryCurve:
+    def fit_boundary_curve(self, points: List[Point], corner_indices: List[int], color, is_closed: bool = True) -> BoundaryCurve:
         """
         Fit piecewise Bézier curves with optimized continuity and accuracy.
         """
@@ -28,27 +28,30 @@ class BezierFitter:
             cleaned_points = points[:3]
             
         # Use moderate number of segments
-        n_segments = self._determine_optimal_segments(cleaned_points, corners)
+        n_segments = self._determine_optimal_segments(cleaned_points, corner_indices)
         
         # Use optimized fitting
         bezier_segments = self._fit_optimized_bezier(
-            cleaned_points, corners, n_segments, is_closed
+            cleaned_points, corner_indices, n_segments, is_closed
         )
+        
+        # Convert corner indices to corner points for the boundary curve
+        corner_points = [cleaned_points[idx] for idx in corner_indices] if corner_indices else []
         
         return BoundaryCurve(
             bezier_segments=bezier_segments,
-            corners=corners,
+            corners=corner_points,
             color=color,
             is_closed=is_closed
         )
     
-    def _determine_optimal_segments(self, points: List[Point], corners: List[Point]) -> int:
+    def _determine_optimal_segments(self, points: List[Point], corner_indices: List[int]) -> int:
         """Determine optimal number of segments."""
         n_points = len(points)
         
         # Increase base segments significantly
-        if corners:
-            base_segments = max(8, len(corners) * 3)  # More segments for corners
+        if corner_indices:
+            base_segments = max(8, len(corner_indices) * 3)  # More segments for corners
         else:
             base_segments = max(12, n_points // 20)  # More segments in general
             
@@ -57,7 +60,7 @@ class BezierFitter:
         
         return min(max_segments, max(min_segments, base_segments))
     
-    def _fit_optimized_bezier(self, points: List[Point], corners: List[Point], 
+    def _fit_optimized_bezier(self, points: List[Point], corner_indices: List[int], 
                             n_segments: int, is_closed: bool) -> List[BezierSegment]:
         """
         Optimized fitting with strong continuity but good shape preservation.
@@ -67,7 +70,7 @@ class BezierFitter:
         
         # Build system with optimized constraints
         A, b_x, b_y = self._build_optimized_system(
-            points, t_global, n_segments, corners, is_closed
+            points, t_global, n_segments, corner_indices, is_closed
         )
         
         try:
@@ -104,7 +107,7 @@ class BezierFitter:
         return segments
     
     def _build_optimized_system(self, points: List[Point], t_global: np.ndarray, 
-                              n_segments: int, corners: List[Point], 
+                              n_segments: int, corner_indices: List[int], 
                               is_closed: bool) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Build optimized system with proper continuity enforcement.
@@ -114,7 +117,7 @@ class BezierFitter:
         total_control_points = n_segments * control_points_per_segment
         
         # Count constraints
-        n_constraints = self._count_optimized_constraints(n_segments, corners, is_closed)
+        n_constraints = self._count_optimized_constraints(n_segments, corner_indices, is_closed)
         
         # Initialize matrices
         A = np.zeros((n_points + n_constraints, total_control_points))
@@ -301,7 +304,7 @@ class BezierFitter:
                 degree=last_segment.degree
             )
     
-    def _count_optimized_constraints(self, n_segments: int, corners: List[Point], is_closed: bool) -> int:
+    def _count_optimized_constraints(self, n_segments: int, corner_indices: List[int], is_closed: bool) -> int:
         """Count optimized constraints."""
         n_constraints = 0
         
