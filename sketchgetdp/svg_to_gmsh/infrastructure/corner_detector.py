@@ -224,11 +224,9 @@ class CornerDetector:
         """Simple corner detection for curves with too few points for full analysis."""
         point_count = len(points)
         
-        if point_count <= 2:
+        if point_count <= 10:
             return list(range(point_count))
         
-        if point_count <= 10:
-            return [0, point_count - 1]  # Start and end only
         else:
             # Simple segmentation for medium-sized curves
             return [0, point_count // 3, 2 * point_count // 3, point_count - 1]
