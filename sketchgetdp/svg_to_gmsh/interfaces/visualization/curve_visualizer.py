@@ -5,25 +5,29 @@ Presentation layer service for visualizing Bézier curves and boundary curves.
 import matplotlib.pyplot as plt
 from typing import List
 from ...core.entities.boundary_curve import BoundaryCurve
-from ...core.entities.point import Point
+from ...infrastructure.svg_parser import RawBoundary 
 
 
 class CurveVisualizer:
-    """Presentation service for visualizing boundary curves and Bézier segments."""
+    """Presentation service for visualizing boundary curves, Bézier segments, and raw polylines."""
     
     @staticmethod
     def display_boundary_curves(boundary_curves: List[BoundaryCurve], 
                               point_electrodes: List[tuple] = None,
+                              raw_boundaries: List[RawBoundary] = None,
                               show_control_points: bool = True, 
-                              show_corners: bool = True) -> None:
+                              show_corners: bool = True,
+                              show_raw_boundaries: bool = True) -> None:
         """
         Display boundary curves in an interactive plot.
         
         Args:
             boundary_curves: List of BoundaryCurve objects to plot
             point_electrodes: List of (Point, Color) tuples for point electrodes
+            raw_boundaries: List of RawBoundary objects (polylines) to plot
             show_control_points: Whether to show Bézier control points
             show_corners: Whether to show detected corners
+            show_raw_boundaries: Whether to show raw polyline boundaries
         """
         plt.figure(figsize=(12, 10))
         
@@ -31,13 +35,17 @@ class CurveVisualizer:
         for i, curve in enumerate(boundary_curves):
             CurveVisualizer._plot_single_curve(curve, i, show_control_points, show_corners)
         
+        # Plot raw boundaries (polylines) if requested
+        if raw_boundaries and show_raw_boundaries:
+            CurveVisualizer._plot_raw_boundaries(raw_boundaries)
+        
         # Plot point electrodes
         if point_electrodes:
             CurveVisualizer._plot_point_electrodes(point_electrodes)
         
         plt.grid(True, alpha=0.3)
         plt.axis('equal')
-        plt.title('Bézier Curves from SVG Conversion')
+        plt.title('Bézier Curves and Polylines from SVG Conversion')
         plt.xlabel('X coordinate')
         plt.ylabel('Y coordinate')
         plt.legend()
@@ -88,6 +96,43 @@ class CurveVisualizer:
                     label=f'{curve.color.name} Corners')
     
     @staticmethod
+    def _plot_raw_boundaries(raw_boundaries: List[RawBoundary]):
+        """Plot raw polyline boundaries with lighter colors."""
+        for i, raw_boundary in enumerate(raw_boundaries):
+            rgb = raw_boundary.color.rgb
+            
+            # Create lighter colors by blending with white
+            light_factor = 0.6  # 0.0 = original color, 1.0 = white
+            plot_color = (
+                (1 - light_factor) * (rgb[0] / 255.0) + light_factor,
+                (1 - light_factor) * (rgb[1] / 255.0) + light_factor,
+                (1 - light_factor) * (rgb[2] / 255.0) + light_factor
+            )
+            
+            x_points = [p.x for p in raw_boundary.points]
+            y_points = [p.y for p in raw_boundary.points]
+            
+            if raw_boundary.is_closed and len(raw_boundary.points) > 1:
+                x_points.append(raw_boundary.points[0].x)
+                y_points.append(raw_boundary.points[0].y)
+            
+            # Plot the polyline with lighter styling
+            linestyle = '-' if raw_boundary.is_closed else '--'
+            
+            # Special handling for red dots (point electrodes in raw form)
+            if raw_boundary.color.name == 'RED' and len(raw_boundary.points) == 1:
+                # Use light red for single red points
+                light_red = (1.0, 0.7, 0.7)  # Light red
+                plt.plot(x_points, y_points, 'x', color=light_red, markersize=8,
+                        markeredgewidth=1.5, alpha=0.7, 
+                        label=f'Raw {raw_boundary.color.name} Point')
+            else:
+                # For polylines, use lighter colors and thinner lines
+                plt.plot(x_points, y_points, linestyle, color=plot_color, 
+                        linewidth=1.0, alpha=0.6, marker='.', markersize=4,
+                        label=f'Raw {raw_boundary.color.name} Polyline {i+1}')
+                
+    @staticmethod
     def _plot_point_electrodes(point_electrodes: List[tuple]):
         """Plot point electrodes."""        
         for point, color in point_electrodes:
@@ -100,6 +145,7 @@ class CurveVisualizer:
     
     @staticmethod
     def save_plot_to_file(boundary_curves: List[BoundaryCurve], point_electrodes: List[tuple] = None,
+                        raw_boundaries: List[RawBoundary] = None,
                         filename: str = 'bezier_curves_plot.png', **kwargs):
         """
         Save the plot to a file instead of displaying it.
@@ -107,6 +153,7 @@ class CurveVisualizer:
         Args:
             boundary_curves: List of BoundaryCurve objects to plot
             point_electrodes: List of (Point, Color) tuples for point electrodes  
+            raw_boundaries: List of RawBoundary objects (polylines) to plot
             filename: Output filename
             **kwargs: Additional arguments for plot_boundary_curves
         """
@@ -118,13 +165,17 @@ class CurveVisualizer:
                                             kwargs.get('show_control_points', True),
                                             kwargs.get('show_corners', True))
         
+        # Plot raw boundaries (polylines) if requested
+        if raw_boundaries and kwargs.get('show_raw_boundaries', True):
+            CurveVisualizer._plot_raw_boundaries(raw_boundaries)
+        
         # Plot point electrodes
         if point_electrodes:
             CurveVisualizer._plot_point_electrodes(point_electrodes)
         
         plt.grid(True, alpha=0.3)
         plt.axis('equal')
-        plt.title('Bézier Curves from SVG Conversion')
+        plt.title('Bézier Curves and Polylines from SVG Conversion')
         plt.xlabel('X coordinate')
         plt.ylabel('Y coordinate')
         plt.legend()

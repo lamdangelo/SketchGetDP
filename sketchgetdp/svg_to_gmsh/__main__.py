@@ -29,7 +29,7 @@ def main():
         converter = ConvertSVGToGeometry(svg_parser, corner_detector, bezier_fitter)
         
         # Execute the use case
-        boundary_curves, point_electrodes = converter.execute(args.svg_file)
+        boundary_curves, point_electrodes, raw_boundaries = converter.execute(args.svg_file)
         
         # Output results
         print(f"Successfully converted {len(boundary_curves)} boundary curves and {len(point_electrodes)} point electrodes:")
@@ -51,6 +51,7 @@ def main():
                     CurveVisualizer.save_plot_to_file(
                         boundary_curves=boundary_curves,
                         point_electrodes=point_electrodes,
+                        raw_boundaries=raw_boundaries,
                         filename=args.output_plot,
                         show_control_points=True,
                         show_corners=True
@@ -61,8 +62,10 @@ def main():
                     CurveVisualizer.display_boundary_curves(
                         boundary_curves=boundary_curves,
                         point_electrodes=point_electrodes,
+                        raw_boundaries=raw_boundaries,
                         show_control_points=True,
-                        show_corners=True
+                        show_corners=True,
+                        show_raw_boundaries=True
                     )
                     
             except ImportError:
