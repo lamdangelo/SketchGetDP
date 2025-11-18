@@ -38,9 +38,10 @@ class SVGParser:
     while adding custom logic for color extraction, scaling, and shape handling.
     """
     
-    def __init__(self, samples_per_segment: int = 20):
+    def __init__(self, samples_per_segment: int = 20, points_per_unit_length: int = 1000):
         self.namespace = '{http://www.w3.org/2000/svg}'
         self.samples_per_segment = samples_per_segment
+        self.points_per_unit_length = points_per_unit_length
     
     def extract_boundaries_by_color(self, svg_file_path: str) -> Dict[Color, List[RawBoundary]]:
         """
@@ -66,9 +67,94 @@ class SVGParser:
         viewbox = self._parse_viewbox(root.get('viewBox'))
         svg_width, svg_height = self._get_svg_dimensions(root)
         
-        return self._convert_paths_to_boundaries(
+        boundaries_by_color = self._convert_paths_to_boundaries(
             paths, attributes, viewbox, svg_width, svg_height
         )
+        
+        # Apply post-processing resampling to ensure even point distribution
+        return self._resample_all_boundaries(boundaries_by_color)
+    
+    def _resample_all_boundaries(self, boundaries_by_color: Dict[Color, List[RawBoundary]]) -> Dict[Color, List[RawBoundary]]:
+        """
+        Apply uniform resampling to all boundaries except red dots.
+        """
+        resampled_boundaries = {}
+        
+        for color, boundaries in boundaries_by_color.items():
+            resampled_boundaries[color] = []
+            for boundary in boundaries:
+                if color == Color.RED:
+                    # Don't resample red dots (single points)
+                    resampled_boundaries[color].append(boundary)
+                else:
+                    # Resample polylines for even point distribution
+                    resampled_points = self._resample_polyline_uniform(boundary.points)
+                    resampled_boundary = RawBoundary(
+                        points=resampled_points,
+                        color=boundary.color,
+                        is_closed=boundary.is_closed
+                    )
+                    resampled_boundaries[color].append(resampled_boundary)
+        
+        return resampled_boundaries
+    
+    def _resample_polyline_uniform(self, points: List[Point]) -> List[Point]:
+        """
+        Resample polyline to have evenly spaced points.
+        
+        Args:
+            points: Original unevenly distributed points
+            
+        Returns:
+            List of evenly spaced points
+        """
+        if len(points) < 2:
+            return points
+        
+        # Calculate total length and segment lengths
+        total_length = 0.0
+        segment_lengths = []
+        for i in range(len(points) - 1):
+            segment_length = math.sqrt(
+                (points[i+1].x - points[i].x)**2 + 
+                (points[i+1].y - points[i].y)**2
+            )
+            segment_lengths.append(segment_length)
+            total_length += segment_length
+        
+        if total_length <= 0:
+            return points
+        
+        spacing = 1.0 / self.points_per_unit_length
+        
+        # Calculate how many points we need for each segment
+        resampled_points = [points[0]]
+        
+        for segment_idx in range(len(segment_lengths)):
+            segment_length = segment_lengths[segment_idx]
+            segment_start = points[segment_idx]
+            segment_end = points[segment_idx + 1]
+            
+            # Calculate how many points to place on this segment (excluding the start point)
+            num_points_on_segment = max(1, int(segment_length / spacing))
+            actual_spacing = segment_length / num_points_on_segment
+            
+            # Add points along this segment
+            for i in range(1, num_points_on_segment):
+                t = i * actual_spacing / segment_length
+                new_x = segment_start.x + t * (segment_end.x - segment_start.x)
+                new_y = segment_start.y + t * (segment_end.y - segment_start.y)
+                resampled_points.append(Point(new_x, new_y))
+            
+            # Add the segment end point (unless it's the very last point of the polyline)
+            if segment_idx < len(segment_lengths) - 1:
+                resampled_points.append(segment_end)
+        
+        # Always include the very last point of the polyline
+        if resampled_points[-1] != points[-1]:
+            resampled_points.append(points[-1])
+        
+        return resampled_points
     
     def _convert_paths_to_boundaries(self, paths: List[Path], attributes: List[dict],
                                    viewbox: Optional[Tuple[float, float, float, float]],
