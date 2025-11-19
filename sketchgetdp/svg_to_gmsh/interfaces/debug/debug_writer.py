@@ -5,7 +5,7 @@ from datetime import datetime
 class DebugWriter:
     """Utility class for writing debug information about SVG parsing results."""
     
-    def _write_debug_info(self, svg_file_path: str, colored_boundaries: dict):
+    def _write_svg_parser_debug_info(self, svg_file_path: str, colored_boundaries: dict):
         """
         Write SVG parser results to a debug text file.
         """
@@ -69,4 +69,51 @@ class DebugWriter:
                        f"{avg_points:.1f} avg points, {closed_count} closed\n")
         
         print(f"SVG parser debug information written to: {debug_filename}")
-    
+        
+    def save_results(boundary_curves, point_electrodes, output_path: str):
+        """Save conversion results to file with coordinates"""
+        with open(output_path, 'w') as f:
+            f.write("SVG to Geometry Conversion Results\n")
+            f.write("=" * 50 + "\n\n")
+            
+            # Boundary Curves Section
+            f.write("BOUNDARY CURVES\n")
+            f.write("=" * 50 + "\n\n")
+            
+            for i, curve in enumerate(boundary_curves):
+                f.write(f"Curve {i+1}:\n")
+                f.write(f"  Color: {curve.color.name}\n")
+                f.write(f"  Segments: {len(curve.bezier_segments)}\n")
+                f.write(f"  Corners: {len(curve.corners)}\n")
+                f.write(f"  Closed: {curve.is_closed}\n")
+                
+                # Segment details with control points
+                f.write("  Segments:\n")
+                for seg_idx, segment in enumerate(curve.bezier_segments):
+                    f.write(f"    Segment {seg_idx} (Degree {segment.degree}):\n")
+                    for cp_idx, control_point in enumerate(segment.control_points):
+                        f.write(f"      Control Point {cp_idx}: ({control_point.x:.6f}, {control_point.y:.6f})\n")
+                
+                # Corner coordinates
+                if curve.corners:
+                    f.write("  Corners:\n")
+                    for corner_idx, corner in enumerate(curve.corners):
+                        f.write(f"    Corner {corner_idx}: ({corner.x:.6f}, {corner.y:.6f})\n")
+                
+                # Sample points along the curve
+                f.write("  Sampled Curve Points (t=0 to 1):\n")
+                for t in [0.0, 0.25, 0.5, 0.75, 1.0]:
+                    point = curve.evaluate(t)
+                    f.write(f"    t={t:.2f}: ({point.x:.6f}, {point.y:.6f})\n")
+                
+                f.write("\n")
+            
+            # Point Electrodes Section
+            f.write("POINT ELECTRODES\n")
+            f.write("=" * 50 + "\n\n")
+            
+            for i, (point, color) in enumerate(point_electrodes):
+                f.write(f"Point Electrode {i+1}:\n")
+                f.write(f"  Color: {color.name}\n")
+                f.write(f"  Position: ({point.x:.6f}, {point.y:.6f})\n\n")
+        
