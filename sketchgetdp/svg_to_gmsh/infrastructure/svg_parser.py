@@ -11,6 +11,7 @@ from svgpathtools import svg2paths, Path, Line, CubicBezier, QuadraticBezier, Ar
 
 from ..core.entities.point import Point
 from ..core.entities.color import Color
+from ..interfaces.abstractions.svg_parser_interface import SVGParserInterface
 
 
 @dataclass
@@ -32,7 +33,7 @@ class RawBoundary:
             raise ValueError("Red dot must have at least 1 point")
 
 
-class SVGParser:
+class SVGParser(SVGParserInterface):
     """
     SVG parser that uses svgpathtools for all path parsing
     while adding custom logic for color extraction, scaling, and shape handling.

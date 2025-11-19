@@ -6,10 +6,9 @@ from typing import List, Tuple
 from ...core.entities.boundary_curve import BoundaryCurve
 from ...core.entities.point import Point
 from ...core.entities.color import Color
-from ...infrastructure.svg_parser import SVGParser
-from ...infrastructure.corner_detector import CornerDetector
-from ...infrastructure.bezier_fitter import BezierFitter
-
+from ...interfaces.abstractions.svg_parser_interface import SVGParserInterface as SVGParser
+from ...interfaces.abstractions.corner_detector_interface import CornerDetectorInterface as CornerDetector
+from ...interfaces.abstractions.bezier_fitter_interface import BezierFitterInterface as BezierFitter
 
 class ConvertSVGToGeometry:
     """
@@ -21,7 +20,7 @@ class ConvertSVGToGeometry:
         self.corner_detector = corner_detector
         self.bezier_fitter = bezier_fitter
     
-    def execute(self, svg_file_path: str) -> Tuple[List[BoundaryCurve], List[Tuple[Point, Color]]]:
+    def execute(self, svg_file_path: str) -> Tuple[List[BoundaryCurve], List[Tuple[Point, Color]], dict]:
         """
         Convert SVG file to boundary curves with Bézier representations and point electrodes.
         """

@@ -5,8 +5,9 @@ import math
 from ..core.entities.bezier_segment import BezierSegment
 from ..core.entities.boundary_curve import BoundaryCurve
 from ..core.entities.point import Point
+from ..interfaces.abstractions.bezier_fitter_interface import BezierFitterInterface
 
-class BezierFitter:
+class BezierFitter(BezierFitterInterface):
     """
     Fits piecewise Bézier curves to boundary points using optimized global least-squares.
     """

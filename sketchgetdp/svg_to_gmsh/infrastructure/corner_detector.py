@@ -1,9 +1,10 @@
 import numpy as np
 from typing import List
 from ..core.entities.point import Point
+from ..interfaces.abstractions.corner_detector_interface import CornerDetectorInterface
 
 
-class CornerDetector:
+class CornerDetector(CornerDetectorInterface):
     """
     Identifies corner points in boundary point sequences by analyzing changes
     in direction vectors across sliding windows, then refines them locally
