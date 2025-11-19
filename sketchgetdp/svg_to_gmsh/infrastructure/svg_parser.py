@@ -72,7 +72,10 @@ class SVGParser:
         )
         
         # Apply post-processing resampling to ensure even point distribution
-        return self._resample_all_boundaries(boundaries_by_color)
+        resampled_boundaries = self._resample_all_boundaries(boundaries_by_color)
+        
+        # Remove duplicate points from all boundaries after resampling
+        return self._remove_duplicates_from_all_boundaries(resampled_boundaries)
     
     def _resample_all_boundaries(self, boundaries_by_color: Dict[Color, List[RawBoundary]]) -> Dict[Color, List[RawBoundary]]:
         """
@@ -214,7 +217,7 @@ class SVGParser:
             segment_points = self._sample_segment_points(segment, self.samples_per_segment)
             points.extend(segment_points)
         
-        points = self._remove_duplicate_points(points)
+        points = self._remove_consecutive_duplicate_points(points)
         return [self._scale_to_unit_coordinates(p, viewbox, svg_width, svg_height) for p in points]
     
     def _sample_segment_points(self, segment, samples_per_segment: int) -> List[Point]:
@@ -235,7 +238,7 @@ class SVGParser:
         
         return points
     
-    def _remove_duplicate_points(self, points: List[Point]) -> List[Point]:
+    def _remove_consecutive_duplicate_points(self, points: List[Point]) -> List[Point]:
         """Remove consecutive duplicate points while preserving order."""
         if not points:
             return points
@@ -246,6 +249,18 @@ class SVGParser:
                 unique_points.append(current_point)
         
         return unique_points
+    
+    def _remove_duplicate_end_point(self, points: List[Point]) -> List[Point]:
+        """Remove closing duplicate point for closed paths."""
+        if not points:
+            return points
+
+        # Check if path is closed (first and last points are the same)
+        if len(points) > 1 and points[0] == points[-1]:
+            # Remove the last point since it's a duplicate of the first
+            points = points[:-1]
+        
+        return points
     
     def _is_path_closed(self, path: Path) -> bool:
         """
@@ -468,3 +483,29 @@ class SVGParser:
         normalized_y = point.y / 100.0
         flipped_y = 1.0 - normalized_y
         return Point(normalized_x, flipped_y)
+
+    def _remove_duplicates_from_all_boundaries(self, boundaries_by_color: Dict[Color, List[RawBoundary]]) -> Dict[Color, List[RawBoundary]]:
+        """
+        Remove duplicate points from all boundaries after resampling.
+        """
+        cleaned_boundaries = {}
+        
+        for color, boundaries in boundaries_by_color.items():
+            cleaned_boundaries[color] = []
+            for boundary in boundaries:
+                if color == Color.RED:
+                    # For red dots (single points), no need to remove duplicates
+                    cleaned_boundaries[color].append(boundary)
+                else:
+                    # Remove duplicate points from polyline boundaries
+                    no_consecutive_duplicate_points = self._remove_consecutive_duplicate_points(boundary.points)
+                    cleaned_points = self._remove_duplicate_end_point(no_consecutive_duplicate_points)
+                    cleaned_boundary = RawBoundary(
+                        points=cleaned_points,
+                        color=boundary.color,
+                        is_closed=boundary.is_closed
+                    )
+                    cleaned_boundaries[color].append(cleaned_boundary)
+        
+        return cleaned_boundaries
+    
