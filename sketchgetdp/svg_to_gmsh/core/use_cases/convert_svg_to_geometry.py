@@ -30,12 +30,10 @@ class ConvertSVGToGeometry:
         
         boundary_curves = []
         point_electrodes = []
-        svg_polylines = []
         
         # Process each color group
         for color, raw_boundaries in colored_boundaries.items():
             for raw_boundary in raw_boundaries:
-                svg_polylines.append(raw_boundary)
                 if color == Color.RED:
                     # For red elements: treat as point electrodes
                     if len(raw_boundary.points) == 1:
@@ -66,7 +64,7 @@ class ConvertSVGToGeometry:
                     
                     boundary_curves.append(boundary_curve)
         
-        return boundary_curves, point_electrodes, svg_polylines
+        return boundary_curves, point_electrodes, colored_boundaries
     
     def _ensure_proper_closure(self, points: List[Point], is_closed: bool) -> List[Point]:
         """

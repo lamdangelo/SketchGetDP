@@ -22,6 +22,13 @@ class ArgParser:
             help='Path to SVG file to process'
         )
         
+        # Debug options
+        parser.add_argument(
+            '--debug', '-d', 
+            action='store_true',
+            help='Enable debug mode to output intermediate processing information'
+        )
+        
         # Output options
         parser.add_argument(
             '--output', '-o', 

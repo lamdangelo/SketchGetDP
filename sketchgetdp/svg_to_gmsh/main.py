@@ -28,7 +28,7 @@ def main():
         converter = ConvertSVGToGeometry(svg_parser, corner_detector, bezier_fitter)
         
         # Execute the use case
-        boundary_curves, point_electrodes, raw_boundaries = converter.execute(args.svg_file)
+        boundary_curves, point_electrodes, colored_boundaries = converter.execute(args.svg_file)
         
         # Output results
         print(f"Successfully converted {len(boundary_curves)} boundary curves and {len(point_electrodes)} point electrodes:")
@@ -40,17 +40,32 @@ def main():
         for i, (point, color) in enumerate(point_electrodes):
             print(f"  Point electrode {i+1}: at ({point.x:.3f}, {point.y:.3f}), color: {color.name.lower()}")
         
+        # Handle debug output if requested
+        if args.debug:
+            try:
+                from svg_to_gmsh.interfaces.debug_writer import DebugWriter
+                
+                DebugWriter()._write_debug_info(
+                    svg_file_path=args.svg_file,
+                    colored_boundaries=colored_boundaries
+                )
+            
+            except ImportError:
+                print("Debug output unavailable: required module not found")
+            except Exception as e:
+                print(f"Debug output error: {e}")
+        
         # Handle visualization if requested
         if args.visualize or args.output_plot:
             try:
-                from svg_to_gmsh.interfaces.visualization.curve_visualizer import CurveVisualizer
+                from svg_to_gmsh.interfaces.curve_visualizer import CurveVisualizer
                 
                 if args.output_plot:
                     # Save plot to file
                     CurveVisualizer.save_plot_to_file(
                         boundary_curves=boundary_curves,
                         point_electrodes=point_electrodes,
-                        raw_boundaries=raw_boundaries,
+                        colored_boundaries=colored_boundaries,
                         filename=args.output_plot,
                         show_control_points=True,
                         show_corners=True
@@ -61,8 +76,8 @@ def main():
                     CurveVisualizer.display_boundary_curves(
                         boundary_curves=boundary_curves,
                         point_electrodes=point_electrodes,
-                        raw_boundaries=raw_boundaries,
-                        show_control_points=True,
+                        colored_boundaries=colored_boundaries,
+                        show_control_points=colored_boundaries,
                         show_corners=True,
                         show_raw_boundaries=True
                     )
