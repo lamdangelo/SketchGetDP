@@ -29,7 +29,7 @@ class BoundaryCurve:
             next_segment = self.bezier_segments[i + 1]
             
             distance = current_segment.end_point.distance_to(next_segment.start_point)
-            if distance > 1e-5:  # Only warn for gaps > 0.00001
+            if distance >= 1e-8:  # Only warn for gaps smaller than gmsh Geometry.Tolerance default
                 print(f"WARNING: Small discontinuity between segments {i} and {i+1}: {distance:.6f}")
                 
     @property
