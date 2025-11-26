@@ -4,11 +4,12 @@ from typing import ClassVar
 
 @dataclass(frozen=True)
 class Color:
-    """A simple color entity supporting red, green, and blue colors."""
+    """A simple color entity supporting red, green, blue and black colors."""
     
     RED: ClassVar['Color'] = None
     GREEN: ClassVar['Color'] = None
     BLUE: ClassVar['Color'] = None
+    BLACK: ClassVar['Color'] = None
     
     name: str
     rgb: tuple[int, int, int]
@@ -18,8 +19,8 @@ class Color:
         if not isinstance(self.name, str):
             raise TypeError("Color name must be a string")
         
-        if self.name not in ["red", "green", "blue"]:
-            raise ValueError("Color must be 'red', 'green', or 'blue'")
+        if self.name not in ["red", "green", "blue", "black"]:
+            raise ValueError("Color must be 'red', 'green', 'blue', or 'black'")
         
         if not isinstance(self.rgb, tuple) or len(self.rgb) != 3:
             raise ValueError("RGB must be a tuple of 3 integers")
@@ -41,3 +42,4 @@ class Color:
 Color.RED = Color("red", (255, 0, 0))
 Color.GREEN = Color("green", (0, 255, 0))
 Color.BLUE = Color("blue", (0, 0, 255))
+Color.BLACK = Color("black", (0, 0, 0))

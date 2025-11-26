@@ -339,6 +339,8 @@ class SVGParser(SVGParserInterface):
             return Color.GREEN
         elif self._is_blue_color(normalized_color):
             return Color.BLUE
+        elif self._is_black_color(normalized_color):
+            return Color.BLACK
         elif normalized_color.startswith('#'):
             return self._convert_hex_to_primary_color(normalized_color)
         elif normalized_color.startswith('rgb'):
@@ -369,6 +371,14 @@ class SVGParser(SVGParserInterface):
             'rgb(0,0,255)', 'rgb(0, 0, 255)'
         }
         return color_string in blue_representations
+    
+    def _is_black_color(self, color_string: str) -> bool:
+        """Check if color string represents a black color."""
+        black_representations = {
+            '#000000', 'black', '#000', '#000000ff',
+            'rgb(0,0,0)', 'rgb(0, 0, 0)'
+        }
+        return color_string in black_representations
     
     def _infer_color_from_name(self, color_name: str) -> Color:
         """Infer color from color name containing color hint."""
@@ -416,7 +426,8 @@ class SVGParser(SVGParserInterface):
         primary_colors = {
             Color.RED: (255, 0, 0),
             Color.GREEN: (0, 255, 0),
-            Color.BLUE: (0, 0, 255)
+            Color.BLUE: (0, 0, 255),
+            Color.BLACK: (0, 0, 0)
         }
         
         min_distance = float('inf')
