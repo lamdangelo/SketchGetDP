@@ -71,7 +71,8 @@ bitmap_tracer/
 │   ├── controllers/        # Flow control
 │   ├── presenters/         # Output formatting
 │   └── gateways/           # External interfaces
-├── main.py                 # Entry point
+├── __main__.py             # Python module entry point
+├── main.py                 # General entry point
 └── config.yaml            # Configuration
 ```
 
@@ -87,16 +88,25 @@ green_paths: 8    # Maximum number of green paths to keep
 
 ## 🛠️ Usage
 
-```python
-from bitmap_tracer import create_final_svg_color_categories
+The Bitmap Tracer can be run from the command line in two ways:
 
-# Convert image to SVG with color categorization
-success = create_final_svg_color_categories(
-    input_image="path/to/image.jpg",
-    output_svg="output.svg",
-    config_path="config.yaml"
-)
+### From the sketchgetdp directory as a python module:
+```bash
+python -m bitmap_tracer <path_to_image>
 ```
+
+### From the bitmap_tracer directory:
+```bash
+python main.py <path_to_image>
+```
+
+Where `<path_to_image>` is the path to the bitmap image you want to convert to SVG.
+
+The application will automatically:
+- Load configuration from `config.yaml`
+- Process the input image
+- Generate an SVG output file with the same name as the input image (changing extension to .svg)
+- Apply color categorization and structure filtering based on your configuration
 
 ## 📊 Output
 
