@@ -1,0 +1,8 @@
+# SVG To Gmsh Configuration
+
+## coil current directions
+# Positive current flows out of the page.
+# Counting order: Top to bottom, left to right.
+coil_currents: 
+  coil_1: 1
+  coil_2: -1

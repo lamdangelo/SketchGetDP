@@ -19,6 +19,7 @@ class PhysicalGroup:
     name: str
     description: str
     group_type: str  # "domain" or "boundary"
+    value: int  # Numeric identifier for the physical group
     color: Optional[Color] = None
     current_sign: Optional[int] = None  # 1 for positive, -1 for negative, None for non-coil domains
     
@@ -32,6 +33,9 @@ class PhysicalGroup:
         
         if self.group_type not in ["domain", "boundary"]:
             raise ValueError("Group type must be either 'domain' or 'boundary'")
+        
+        if not isinstance(self.value, int):
+            raise TypeError("Value must be an integer")
         
         if self.color is not None and not isinstance(self.color, Color):
             raise TypeError("Color must be an instance of Color class or None")
@@ -69,6 +73,7 @@ PhysicalGroup.DOMAIN_VI_IRON = PhysicalGroup(
     name="domain_Vi_iron",
     description="Iron domain in Vi region",
     group_type="domain",
+    value=2,
     color=Color.BLUE
 )
 
@@ -76,6 +81,7 @@ PhysicalGroup.DOMAIN_VI_AIR = PhysicalGroup(
     name="domain_Vi_air", 
     description="Air domain in Vi region",
     group_type="domain",
+    value=3,
     color=Color.GREEN
 )
 
@@ -83,6 +89,7 @@ PhysicalGroup.DOMAIN_VA = PhysicalGroup(
     name="domain_Va",
     description="Va domain",
     group_type="domain", 
+    value=1,
     color=Color.BLACK
 )
 
@@ -90,6 +97,7 @@ PhysicalGroup.DOMAIN_COIL_POSITIVE = PhysicalGroup(
     name="domain_coil_positive",
     description="Coil domain with positive current",
     group_type="domain",
+    value=101,
     color=Color.RED,
     current_sign=1
 )
@@ -98,6 +106,7 @@ PhysicalGroup.DOMAIN_COIL_NEGATIVE = PhysicalGroup(
     name="domain_coil_negative", 
     description="Coil domain with negative current",
     group_type="domain",
+    value=102,
     color=Color.RED,
     current_sign=-1
 )
@@ -105,11 +114,13 @@ PhysicalGroup.DOMAIN_COIL_NEGATIVE = PhysicalGroup(
 PhysicalGroup.BOUNDARY_GAMMA = PhysicalGroup(
     name="boundary_gamma",
     description="Interface boundary between Vi and Va regions",
-    group_type="boundary"
+    group_type="boundary",
+    value=11
 )
 
 PhysicalGroup.BOUNDARY_OUT = PhysicalGroup(
     name="boundary_out",
     description="Outermost boundary",
-    group_type="boundary"
+    group_type="boundary",
+    value=12
 )
