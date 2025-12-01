@@ -2,7 +2,10 @@ import yaml
 from typing import List, Tuple
 from ..core.entities.point import Point
 from ..core.entities.color import Color
-from ..core.entities.physical_group import PhysicalGroup
+from ..core.entities.physical_group import (
+    DOMAIN_COIL_POSITIVE, 
+    DOMAIN_COIL_NEGATIVE
+)
 
 class PointElectrodeMesher:
     """
@@ -62,7 +65,7 @@ class PointElectrodeMesher:
         point, color = elem
         return (-point.y, point.x)
     
-    def _get_physical_group_for_electrode(self, index: int, color: Color) -> PhysicalGroup:
+    def _get_physical_group_for_electrode(self, index: int, color: Color):
         """
         Get the appropriate physical group for an electrode based on its index and color.
         
@@ -77,9 +80,9 @@ class PointElectrodeMesher:
         current_sign = self.coil_currents.get(coil_name)
         
         if current_sign == 1:
-            return PhysicalGroup.DOMAIN_COIL_POSITIVE
+            return DOMAIN_COIL_POSITIVE
         elif current_sign == -1:
-            return PhysicalGroup.DOMAIN_COIL_NEGATIVE
+            return DOMAIN_COIL_NEGATIVE
         else:
             raise ValueError(f"Invalid current sign {current_sign} for {coil_name}")
     
