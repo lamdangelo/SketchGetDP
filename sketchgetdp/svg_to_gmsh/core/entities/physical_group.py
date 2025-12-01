@@ -1,20 +1,11 @@
 from dataclasses import dataclass
-from typing import ClassVar, Optional
-from color import Color
+from typing import Optional
+from svg_to_gmsh.core.entities.color import Color
 
 
 @dataclass(frozen=True)
 class PhysicalGroup:
     """A physical group entity representing different domains and boundaries in the system."""
-    
-    # Pre-defined class variables for all physical groups
-    DOMAIN_VI_IRON: ClassVar['PhysicalGroup'] = None
-    DOMAIN_VI_AIR: ClassVar['PhysicalGroup'] = None
-    DOMAIN_VA: ClassVar['PhysicalGroup'] = None
-    DOMAIN_COIL_POSITIVE: ClassVar['PhysicalGroup'] = None
-    DOMAIN_COIL_NEGATIVE: ClassVar['PhysicalGroup'] = None
-    BOUNDARY_GAMMA: ClassVar['PhysicalGroup'] = None
-    BOUNDARY_OUT: ClassVar['PhysicalGroup'] = None
     
     name: str
     description: str
@@ -44,7 +35,8 @@ class PhysicalGroup:
             raise ValueError("Current sign must be None, 1 (positive), or -1 (negative)")
         
         # Validate coil-specific constraints
-        if "coil" in self.name:
+        # Only apply coil rules if it's a domain AND has "coil" in name (case-insensitive)
+        if self.group_type == "domain" and "coil" in self.name.lower():
             if self.current_sign is None:
                 raise ValueError("Coil domains must have a current sign (1 or -1)")
             if self.color != Color.RED:
@@ -59,7 +51,7 @@ class PhysicalGroup:
     
     def is_coil(self) -> bool:
         """Check if this is a coil domain."""
-        return "coil" in self.name and self.group_type == "domain"
+        return self.group_type == "domain" and "coil" in self.name.lower()
     
     def is_boundary(self) -> bool:
         """Check if this is a boundary."""
@@ -69,7 +61,9 @@ class PhysicalGroup:
         """Check if this is a domain."""
         return self.group_type == "domain"
 
-PhysicalGroup.DOMAIN_VI_IRON = PhysicalGroup(
+
+# Module-level constants instead of class variables
+DOMAIN_VI_IRON = PhysicalGroup(
     name="domain_Vi_iron",
     description="Iron domain in Vi region",
     group_type="domain",
@@ -77,7 +71,7 @@ PhysicalGroup.DOMAIN_VI_IRON = PhysicalGroup(
     color=Color.BLUE
 )
 
-PhysicalGroup.DOMAIN_VI_AIR = PhysicalGroup(
+DOMAIN_VI_AIR = PhysicalGroup(
     name="domain_Vi_air", 
     description="Air domain in Vi region",
     group_type="domain",
@@ -85,7 +79,7 @@ PhysicalGroup.DOMAIN_VI_AIR = PhysicalGroup(
     color=Color.GREEN
 )
 
-PhysicalGroup.DOMAIN_VA = PhysicalGroup(
+DOMAIN_VA = PhysicalGroup(
     name="domain_Va",
     description="Va domain",
     group_type="domain", 
@@ -93,7 +87,7 @@ PhysicalGroup.DOMAIN_VA = PhysicalGroup(
     color=Color.BLACK
 )
 
-PhysicalGroup.DOMAIN_COIL_POSITIVE = PhysicalGroup(
+DOMAIN_COIL_POSITIVE = PhysicalGroup(
     name="domain_coil_positive",
     description="Coil domain with positive current",
     group_type="domain",
@@ -102,7 +96,7 @@ PhysicalGroup.DOMAIN_COIL_POSITIVE = PhysicalGroup(
     current_sign=1
 )
 
-PhysicalGroup.DOMAIN_COIL_NEGATIVE = PhysicalGroup(
+DOMAIN_COIL_NEGATIVE = PhysicalGroup(
     name="domain_coil_negative", 
     description="Coil domain with negative current",
     group_type="domain",
@@ -111,14 +105,14 @@ PhysicalGroup.DOMAIN_COIL_NEGATIVE = PhysicalGroup(
     current_sign=-1
 )
 
-PhysicalGroup.BOUNDARY_GAMMA = PhysicalGroup(
+BOUNDARY_GAMMA = PhysicalGroup(
     name="boundary_gamma",
     description="Interface boundary between Vi and Va regions",
     group_type="boundary",
     value=11
 )
 
-PhysicalGroup.BOUNDARY_OUT = PhysicalGroup(
+BOUNDARY_OUT = PhysicalGroup(
     name="boundary_out",
     description="Outermost boundary",
     group_type="boundary",
