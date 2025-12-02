@@ -8,6 +8,89 @@ class BoundaryCurveGrouper:
     Groups boundary curves into hierarchical structure with containment relationships
     and assigns physical groups based on containment logic.
     """
+
+    @staticmethod
+    def group_boundary_curves(boundary_curves: List[BoundaryCurve]) -> List[Dict]:
+        """
+        Main function to group boundary curves and assign physical groups.
+        
+        Args:
+            boundary_curves: List of boundary curves to process
+            
+        Returns:
+            List of dictionaries, one per boundary curve, with keys:
+            - "holes": List of indices of curves contained by this curve
+            - "physical_groups": List of PhysicalGroup objects for this curve
+        """
+        if not boundary_curves:
+            return []
+        
+        # Get containment hierarchy
+        containment_map = BoundaryCurveGrouper.get_containment_hierarchy(boundary_curves)
+        
+        # Find the outermost curve (contains all others but is not contained by any)
+        outermost_candidates = []
+        for i in range(len(boundary_curves)):
+            # Count how many other curves contain this one
+            contained_by_count = sum(1 for j in range(len(boundary_curves)) 
+                                if i != j and i in containment_map[j])
+            
+            if contained_by_count == 0:
+                outermost_candidates.append(i)
+        
+        # If multiple outermost candidates, choose the one with largest bounding box AREA
+        if outermost_candidates:
+            # Calculate areas for all candidates
+            candidate_areas = []
+            for idx in outermost_candidates:
+                min_x, max_x, min_y, max_y = BoundaryCurveGrouper.get_curve_bounding_box(boundary_curves[idx])
+                area = (max_x - min_x) * (max_y - min_y)
+                candidate_areas.append((idx, area))
+            
+            # Find the index with largest area
+            outermost_idx = max(candidate_areas, key=lambda item: item[1])[0]
+        else:
+            raise ValueError("No outermost candidates found")
+        
+        # Classify all curves
+        classifications = [BoundaryCurveGrouper.classify_curve_color(curve) 
+                        for curve in boundary_curves]
+        
+        # Check which Va curves are inside Vi curves
+        va_in_vi_flags = [False] * len(boundary_curves)
+        
+        for i, (curve, classification) in enumerate(zip(boundary_curves, classifications)):
+            if classification == "va":
+                # Check if this Va curve is inside any Vi curve
+                for j, (other_curve, other_classification) in enumerate(zip(boundary_curves, classifications)):
+                    if i != j and (other_classification == "vi_iron" or other_classification == "vi_air"):
+                        if BoundaryCurveGrouper.is_curve_inside_other(curve, other_curve):
+                            va_in_vi_flags[i] = True
+                            break
+        
+        # Build result dictionaries
+        result = []
+        for i, curve in enumerate(boundary_curves):
+            is_outermost = (i == outermost_idx)
+            is_va_in_vi = va_in_vi_flags[i]
+            
+            # Get holes (contained curves)
+            holes = containment_map.get(i, [])
+            
+            # Get physical groups
+            physical_groups = BoundaryCurveGrouper.get_physical_groups_for_curve(
+                curve=curve,
+                classification=classifications[i],
+                is_outermost=is_outermost,
+                is_va_in_vi=is_va_in_vi
+            )
+            
+            result.append({
+                "holes": holes,
+                "physical_groups": physical_groups
+            })
+        
+        return result
     
     @staticmethod
     def is_point_inside_boundary(point: Point, boundary: BoundaryCurve, num_samples: int = 1000) -> bool:
@@ -230,89 +313,6 @@ class BoundaryCurveGrouper:
             physical_groups.append(BOUNDARY_OUT)
         
         return physical_groups
-    
-    @staticmethod
-    def group_boundary_curves(boundary_curves: List[BoundaryCurve]) -> List[Dict]:
-        """
-        Main function to group boundary curves and assign physical groups.
-        
-        Args:
-            boundary_curves: List of boundary curves to process
-            
-        Returns:
-            List of dictionaries, one per boundary curve, with keys:
-            - "holes": List of indices of curves contained by this curve
-            - "physical_groups": List of PhysicalGroup objects for this curve
-        """
-        if not boundary_curves:
-            return []
-        
-        # Get containment hierarchy
-        containment_map = BoundaryCurveGrouper.get_containment_hierarchy(boundary_curves)
-        
-        # Find the outermost curve (contains all others but is not contained by any)
-        outermost_candidates = []
-        for i in range(len(boundary_curves)):
-            # Count how many other curves contain this one
-            contained_by_count = sum(1 for j in range(len(boundary_curves)) 
-                                if i != j and i in containment_map[j])
-            
-            if contained_by_count == 0:
-                outermost_candidates.append(i)
-        
-        # If multiple outermost candidates, choose the one with largest bounding box AREA
-        if outermost_candidates:
-            # Calculate areas for all candidates
-            candidate_areas = []
-            for idx in outermost_candidates:
-                min_x, max_x, min_y, max_y = BoundaryCurveGrouper.get_curve_bounding_box(boundary_curves[idx])
-                area = (max_x - min_x) * (max_y - min_y)
-                candidate_areas.append((idx, area))
-            
-            # Find the index with largest area
-            outermost_idx = max(candidate_areas, key=lambda item: item[1])[0]
-        else:
-            raise ValueError("No outermost candidates found")
-        
-        # Classify all curves
-        classifications = [BoundaryCurveGrouper.classify_curve_color(curve) 
-                        for curve in boundary_curves]
-        
-        # Check which Va curves are inside Vi curves
-        va_in_vi_flags = [False] * len(boundary_curves)
-        
-        for i, (curve, classification) in enumerate(zip(boundary_curves, classifications)):
-            if classification == "va":
-                # Check if this Va curve is inside any Vi curve
-                for j, (other_curve, other_classification) in enumerate(zip(boundary_curves, classifications)):
-                    if i != j and (other_classification == "vi_iron" or other_classification == "vi_air"):
-                        if BoundaryCurveGrouper.is_curve_inside_other(curve, other_curve):
-                            va_in_vi_flags[i] = True
-                            break
-        
-        # Build result dictionaries
-        result = []
-        for i, curve in enumerate(boundary_curves):
-            is_outermost = (i == outermost_idx)
-            is_va_in_vi = va_in_vi_flags[i]
-            
-            # Get holes (contained curves)
-            holes = containment_map.get(i, [])
-            
-            # Get physical groups
-            physical_groups = BoundaryCurveGrouper.get_physical_groups_for_curve(
-                curve=curve,
-                classification=classifications[i],
-                is_outermost=is_outermost,
-                is_va_in_vi=is_va_in_vi
-            )
-            
-            result.append({
-                "holes": holes,
-                "physical_groups": physical_groups
-            })
-        
-        return result
     
     @staticmethod
     def print_grouping_summary(boundary_curves: List[BoundaryCurve], grouping_result: List[Dict]):
