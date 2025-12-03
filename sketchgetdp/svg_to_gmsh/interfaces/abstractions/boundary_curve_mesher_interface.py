@@ -17,12 +17,14 @@ class BoundaryCurveMesherInterface(ABC):
     
     @abstractmethod
     def mesh_boundary_curves(self, 
-                           boundary_curves: List[BoundaryCurve], 
-                           properties: List[Dict[str, Any]]) -> None:
+                        factory: Any,
+                        boundary_curves: List[BoundaryCurve], 
+                        properties: List[Dict[str, Any]]) -> None:
         """
         Mesh all boundary curves with their properties.
         
         Args:
+            factory: Gmsh geometry factory (gmsh.model.geo)
             boundary_curves: List of BoundaryCurve objects to mesh
             properties: List of dictionaries with "holes" and "physical_groups" keys
                        Each dictionary corresponds to the boundary curve at the same index

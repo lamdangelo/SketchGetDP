@@ -15,22 +15,21 @@ class PointElectrodeMesherInterface(ABC):
     """
     
     @abstractmethod
-    def mesh_electrodes(self, electrodes: List[Tuple[Point, Color]], point_size: float = 0.1) -> Dict[int, Dict[str, Any]]:
+    def mesh_electrodes(self, 
+                        factory: Any,
+                        config_path: str,
+                        electrodes: List[Tuple[Point, Color]], 
+                        point_size: float = 0.1) -> Dict[int, Dict[str, Any]]:
         """
         Create Gmsh entities for point electrodes with physical groups.
         
         Args:
+            factory: Gmsh factory object
+            config_path: Path to the YAML configuration file
             electrodes: List of (point, color) tuples representing electrodes
             point_size: Size parameter for the point entities
             
         Returns:
             Dictionary mapping electrode indices to their Gmsh tags and physical groups.
-            Each entry contains:
-            - 'original_index': Original index in sorted list
-            - 'point': Point object with coordinates
-            - 'color': Color object
-            - 'gmsh_point_tag': Gmsh point entity tag
-            - 'physical_group': PhysicalGroup instance
-            - 'coil_name': Name identifier for the coil
         """
         pass

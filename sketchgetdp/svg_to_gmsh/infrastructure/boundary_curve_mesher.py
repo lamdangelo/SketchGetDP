@@ -3,28 +3,25 @@ Boundary curve meshing module for Gmsh integration.
 Converts BoundaryCurve objects into Gmsh geometry with proper physical groups.
 """
 
-from typing import List, Dict, Any, Set
-import gmsh
+from typing import List, Dict, Any
 from ..core.entities.boundary_curve import BoundaryCurve
 from ..core.entities.point import Point
-from ..core.entities.bezier_segment import BezierSegment
 from ..core.entities.physical_group import PhysicalGroup
+from ..interfaces.abstractions.boundary_curve_mesher_interface import BoundaryCurveMesherInterface
 
-
-class BoundaryCurveMesher:
+class BoundaryCurveMesher(BoundaryCurveMesherInterface):
     """
     Meshes BoundaryCurve objects in Gmsh with proper physical group assignment.
     Handles both straight lines and 2nd order Bézier curves.
     """
     
-    def __init__(self, factory: Any):
+    def __init__(self):
         """
         Initialize the mesher with a Gmsh factory.
         
         Args:
             factory: Gmsh geometry factory (gmsh.model.geo)
         """
-        self.factory = factory
         self._point_tags = {}  # Maps Point objects to Gmsh point tags
         self._curve_loops = {}  # Maps boundary curve indices to Gmsh curve loop tags
         self._surface_tags = {}  # Maps boundary curve indices to Gmsh surface tags
@@ -32,7 +29,8 @@ class BoundaryCurveMesher:
         self._curve_tags_per_boundary = {}  # Store curve tags per boundary curve index
         self._processing_order = []  # Store the order in which boundary curves were processed
         
-    def mesh_boundary_curves(self, 
+    def mesh_boundary_curves(self,
+                           factory: Any,  # Add factory parameter
                            boundary_curves: List[BoundaryCurve], 
                            properties: List[Dict[str, Any]]) -> None:
         """
@@ -45,6 +43,8 @@ class BoundaryCurveMesher:
             properties: List of dictionaries with "holes" and "physical_groups" keys
                        Each dictionary corresponds to the boundary curve at the same index
         """
+        self.factory = factory
+        
         if len(boundary_curves) != len(properties):
             raise ValueError(
                 f"Number of boundary curves ({len(boundary_curves)}) "
@@ -59,9 +59,6 @@ class BoundaryCurveMesher:
             boundary_curve = boundary_curves[idx]
             props = properties[idx]
             self._mesh_single_boundary_curve(idx, boundary_curve, props)
-        
-        # Synchronize after all geometry creation
-        self.factory.synchronize()
         
         # Assign physical groups in the same order
         for idx in self._processing_order:

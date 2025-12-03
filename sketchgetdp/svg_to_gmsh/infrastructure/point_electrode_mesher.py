@@ -1,42 +1,83 @@
 import yaml
-from typing import List, Tuple
+from typing import List, Tuple, Any
 from ..core.entities.point import Point
 from ..core.entities.color import Color
 from ..core.entities.physical_group import (
     DOMAIN_COIL_POSITIVE, 
     DOMAIN_COIL_NEGATIVE
 )
+from ..interfaces.abstractions.point_electrode_mesher_interface import PointElectrodeMesherInterface
 
-class PointElectrodeMesher:
+class PointElectrodeMesher(PointElectrodeMesherInterface):
     """
     Mesher for point electrodes that sorts them and creates Gmsh entities with physical groups.
     """
     
-    def __init__(self, factory, config_path: str):
+    def __init__(self):
+        self.factory = None
+        self.coil_currents = {}
+    
+    def mesh_electrodes(self, 
+                        factory: Any,
+                        config_path: str,
+                        electrodes: List[Tuple[Point, Color]], 
+                        point_size: float = 0.1) -> dict:
         """
-        Initialize the point electrode mesher.
+        Create Gmsh entities for point electrodes with physical groups.
         
         Args:
             factory: Gmsh factory object
             config_path: Path to the YAML configuration file
+            electrodes: List of (point, color) tuples representing electrodes
+            point_size: Size parameter for the point entities
+            
+        Returns:
+            Dictionary mapping electrode indices to their Gmsh tags and physical groups
         """
         self.factory = factory
-        self.config_path = config_path
-        self.coil_currents = self._load_coil_currents()
+        self.coil_currents = self._load_coil_currents(config_path)
         
-    def _load_coil_currents(self) -> dict:
+        if not electrodes:
+            print("Warning: No electrodes provided")
+            return {}
+        
+        sorted_electrodes = self._sort_electrodes(electrodes)
+        results = {}
+        
+        for i, (point, color) in enumerate(sorted_electrodes):
+            # Create Gmsh point entity
+            point_tag = self.factory.addPoint(point.x, point.y, 0.0, point_size)
+            physical_group = self._get_physical_group_for_electrode(i, color)
+            self.factory.addPhysicalGroup(0, [point_tag], physical_group.value)
+            
+            # Store results
+            results[i] = {
+                'original_index': i,
+                'point': point,
+                'color': color,
+                'gmsh_point_tag': point_tag,
+                'physical_group': physical_group,
+                'coil_name': f"coil_{i + 1}"
+            }
+            
+        return results
+    
+    def _load_coil_currents(self, config_path: str) -> dict:
         """
         Load coil current directions from the YAML configuration file.
         
+        Args:
+            config_path: Path to the configuration file
+            
         Returns:
             Dictionary mapping coil names to current directions
         """
         try:
-            with open(self.config_path, 'r') as file:
+            with open(config_path, 'r') as file:
                 config = yaml.safe_load(file)
                 return config.get('coil_currents', {})
         except Exception as e:
-            print(f"Warning: Could not load config file {self.config_path}: {e}")
+            print(f"Warning: Could not load config file {config_path}: {e}")
             return {}
     
     def _sort_electrodes(self, electrodes: List[Tuple[Point, Color]]) -> List[Tuple[Point, Color]]:
@@ -85,43 +126,6 @@ class PointElectrodeMesher:
             return DOMAIN_COIL_NEGATIVE
         else:
             raise ValueError(f"Invalid current sign {current_sign} for {coil_name}")
-    
-    def mesh_electrodes(self, electrodes: List[Tuple[Point, Color]], point_size: float = 0.1) -> dict:
-        """
-        Create Gmsh entities for point electrodes with physical groups.
-        
-        Args:
-            electrodes: List of (point, color) tuples representing electrodes
-            point_size: Size parameter for the point entities
-            
-        Returns:
-            Dictionary mapping electrode indices to their Gmsh tags and physical groups
-        """
-        if not electrodes:
-            print("Warning: No electrodes provided")
-            return {}
-        
-        sorted_electrodes = self._sort_electrodes(electrodes)
-        
-        results = {}
-        
-        for i, (point, color) in enumerate(sorted_electrodes):
-            # Create Gmsh point entity
-            point_tag = self.factory.addPoint(point.x, point.y, 0.0, point_size)
-            physical_group = self._get_physical_group_for_electrode(i, color)
-            self.factory.addPhysicalGroup(0, [point_tag], physical_group.value)
-            
-            # Store results
-            results[i] = {
-                'original_index': i,
-                'point': point,
-                'color': color,
-                'gmsh_point_tag': point_tag,
-                'physical_group': physical_group,
-                'coil_name': f"coil_{i + 1}"
-            }
-            
-        return results
     
     def get_electrode_summary(self, results: dict) -> str:
         """

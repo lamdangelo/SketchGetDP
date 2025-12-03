@@ -2,8 +2,9 @@ from typing import List, Dict, Tuple
 from ..core.entities.boundary_curve import BoundaryCurve
 from ..core.entities.physical_group import PhysicalGroup, DOMAIN_VA, DOMAIN_VI_IRON, DOMAIN_VI_AIR, BOUNDARY_GAMMA, BOUNDARY_OUT
 from ..core.entities.point import Point
+from ..interfaces.abstractions.boundary_curve_grouper_interface import BoundaryCurveGrouperInterface
 
-class BoundaryCurveGrouper:
+class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
     """
     Groups boundary curves into hierarchical structure with containment relationships
     and assigns physical groups based on containment logic.

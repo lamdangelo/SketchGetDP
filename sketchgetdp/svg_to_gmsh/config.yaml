@@ -6,3 +6,7 @@
 coil_currents: 
   coil_1: 1
   coil_2: -1
+
+## mesh settings
+# Set the mesh size for Gmsh
+mesh_size: 0.1
