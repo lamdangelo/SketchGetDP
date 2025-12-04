@@ -1,6 +1,6 @@
 import pytest
-from svg_to_gmsh.core.entities.physical_group import PhysicalGroup
-from svg_to_gmsh.core.entities.color import Color
+from svg_to_getdp.core.entities.physical_group import PhysicalGroup
+from svg_to_getdp.core.entities.color import Color
 
 
 class TestPhysicalGroup:
@@ -227,7 +227,7 @@ class TestPhysicalGroup:
     
     def test_module_constants(self):
         """Test the module-level constants"""
-        from svg_to_gmsh.core.entities.physical_group import (
+        from svg_to_getdp.core.entities.physical_group import (
             DOMAIN_VI_IRON,
             DOMAIN_VI_AIR,
             DOMAIN_VA,

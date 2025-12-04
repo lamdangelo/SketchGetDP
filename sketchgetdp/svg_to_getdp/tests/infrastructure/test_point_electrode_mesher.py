@@ -4,13 +4,13 @@ import os
 from unittest.mock import Mock
 import yaml
 
-from svg_to_gmsh.core.entities.point import Point
-from svg_to_gmsh.core.entities.color import Color
-from svg_to_gmsh.core.entities.physical_group import (
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.color import Color
+from svg_to_getdp.core.entities.physical_group import (
     DOMAIN_COIL_POSITIVE, 
     DOMAIN_COIL_NEGATIVE
 )
-from svg_to_gmsh.infrastructure.point_electrode_mesher import PointElectrodeMesher
+from svg_to_getdp.infrastructure.point_electrode_mesher import PointElectrodeMesher
 
 
 @pytest.fixture

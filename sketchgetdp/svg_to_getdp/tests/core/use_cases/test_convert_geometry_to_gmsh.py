@@ -10,22 +10,22 @@ import yaml
 from pathlib import Path
 
 # Import core entities
-from svg_to_gmsh.core.entities.point import Point
-from svg_to_gmsh.core.entities.bezier_segment import BezierSegment
-from svg_to_gmsh.core.entities.boundary_curve import BoundaryCurve
-from svg_to_gmsh.core.entities.color import Color
-from svg_to_gmsh.core.entities.physical_group import (
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.bezier_segment import BezierSegment
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.color import Color
+from svg_to_getdp.core.entities.physical_group import (
     DOMAIN_VA, DOMAIN_VI_IRON, DOMAIN_VI_AIR, BOUNDARY_GAMMA, BOUNDARY_OUT,
     DOMAIN_COIL_POSITIVE, DOMAIN_COIL_NEGATIVE
 )
 
 # Import use case
-from svg_to_gmsh.core.use_cases.convert_geometry_to_gmsh import ConvertGeometryToGmsh
+from svg_to_getdp.core.use_cases.convert_geometry_to_gmsh import ConvertGeometryToGmsh
 
 # Import REAL implementations instead of interfaces
-from svg_to_gmsh.infrastructure.boundary_curve_grouper import BoundaryCurveGrouper
-from svg_to_gmsh.infrastructure.boundary_curve_mesher import BoundaryCurveMesher
-from svg_to_gmsh.infrastructure.point_electrode_mesher import PointElectrodeMesher
+from svg_to_getdp.infrastructure.boundary_curve_grouper import BoundaryCurveGrouper
+from svg_to_getdp.infrastructure.boundary_curve_mesher import BoundaryCurveMesher
+from svg_to_getdp.infrastructure.point_electrode_mesher import PointElectrodeMesher
 
 
 @pytest.fixture
@@ -124,11 +124,11 @@ class TestConvertGeometryToGmsh:
     @pytest.fixture
     def mock_gmsh_toolbox(self):
         """Mock the Gmsh toolbox functions."""
-        with patch('svg_to_gmsh.core.use_cases.convert_geometry_to_gmsh.initialize_gmsh') as mock_init, \
-             patch('svg_to_gmsh.core.use_cases.convert_geometry_to_gmsh.set_characteristic_mesh_length') as mock_set_mesh, \
-             patch('svg_to_gmsh.core.use_cases.convert_geometry_to_gmsh.mesh_and_save') as mock_mesh_save, \
-             patch('svg_to_gmsh.core.use_cases.convert_geometry_to_gmsh.show_model') as mock_show, \
-             patch('svg_to_gmsh.core.use_cases.convert_geometry_to_gmsh.finalize_gmsh') as mock_finalize:
+        with patch('svg_to_getdp.core.use_cases.convert_geometry_to_gmsh.initialize_gmsh') as mock_init, \
+             patch('svg_to_getdp.core.use_cases.convert_geometry_to_gmsh.set_characteristic_mesh_length') as mock_set_mesh, \
+             patch('svg_to_getdp.core.use_cases.convert_geometry_to_gmsh.mesh_and_save') as mock_mesh_save, \
+             patch('svg_to_getdp.core.use_cases.convert_geometry_to_gmsh.show_model') as mock_show, \
+             patch('svg_to_getdp.core.use_cases.convert_geometry_to_gmsh.finalize_gmsh') as mock_finalize:
             
             mock_factory = Mock()
             mock_init.return_value = mock_factory
@@ -404,11 +404,11 @@ class TestConvertGeometryToGmshIntegration:
     ):
         """Test execution with real implementations (still mocking Gmsh)."""
         # Mock Gmsh functions since we don't want to actually run Gmsh
-        with patch('svg_to_gmsh.core.use_cases.convert_geometry_to_gmsh.initialize_gmsh') as mock_init, \
-            patch('svg_to_gmsh.core.use_cases.convert_geometry_to_gmsh.set_characteristic_mesh_length') as mock_set_mesh, \
-            patch('svg_to_gmsh.core.use_cases.convert_geometry_to_gmsh.mesh_and_save') as mock_mesh_save, \
-            patch('svg_to_gmsh.core.use_cases.convert_geometry_to_gmsh.show_model') as mock_show, \
-            patch('svg_to_gmsh.core.use_cases.convert_geometry_to_gmsh.finalize_gmsh'):
+        with patch('svg_to_getdp.core.use_cases.convert_geometry_to_gmsh.initialize_gmsh') as mock_init, \
+            patch('svg_to_getdp.core.use_cases.convert_geometry_to_gmsh.set_characteristic_mesh_length') as mock_set_mesh, \
+            patch('svg_to_getdp.core.use_cases.convert_geometry_to_gmsh.mesh_and_save') as mock_mesh_save, \
+            patch('svg_to_getdp.core.use_cases.convert_geometry_to_gmsh.show_model') as mock_show, \
+            patch('svg_to_getdp.core.use_cases.convert_geometry_to_gmsh.finalize_gmsh'):
             
             # Mock factory
             mock_factory = Mock()

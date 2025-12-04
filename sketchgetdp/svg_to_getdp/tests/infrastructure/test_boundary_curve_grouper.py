@@ -2,18 +2,18 @@ import pytest
 from unittest.mock import patch, MagicMock, PropertyMock
 import math
 
-from svg_to_gmsh.core.entities.point import Point
-from svg_to_gmsh.core.entities.color import Color
-from svg_to_gmsh.core.entities.bezier_segment import BezierSegment
-from svg_to_gmsh.core.entities.boundary_curve import BoundaryCurve
-from svg_to_gmsh.core.entities.physical_group import (
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.color import Color
+from svg_to_getdp.core.entities.bezier_segment import BezierSegment
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.physical_group import (
     DOMAIN_VA, 
     DOMAIN_VI_IRON, 
     DOMAIN_VI_AIR, 
     BOUNDARY_GAMMA, 
     BOUNDARY_OUT
 )
-from svg_to_gmsh.infrastructure.boundary_curve_grouper import BoundaryCurveGrouper
+from svg_to_getdp.infrastructure.boundary_curve_grouper import BoundaryCurveGrouper
 
 
 # ============================================================================
@@ -265,7 +265,7 @@ class TestBoundaryCurveGrouper:
         assert len(result) == 1
         assert BOUNDARY_OUT in result[0]["physical_groups"]
     
-    @patch('svg_to_gmsh.infrastructure.boundary_curve_grouper.BoundaryCurveGrouper.is_curve_inside_other')
+    @patch('svg_to_getdp.infrastructure.boundary_curve_grouper.BoundaryCurveGrouper.is_curve_inside_other')
     def test_should_detect_va_curves_inside_vi_curves_and_assign_boundary_gamma(self, mock_is_inside, create_square_boundary):
         """Test detection of Va curves inside Vi curves."""
         # Setup mock to simulate Va inside Vi
@@ -284,7 +284,7 @@ class TestBoundaryCurveGrouper:
         curves = [vi_curve, va_curve]
         
         # Mock the containment hierarchy to show Va is inside Vi
-        with patch('svg_to_gmsh.infrastructure.boundary_curve_grouper.BoundaryCurveGrouper.get_containment_hierarchy') as mock_hierarchy:
+        with patch('svg_to_getdp.infrastructure.boundary_curve_grouper.BoundaryCurveGrouper.get_containment_hierarchy') as mock_hierarchy:
             mock_hierarchy.return_value = {0: [1], 1: []}  # Vi contains Va
             
             result = BoundaryCurveGrouper.group_boundary_curves(curves)
@@ -300,7 +300,7 @@ class TestBoundaryCurveGrouper:
         
         # Mock containment hierarchy to create circular reference
         # Use the full module path for patching
-        with patch('svg_to_gmsh.infrastructure.boundary_curve_grouper.BoundaryCurveGrouper.get_containment_hierarchy') as mock_hierarchy:
+        with patch('svg_to_getdp.infrastructure.boundary_curve_grouper.BoundaryCurveGrouper.get_containment_hierarchy') as mock_hierarchy:
             mock_hierarchy.return_value = {0: [1], 1: [0]}  # Each contains the other
             
             with pytest.raises(ValueError, match="No outermost candidates found"):

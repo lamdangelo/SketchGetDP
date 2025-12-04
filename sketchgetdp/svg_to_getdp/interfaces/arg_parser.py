@@ -2,18 +2,18 @@ import argparse
 from typing import List
 
 class ArgParser:
-    """Command line argument parser for SVG to Gmsh converter"""
+    """Command line argument parser for SVG to Getdp converter"""
     
     def parse_args(self, args: List[str] = None) -> argparse.Namespace:
         parser = argparse.ArgumentParser(
-            description='Convert SVG sketches to Gmsh mesh with Bézier boundary curves',
+            description='Convert SVG sketches to Getdp-compatible geometry, mesh with Gmsh and simulate with Getdp.',
             epilog=(
                 'Examples:\n'
-                '  python -m svg_to_gmsh drawing.svg\n'
-                '  python -m svg_to_gmsh sketch.svg --visualize\n'
-                '  python -m svg_to_gmsh design.svg --output-plot curves.png\n'
-                '  python -m svg_to_gmsh design.svg --mesh-name my_mesh --no-gui\n'
-                '  python -m svg_to_gmsh design.svg --gmsh-config custom_config.yaml\n'
+                '  python -m svg_to_getdp drawing.svg\n'
+                '  python -m svg_to_getdp sketch.svg --visualize\n'
+                '  python -m svg_to_getdp design.svg --output-plot curves.png\n'
+                '  python -m svg_to_getdp design.svg --mesh-name my_mesh --no-gui\n'
+                '  python -m svg_to_getdp design.svg --gmsh-config custom_config.yaml\n'
             ),
             formatter_class=argparse.RawDescriptionHelpFormatter
         )
@@ -26,9 +26,9 @@ class ArgParser:
         
         # Gmsh meshing options
         parser.add_argument(
-            '--gmsh-config',
+            '--config',
             type=str,
-            help='Path to YAML configuration file for coil currents and mesh settings (default: config.yaml)'
+            help='Path to YAML configuration file for coil currents, mesh settings and simulation parameters'
         )
         
         parser.add_argument(

@@ -1,8 +1,8 @@
 """
-SVG to Gmsh Geometry Converter - Package Entry Point
+SVG to Getdp - Package Entry Point
 
 This module allows the package to be executed as:
-python -m svg_to_gmsh [arguments]
+python -m svg_to_getdp [arguments]
 """
 
 from pathlib import Path
@@ -48,7 +48,7 @@ def main():
             print(f"  Point electrode {i+1}: at ({point.x:.3f}, {point.y:.3f}), color: {color.name.lower()}")
         
         # Determine config file path
-        config_file_path = Path(args.gmsh_config)
+        config_file_path = Path(args.config)
         if not config_file_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {config_file_path}")
         

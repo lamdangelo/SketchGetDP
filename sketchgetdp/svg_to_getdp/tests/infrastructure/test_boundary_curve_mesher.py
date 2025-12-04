@@ -9,11 +9,11 @@ from unittest.mock import Mock, patch
 
 import gmsh
 
-from svg_to_gmsh.core.entities.boundary_curve import BoundaryCurve
-from svg_to_gmsh.core.entities.point import Point
-from svg_to_gmsh.core.entities.bezier_segment import BezierSegment
-from svg_to_gmsh.core.entities.color import Color
-from svg_to_gmsh.core.entities.physical_group import (
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.bezier_segment import BezierSegment
+from svg_to_getdp.core.entities.color import Color
+from svg_to_getdp.core.entities.physical_group import (
     PhysicalGroup,
     DOMAIN_VI_IRON,
     DOMAIN_VI_AIR,
@@ -23,7 +23,7 @@ from svg_to_gmsh.core.entities.physical_group import (
     BOUNDARY_GAMMA,
     BOUNDARY_OUT
 )
-from svg_to_gmsh.infrastructure.boundary_curve_mesher import BoundaryCurveMesher
+from svg_to_getdp.infrastructure.boundary_curve_mesher import BoundaryCurveMesher
 
 
 class TestBoundaryCurveMesher:

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
-from svg_to_gmsh.core.entities.color import Color
+from ...core.entities.color import Color
 
 
 @dataclass(frozen=True)
