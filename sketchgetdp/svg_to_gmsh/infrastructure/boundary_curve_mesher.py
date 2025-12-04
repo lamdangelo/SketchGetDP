@@ -29,6 +29,12 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         self._curve_tags_per_boundary = {}  # Store curve tags per boundary curve index
         self._processing_order = []  # Store the order in which boundary curves were processed
         
+        # Track physical groups by type
+        self._physical_groups_by_type = {
+            'boundary': {},  # physical_group.value -> list of curve tags
+            'domain': {}     # physical_group.value -> list of surface tags
+        }
+        
     def mesh_boundary_curves(self,
                            factory: Any,  # Add factory parameter
                            boundary_curves: List[BoundaryCurve], 
@@ -60,11 +66,14 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
             props = properties[idx]
             self._mesh_single_boundary_curve(idx, boundary_curve, props)
         
-        # Assign physical groups in the same order
+        # Now collect all entities by physical group type
         for idx in self._processing_order:
             boundary_curve = boundary_curves[idx]
             props = properties[idx]
-            self._assign_physical_groups(idx, boundary_curve, props)
+            self._collect_physical_groups(idx, boundary_curve, props)
+        
+        # After all curves and surfaces are created, assign physical groups
+        self._assign_physical_groups()
     
     def _get_processing_order(self, 
                             boundary_curves: List[BoundaryCurve], 
@@ -215,12 +224,12 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         self._created_points[point] = point_tag
         return point_tag
     
-    def _assign_physical_groups(self, 
-                            idx: int, 
-                            boundary_curve: BoundaryCurve, 
-                            properties: Dict[str, Any]) -> None:
+    def _collect_physical_groups(self, 
+                               idx: int, 
+                               boundary_curve: BoundaryCurve, 
+                               properties: Dict[str, Any]) -> None:
         """
-        Assign physical groups to the created geometry.
+        Collect entities that belong to each physical group type.
         
         Args:
             idx: Index of the boundary curve
@@ -235,36 +244,50 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         if not isinstance(physical_groups, list):
             physical_groups = [physical_groups]
         
-        # Separate boundary and domain groups
-        boundary_groups = []
-        domain_groups = []
-        
         for pg in physical_groups:
-            if isinstance(pg, PhysicalGroup):
-                if pg.is_boundary():
-                    boundary_groups.append(pg)
-                elif pg.is_domain():
-                    domain_groups.append(pg)
-            else:
+            if not isinstance(pg, PhysicalGroup):
                 raise TypeError(f"Physical group must be PhysicalGroup instance, got {type(pg)}")
+            
+            if pg.is_boundary():
+                # Collect curve tags for this boundary group
+                if idx in self._curve_tags_per_boundary:
+                    if pg.value not in self._physical_groups_by_type['boundary']:
+                        self._physical_groups_by_type['boundary'][pg.value] = []
+                    self._physical_groups_by_type['boundary'][pg.value].extend(
+                        self._curve_tags_per_boundary[idx]
+                    )
+                    
+            elif pg.is_domain():
+                # Collect surface tag for this domain group
+                if idx in self._surface_tags:
+                    if pg.value not in self._physical_groups_by_type['domain']:
+                        self._physical_groups_by_type['domain'][pg.value] = []
+                    self._physical_groups_by_type['domain'][pg.value].append(
+                        self._surface_tags[idx]
+                    )
+    
+    def _assign_physical_groups(self) -> None:
+        """
+        Assign physical groups after all entities are collected.
+        Creates one physical group per type with all relevant entities.
+        """
+        # Assign boundary groups (1D curves)
+        for physical_group_value, curve_tags in self._physical_groups_by_type['boundary'].items():
+            if curve_tags:
+                # Remove duplicates while preserving order
+                unique_curve_tags = list(dict.fromkeys(curve_tags))
+                self.factory.addPhysicalGroup(1, unique_curve_tags, physical_group_value)
+                print(f"Created boundary physical group (tag {physical_group_value}) "
+                      f"with {len(unique_curve_tags)} curves")
         
-        # Assign boundary groups to curves (1D)
-        for pg in boundary_groups:
-            if idx in self._curve_tags_per_boundary:
-                self.factory.addPhysicalGroup(
-                    1,  # Curve dimension for boundaries
-                    self._curve_tags_per_boundary[idx], 
-                    pg.value
-                )
-        
-        # Assign domain groups to surface (2D)
-        for pg in domain_groups:
-            if idx in self._surface_tags:
-                self.factory.addPhysicalGroup(
-                    2,  # Surface dimension for domains
-                    [self._surface_tags[idx]], 
-                    pg.value
-                )
+        # Assign domain groups (2D surfaces)
+        for physical_group_value, surface_tags in self._physical_groups_by_type['domain'].items():
+            if surface_tags:
+                # Remove duplicates while preserving order
+                unique_surface_tags = list(dict.fromkeys(surface_tags))
+                self.factory.addPhysicalGroup(2, unique_surface_tags, physical_group_value)
+                print(f"Created domain physical group (tag {physical_group_value}) "
+                      f"with {len(unique_surface_tags)} surfaces")
     
     def get_processing_order(self) -> List[int]:
         """
@@ -315,7 +338,34 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         """
         if idx not in self._curve_tags_per_boundary:
             raise KeyError(f"No curve tags found for boundary curve index {idx}")
-        return self._curve_tags_per_boundary[idx]
+        return self._curve_tags_per_boundary[idx].copy()
+    
+    def get_physical_group_summary(self) -> str:
+        """
+        Generate a summary of created physical groups.
+        
+        Returns:
+            Formatted summary string
+        """
+        summary = ["Boundary Curve Physical Group Summary:"]
+        summary.append("-" * 50)
+        
+        # Boundary groups
+        boundary_count = len(self._physical_groups_by_type['boundary'])
+        summary.append(f"Boundary Groups (1D curves): {boundary_count}")
+        for pg_value, curve_tags in self._physical_groups_by_type['boundary'].items():
+            unique_tags = list(dict.fromkeys(curve_tags))
+            summary.append(f"  Tag {pg_value}: {len(unique_tags)} curves")
+        
+        # Domain groups
+        domain_count = len(self._physical_groups_by_type['domain'])
+        summary.append(f"Domain Groups (2D surfaces): {domain_count}")
+        for pg_value, surface_tags in self._physical_groups_by_type['domain'].items():
+            unique_tags = list(dict.fromkeys(surface_tags))
+            summary.append(f"  Tag {pg_value}: {len(unique_tags)} surfaces")
+        
+        summary.append("-" * 50)
+        return "\n".join(summary)
     
     def clear(self) -> None:
         """
@@ -327,3 +377,5 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         self._created_points.clear()
         self._curve_tags_per_boundary.clear()
         self._processing_order.clear()
+        self._physical_groups_by_type['boundary'].clear()
+        self._physical_groups_by_type['domain'].clear()

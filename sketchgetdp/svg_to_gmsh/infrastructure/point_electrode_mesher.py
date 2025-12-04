@@ -42,13 +42,24 @@ class PointElectrodeMesher(PointElectrodeMesherInterface):
             return {}
         
         sorted_electrodes = self._sort_electrodes(electrodes)
+        
+        # Collect points by their polarity
+        positive_point_tags = []
+        negative_point_tags = []
         results = {}
         
         for i, (point, color) in enumerate(sorted_electrodes):
             # Create Gmsh point entity
             point_tag = self.factory.addPoint(point.x, point.y, 0.0, point_size)
             physical_group = self._get_physical_group_for_electrode(i, color)
-            self.factory.addPhysicalGroup(0, [point_tag], physical_group.value)
+            
+            # Store point tag based on polarity
+            if physical_group == DOMAIN_COIL_POSITIVE:
+                positive_point_tags.append(point_tag)
+            elif physical_group == DOMAIN_COIL_NEGATIVE:
+                negative_point_tags.append(point_tag)
+            else:
+                raise ValueError(f"Unknown physical group type: {physical_group}")
             
             # Store results
             results[i] = {
@@ -59,6 +70,23 @@ class PointElectrodeMesher(PointElectrodeMesherInterface):
                 'physical_group': physical_group,
                 'coil_name': f"coil_{i + 1}"
             }
+        
+        # Create ONE physical group for all positive points
+        if positive_point_tags:
+            self.factory.addPhysicalGroup(0, positive_point_tags, DOMAIN_COIL_POSITIVE.value)
+            print(f"Created positive coil physical group (tag {DOMAIN_COIL_POSITIVE.value}) "
+                  f"with {len(positive_point_tags)} electrodes")
+        
+        # Create ONE physical group for all negative points  
+        if negative_point_tags:
+            self.factory.addPhysicalGroup(0, negative_point_tags, DOMAIN_COIL_NEGATIVE.value)
+            print(f"Created negative coil physical group (tag {DOMAIN_COIL_NEGATIVE.value}) "
+                  f"with {len(negative_point_tags)} electrodes")
+        
+        # Print summary
+        print(f"Total electrodes processed: {len(electrodes)}")
+        print(f"  Positive: {len(positive_point_tags)}")
+        print(f"  Negative: {len(negative_point_tags)}")
             
         return results
     
@@ -137,17 +165,28 @@ class PointElectrodeMesher(PointElectrodeMesherInterface):
         Returns:
             Formatted summary string
         """
+        if not results:
+            return "No electrodes processed."
+        
+        # Count positive and negative electrodes
+        positive_count = sum(1 for data in results.values() 
+                            if data['physical_group'] == DOMAIN_COIL_POSITIVE)
+        negative_count = sum(1 for data in results.values() 
+                            if data['physical_group'] == DOMAIN_COIL_NEGATIVE)
+        
         summary = ["Point Electrode Summary (sorted order):"]
+        summary.append("-" * 50)
+        summary.append(f"Total electrodes: {len(results)}")
+        summary.append(f"Positive coils (+): {positive_count} (physical group tag: {DOMAIN_COIL_POSITIVE.value})")
+        summary.append(f"Negative coils (-): {negative_count} (physical group tag: {DOMAIN_COIL_NEGATIVE.value})")
         summary.append("-" * 50)
         
         for i, data in results.items():
-            current_sign = "Positive (+)" if data['physical_group'].current_sign == 1 else "Negative (-)" if data['physical_group'].current_sign == -1 else "None"
-            summary.append(f"Electrode {i+1}:")
+            polarity = "Positive (+)" if data['physical_group'] == DOMAIN_COIL_POSITIVE else "Negative (-)"
+            summary.append(f"Electrode {i+1} ({polarity}):")
             summary.append(f"  Position: ({data['point'].x:.3f}, {data['point'].y:.3f})")
             summary.append(f"  Color: {data['color'].name}")
             summary.append(f"  Coil Name: {data['coil_name']}")
-            summary.append(f"  Physical Group: {data['physical_group'].name}")
-            summary.append(f"  Current Sign: {current_sign}")
             summary.append(f"  Gmsh Point Tag: {data['gmsh_point_tag']}")
             summary.append("")
         
