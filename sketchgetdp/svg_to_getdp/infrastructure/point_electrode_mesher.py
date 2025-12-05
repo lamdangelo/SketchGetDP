@@ -20,8 +20,7 @@ class PointElectrodeMesher(PointElectrodeMesherInterface):
     def mesh_electrodes(self, 
                         factory: Any,
                         config_path: str,
-                        electrodes: List[Tuple[Point, Color]], 
-                        point_size: float = 0.1) -> dict:
+                        electrodes: List[Tuple[Point, Color]]) -> dict:
         """
         Create Gmsh entities for point electrodes with physical groups.
         
@@ -29,7 +28,6 @@ class PointElectrodeMesher(PointElectrodeMesherInterface):
             factory: Gmsh factory object
             config_path: Path to the YAML configuration file
             electrodes: List of (point, color) tuples representing electrodes
-            point_size: Size parameter for the point entities
             
         Returns:
             Dictionary mapping electrode indices to their Gmsh tags and physical groups
@@ -50,7 +48,7 @@ class PointElectrodeMesher(PointElectrodeMesherInterface):
         
         for i, (point, color) in enumerate(sorted_electrodes):
             # Create Gmsh point entity
-            point_tag = self.factory.addPoint(point.x, point.y, 0.0, point_size)
+            point_tag = self.factory.addPoint(point.x, point.y, 0.0)
             physical_group = self._get_physical_group_for_electrode(i, color)
             
             # Store point tag based on polarity

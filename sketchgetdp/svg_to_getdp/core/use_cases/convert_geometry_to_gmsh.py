@@ -137,8 +137,7 @@ class ConvertGeometryToGmsh:
             electrode_results = self.point_electrode_mesher.mesh_electrodes(
                 factory,
                 config_file_path,
-                point_electrodes,
-                point_size=mesh_size
+                point_electrodes
             )
             results["electrode_results"] = electrode_results
             

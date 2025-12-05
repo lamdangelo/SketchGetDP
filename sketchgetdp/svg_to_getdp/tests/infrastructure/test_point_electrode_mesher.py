@@ -201,7 +201,7 @@ class TestPointElectrodeMesher:
         # Mock sequential point tags
         mock_factory.addPoint.side_effect = [1, 2, 3, 4]
         
-        results = mesher.mesh_electrodes(sample_electrodes, point_size=0.05)
+        results = mesher.mesh_electrodes(sample_electrodes)
         
         # Check results structure
         assert len(results) == 4

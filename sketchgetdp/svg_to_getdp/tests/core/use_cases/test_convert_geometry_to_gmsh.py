@@ -228,7 +228,6 @@ class TestConvertGeometryToGmsh:
                 mock_gmsh_toolbox['factory'],  # factory first
                 sample_config_file,            # config_path second
                 sample_point_electrodes,       # electrodes third
-                point_size=0.05                # point_size (using mesh_size)
             )
             
             # Verify boundary curve grouping
@@ -436,8 +435,7 @@ class TestConvertGeometryToGmshIntegration:
                 mock_mesh_electrodes.assert_called_once_with(
                     mock_factory,
                     sample_config_file,
-                    sample_point_electrodes,
-                    point_size=0.1
+                    sample_point_electrodes
                 )
                 mock_group_boundary_curves.assert_called_once()
                 mock_mesh_boundary_curves.assert_called_once_with(
