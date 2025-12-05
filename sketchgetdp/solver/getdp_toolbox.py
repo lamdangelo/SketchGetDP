@@ -7,27 +7,58 @@ Author: Laura D'Angelo
 import gmsh 
 import numpy as np
 from sketchgetdp.geometry import gmsh_toolbox as geo
+import os
 
 
-def get_getdp_path(filename: str) -> str:
+def get_getdp_path(filename: str = "./../../getdp_path.txt") -> str:
     """
     Returns the path for running GetDP on the respective computer.
 
     Parameters:
-        filename (str): file name
+        filename (str): file name containing GetDP path. 
+                       Can be absolute path or relative to this script.
     
     Returns:
         str: path to GetDP executable
     """
+    # Get the directory where this script (getdp_toolbox.py) is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Check if filename is an absolute path
+    if os.path.isabs(filename):
+        path_file = filename
+    else:
+        # If relative, resolve it relative to this script's location
+        # Join with script_dir, then normalize the path
+        path_file = os.path.join(script_dir, filename)
+        path_file = os.path.normpath(path_file)
+    
     try:
-        file = open(filename, 'r')
+        with open(path_file, 'r') as file:
+            path = file.readline().strip()
+            if path:
+                print(f"Found GetDP path at: {path_file}")
+                return path
+            else:
+                raise ValueError(f"{filename} is empty")
     except FileNotFoundError:
-        message = 'Error: ' + filename + " not found. You have to create this file and give the path of your GetDP executable."
+        # Provide helpful error message showing what we tried
+        message = f"""Error: Could not find GetDP path file.
+        
+Tried to open: {path_file}
+This script is located at: {script_dir}
+
+You need to ensure 'getdp_path.txt' exists at the expected location.
+Current expected location (relative to script): {filename}
+
+Please check that:
+1. The file exists at: {path_file}
+2. Or update the filename parameter in get_getdp_path() call
+"""
         exit(message)
-    data = file.readlines()
-    path = data[0].split('\n')
-    file.close()
-    return path[0]
+    except Exception as e:
+        message = f"Error reading {path_file}: {str(e)}"
+        exit(message)
 
 
 def physical_identifiers() -> dict:

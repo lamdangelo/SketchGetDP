@@ -12,20 +12,52 @@ def main():
     
     # Import here to ensure path is set correctly
     from .interfaces.arg_parser import ArgParser
-    from .core.use_cases.convert_svg_to_geometry import ConvertSVGToGeometry
-    from .core.use_cases.convert_geometry_to_gmsh import ConvertGeometryToGmsh
-    from .infrastructure.svg_parser import SVGParser
-    from .infrastructure.corner_detector import CornerDetector
-    from .infrastructure.bezier_fitter import BezierFitter
-    from .infrastructure.boundary_curve_grouper import BoundaryCurveGrouper
-    from .infrastructure.boundary_curve_mesher import BoundaryCurveMesher
-    from .infrastructure.point_electrode_mesher import PointElectrodeMesher
     
     # Parse command line arguments
     arg_parser = ArgParser()
     args = arg_parser.parse_args()
     
     try:
+        # MODE 1: Simulation-only mode (existing mesh)
+        if args.simulation_only:
+            from .core.use_cases.run_getdp_simulation import RunGetDPSimulation
+            
+            # Get mesh name from the provided mesh file
+            mesh_path = Path(args.simulation_only)
+            if not mesh_path.exists():
+                raise FileNotFoundError(f"Mesh file not found: {args.simulation_only}")
+            
+            # Remove .msh extension if present
+            mesh_name = mesh_path.stem
+            
+            print(f"\n=== Running GetDP Simulation on Existing Mesh ===")
+            print(f"Mesh file: {args.simulation_only}")
+            print(f"Config file: {args.config}")
+            
+            # Initialize and run GetDP simulation
+            getdp_usecase = RunGetDPSimulation()
+            getdp_usecase.execute(
+                mesh_name=mesh_name,
+                use_config_yaml=True,
+                config_yaml_path=args.config,
+                show_simulation_result=not args.no_gui
+            )
+            
+            print(f"\n✓ GetDP simulation completed successfully!")
+            print(f"  Results saved to: results/")
+            
+            return 0
+        
+        # MODE 2 & 3: Normal processing (SVG → Gmsh)
+        from .core.use_cases.convert_svg_to_geometry import ConvertSVGToGeometry
+        from .core.use_cases.convert_geometry_to_gmsh import ConvertGeometryToGmsh
+        from .infrastructure.svg_parser import SVGParser
+        from .infrastructure.corner_detector import CornerDetector
+        from .infrastructure.bezier_fitter import BezierFitter
+        from .infrastructure.boundary_curve_grouper import BoundaryCurveGrouper
+        from .infrastructure.boundary_curve_mesher import BoundaryCurveMesher
+        from .infrastructure.point_electrode_mesher import PointElectrodeMesher
+        
         # Initialize infrastructure services for SVG conversion
         svg_parser = SVGParser()
         corner_detector = CornerDetector()
@@ -52,7 +84,7 @@ def main():
         if not config_file_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {config_file_path}")
         
-        # ALWAYS perform Gmsh meshing (this is now the main purpose)
+        # ALWAYS perform Gmsh meshing
         print("\n=== Starting Gmsh Meshing ===")
         
         # Initialize infrastructure services for Gmsh conversion
@@ -76,7 +108,7 @@ def main():
             svg_path = Path(args.svg_file)
             mesh_name = svg_path.stem
         
-        # Execute Gmsh conversion (mesh size is now read internally from config)
+        # Execute Gmsh conversion
         gmsh_results = gmsh_converter.execute(
             boundary_curves=boundary_curves,
             point_electrodes=point_electrodes,
@@ -89,6 +121,24 @@ def main():
         
         print(f"\n✓ Gmsh meshing completed successfully!")
         print(f"  Mesh saved to: {mesh_name}.msh")
+        
+        # MODE 3: Run GetDP simulation if requested
+        if args.run_simulation:
+            from .core.use_cases.run_getdp_simulation import RunGetDPSimulation
+            
+            print("\n=== Starting GetDP Simulation ===")
+            
+            # Initialize and run GetDP simulation
+            getdp_usecase = RunGetDPSimulation()
+            getdp_usecase.execute(
+                mesh_name=mesh_name,
+                use_config_yaml=True,
+                config_yaml_path=args.config,
+                show_simulation_result=not args.no_gui
+            )
+            
+            print(f"\n✓ GetDP simulation completed successfully!")
+            print(f"  Results saved to: results/")
         
         # Handle debug output if requested (optional)
         if args.debug:
@@ -145,8 +195,14 @@ def main():
             DebugWriter.save_results(boundary_curves, point_electrodes, args.output)
             print(f"Intermediate results saved to: {args.output}")
             
+    except FileNotFoundError as e:
+        print(f"Error: File not found - {e}")
+        print(f"Current working directory: {Path.cwd()}")
+        return 1
     except Exception as e:
-        print(f"Error processing SVG file: {e}")
+        print(f"Error processing: {e}")
+        import traceback
+        traceback.print_exc()
         return 1
     
     return 0
