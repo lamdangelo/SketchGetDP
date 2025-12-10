@@ -7,10 +7,10 @@ import yaml
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.core.entities.color import Color
 from svg_to_getdp.core.entities.physical_group import (
-    DOMAIN_COIL_POSITIVE, 
-    DOMAIN_COIL_NEGATIVE
+    DOMAIN_WIRE_POSITIVE, 
+    DOMAIN_WIRE_NEGATIVE
 )
-from svg_to_getdp.infrastructure.point_electrode_mesher import PointElectrodeMesher
+from sketchgetdp.svg_to_getdp.infrastructure.wire_preprocessor import WirePreprocessor
 
 
 @pytest.fixture
@@ -23,8 +23,8 @@ def mock_factory():
 
 
 @pytest.fixture
-def sample_electrodes():
-    """Create sample electrode data for testing."""
+def sample_wires():
+    """Create sample wire data for testing."""
     return [
         (Point(0.0, 0.0), Color("red", (255, 0, 0))),
         (Point(1.0, 1.0), Color("blue", (0, 0, 255))),
@@ -37,11 +37,11 @@ def sample_electrodes():
 def temp_config_file():
     """Create a temporary YAML config file for testing."""
     config_data = {
-        'coil_currents': {
-            'coil_1': 1,
-            'coil_2': -1,
-            'coil_3': 1,
-            'coil_4': -1
+        'wire_currents': {
+            'wire_1': 1,
+            'wire_2': -1,
+            'wire_3': 1,
+            'wire_4': -1
         }
     }
     
@@ -70,55 +70,58 @@ def temp_empty_config_file():
     os.unlink(temp_path)
 
 
-class TestPointElectrodeMesher:
-    """Test suite for PointElectrodeMesher class."""
+class TestWirePreprocessor:
+    """Test suite for WirePreprocessor class."""
     
     def test_init_with_valid_config(self, mock_factory, temp_config_file):
         """Test initialization with a valid config file."""
-        mesher = PointElectrodeMesher(mock_factory, temp_config_file)
+        preprocessor = WirePreprocessor()
+        preprocessor.factory = mock_factory
+        preprocessor.wire_currents = preprocessor._load_wire_currents(temp_config_file)
         
-        assert mesher.factory == mock_factory
-        assert mesher.config_path == temp_config_file
-        assert mesher.coil_currents == {
-            'coil_1': 1,
-            'coil_2': -1,
-            'coil_3': 1,
-            'coil_4': -1
+        assert preprocessor.wire_currents == {
+            'wire_1': 1,
+            'wire_2': -1,
+            'wire_3': 1,
+            'wire_4': -1
         }
     
-    def test_init_with_missing_config_file(self, mock_factory):
+    def test_init_with_missing_config_file(self):
         """Test initialization with a non-existent config file."""
-        non_existent_path = "/non/existent/path/config.yaml"
+        preprocessor = WirePreprocessor()
         
-        # Should handle gracefully and have empty coil_currents
-        mesher = PointElectrodeMesher(mock_factory, non_existent_path)
-        assert mesher.coil_currents == {}
+        # Should handle gracefully and have empty wire_currents
+        non_existent_path = "/non/existent/path/config.yaml"
+        wire_currents = preprocessor._load_wire_currents(non_existent_path)
+        assert wire_currents == {}
     
-    def test_init_with_invalid_yaml(self, mock_factory):
+    def test_init_with_invalid_yaml(self):
         """Test initialization with invalid YAML file."""
+        preprocessor = WirePreprocessor()
+        
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             f.write("invalid: yaml: content: [")
             temp_path = f.name
         
         try:
             # Should handle gracefully
-            mesher = PointElectrodeMesher(mock_factory, temp_path)
-            assert mesher.coil_currents == {}
+            wire_currents = preprocessor._load_wire_currents(temp_path)
+            assert wire_currents == {}
         finally:
             os.unlink(temp_path)
     
-    def test_sort_electrodes(self, mock_factory, temp_empty_config_file):
-        """Test electrode sorting from top to bottom, left to right."""
-        mesher = PointElectrodeMesher(mock_factory, temp_empty_config_file)
+    def test_sort_wires(self, temp_empty_config_file):
+        """Test wire sorting from top to bottom, left to right."""
+        preprocessor = WirePreprocessor()
         
-        electrodes = [
+        wires = [
             (Point(2.0, 1.0), Color("red", (255, 0, 0))),    # Top right
             (Point(1.0, 2.0), Color("blue", (0, 0, 255))),   # Top left (highest y)
             (Point(1.0, 0.0), Color("green", (0, 255, 0))),  # Bottom left
             (Point(2.0, 1.5), Color("black", (0, 0, 0))),    # Top middle
         ]
         
-        sorted_electrodes = mesher._sort_electrodes(electrodes)
+        sorted_wires = preprocessor._sort_wires(wires)
         
         # Expected order: highest y first, then smallest x for same y
         expected_order = [
@@ -128,16 +131,16 @@ class TestPointElectrodeMesher:
             (Point(1.0, 0.0), Color("green", (0, 255, 0))),  # Lowest y
         ]
         
-        assert len(sorted_electrodes) == len(expected_order)
-        for (exp_point, exp_color), (act_point, act_color) in zip(expected_order, sorted_electrodes):
+        assert len(sorted_wires) == len(expected_order)
+        for (exp_point, exp_color), (act_point, act_color) in zip(expected_order, sorted_wires):
             assert exp_point.x == act_point.x
             assert exp_point.y == act_point.y
             assert exp_color.name == act_color.name
             assert exp_color.rgb == act_color.rgb
     
-    def test_electrode_sort_key(self, mock_factory, temp_empty_config_file):
+    def test_wire_sort_key(self):
         """Test the sort key function."""
-        mesher = PointElectrodeMesher(mock_factory, temp_empty_config_file)
+        preprocessor = WirePreprocessor()
         
         test_cases = [
             ((Point(1.0, 2.0), Color("red", (255, 0, 0))), (-2.0, 1.0)),
@@ -146,62 +149,62 @@ class TestPointElectrodeMesher:
             ((Point(2.0, 1.0), Color("black", (0, 0, 0))), (-1.0, 2.0)),
         ]
         
-        for electrode, expected_key in test_cases:
-            assert mesher._electrode_sort_key(electrode) == expected_key
+        for wire, expected_key in test_cases:
+            assert preprocessor._wire_sort_key(wire) == expected_key
     
-    def test_get_physical_group_for_electrode(self, mock_factory, temp_config_file):
-        """Test physical group assignment based on coil currents."""
-        mesher = PointElectrodeMesher(mock_factory, temp_config_file)
+    def test_get_physical_group_for_wire(self, temp_config_file):
+        """Test physical group assignment based on wire currents."""
+        preprocessor = WirePreprocessor()
+        preprocessor.wire_currents = preprocessor._load_wire_currents(temp_config_file)
         
-        # Mock coil currents from temp_config_file
-        assert mesher.coil_currents == {
-            'coil_1': 1,
-            'coil_2': -1,
-            'coil_3': 1,
-            'coil_4': -1
+        # Mock wire currents from temp_config_file
+        assert preprocessor.wire_currents == {
+            'wire_1': 1,
+            'wire_2': -1,
+            'wire_3': 1,
+            'wire_4': -1
         }
         
         # Test positive current
-        group = mesher._get_physical_group_for_electrode(0, Color("red", (255, 0, 0)))
-        assert group == DOMAIN_COIL_POSITIVE
+        group = preprocessor._get_physical_group_for_wire(0, Color("red", (255, 0, 0)))
+        assert group == DOMAIN_WIRE_POSITIVE
         
         # Test negative current
-        group = mesher._get_physical_group_for_electrode(1, Color("blue", (0, 0, 255)))
-        assert group == DOMAIN_COIL_NEGATIVE
+        group = preprocessor._get_physical_group_for_wire(1, Color("blue", (0, 0, 255)))
+        assert group == DOMAIN_WIRE_NEGATIVE
         
         # Test invalid index (should use default from config or raise error)
-        # Note: The error message includes the actual current_sign value (None) and coil_name
-        with pytest.raises(ValueError, match=r"Invalid current sign None for coil_11"):
-            mesher._get_physical_group_for_electrode(10, Color("green", (0, 255, 0)))
+        with pytest.raises(ValueError, match=r"Invalid current sign None for wire_11"):
+            preprocessor._get_physical_group_for_wire(10, Color("green", (0, 255, 0)))
     
-    def test_get_physical_group_with_missing_config(self, mock_factory, temp_empty_config_file):
-        """Test physical group assignment with missing coil currents."""
-        mesher = PointElectrodeMesher(mock_factory, temp_empty_config_file)
+    def test_get_physical_group_with_missing_config(self, temp_empty_config_file):
+        """Test physical group assignment with missing wire currents."""
+        preprocessor = WirePreprocessor()
+        preprocessor.wire_currents = preprocessor._load_wire_currents(temp_empty_config_file)
         
         # With empty config, all should raise ValueError
-        # Note: The error message includes the actual current_sign value (None) and coil_name
-        with pytest.raises(ValueError, match=r"Invalid current sign None for coil_1"):
-            mesher._get_physical_group_for_electrode(0, Color("red", (255, 0, 0)))
+        with pytest.raises(ValueError, match=r"Invalid current sign None for wire_1"):
+            preprocessor._get_physical_group_for_wire(0, Color("red", (255, 0, 0)))
     
-    def test_mesh_electrodes_empty_list(self, mock_factory, temp_empty_config_file):
-        """Test meshing with empty electrode list."""
-        mesher = PointElectrodeMesher(mock_factory, temp_empty_config_file)
+    def test_prepare_wires_empty_list(self, mock_factory, temp_empty_config_file):
+        """Test preparing with empty wire list."""
+        preprocessor = WirePreprocessor()
         
-        results = mesher.mesh_electrodes([])
+        results = preprocessor.prepare_wires(mock_factory, temp_empty_config_file, [])
         assert results == {}
         
         # Verify no Gmsh calls were made
         mock_factory.addPoint.assert_not_called()
         mock_factory.addPhysicalGroup.assert_not_called()
     
-    def test_mesh_electrodes_with_valid_data(self, mock_factory, temp_config_file, sample_electrodes):
-        """Test meshing with valid electrode data."""
-        mesher = PointElectrodeMesher(mock_factory, temp_config_file)
+    def test_prepare_wires_with_valid_data(self, mock_factory, temp_config_file, sample_wires):
+        """Test preparing with valid wire data."""
+        preprocessor = WirePreprocessor()
         
         # Mock sequential point tags
         mock_factory.addPoint.side_effect = [1, 2, 3, 4]
         
-        results = mesher.mesh_electrodes(sample_electrodes)
+        results = preprocessor.prepare_wires(mock_factory, temp_config_file, sample_wires)
         
         # Check results structure
         assert len(results) == 4
@@ -213,10 +216,10 @@ class TestPointElectrodeMesher:
             assert 'color' in results[i]
             assert 'gmsh_point_tag' in results[i]
             assert 'physical_group' in results[i]
-            assert 'coil_name' in results[i]
+            assert 'wire_name' in results[i]
             
-            # Check coil name
-            assert results[i]['coil_name'] == f"coil_{i + 1}"
+            # Check wire name
+            assert results[i]['wire_name'] == f"wire_{i + 1}"
             
             # Check point tags
             assert results[i]['gmsh_point_tag'] == i + 1
@@ -224,19 +227,19 @@ class TestPointElectrodeMesher:
         # Verify Gmsh calls
         assert mock_factory.addPoint.call_count == 4
         
-        # Check that addPhysicalGroup was called for each point
-        assert mock_factory.addPhysicalGroup.call_count == 4
+        # Check that addPhysicalGroup was called twice (once for positive, once for negative)
+        assert mock_factory.addPhysicalGroup.call_count == 2
         
         # Check point creation parameters
-        sorted_electrodes = mesher._sort_electrodes(sample_electrodes)
-        for i, (point, color) in enumerate(sorted_electrodes):
-            mock_factory.addPoint.assert_any_call(point.x, point.y, 0.0, 0.05)
+        sorted_wires = preprocessor._sort_wires(sample_wires)
+        for i, (point, color) in enumerate(sorted_wires):
+            mock_factory.addPoint.assert_any_call(point.x, point.y, 0.0)
     
-    def test_mesh_electrodes_sorted_order(self, mock_factory, temp_config_file):
-        """Verify electrodes are processed in sorted order."""
-        mesher = PointElectrodeMesher(mock_factory, temp_config_file)
+    def test_prepare_wires_sorted_order(self, mock_factory, temp_config_file):
+        """Verify wires are processed in sorted order."""
+        preprocessor = WirePreprocessor()
         
-        electrodes = [
+        wires = [
             (Point(10.0, 5.0), Color("red", (255, 0, 0))),    # Should be last (lowest y)
             (Point(5.0, 10.0), Color("blue", (0, 0, 255))),   # Should be first (highest y)
             (Point(7.0, 8.0), Color("green", (0, 255, 0))),   # Should be second
@@ -244,7 +247,7 @@ class TestPointElectrodeMesher:
         
         mock_factory.addPoint.side_effect = [1, 2, 3]
         
-        results = mesher.mesh_electrodes(electrodes)
+        results = preprocessor.prepare_wires(mock_factory, temp_config_file, wires)
         
         # Verify processing order by checking the stored original points
         # Results are stored in processing order (which should be sorted)
@@ -260,55 +263,49 @@ class TestPointElectrodeMesher:
             assert results[i]['color'].name == expected_color.name
             assert results[i]['color'].rgb == expected_color.rgb
     
-    def test_get_electrode_summary(self, mock_factory, temp_config_file, sample_electrodes):
+    def test_get_wire_summary(self, temp_config_file):
         """Test the summary generation method."""
-        mesher = PointElectrodeMesher(mock_factory, temp_config_file)
+        preprocessor = WirePreprocessor()
         
-        # Create mock results similar to what mesh_electrodes would produce
+        # Create mock results similar to what prepare_wires would produce
         mock_results = {
             0: {
                 'original_index': 0,
                 'point': Point(1.0, 2.0),
                 'color': Color("red", (255, 0, 0)),
                 'gmsh_point_tag': 1,
-                'physical_group': DOMAIN_COIL_POSITIVE,
-                'coil_name': 'coil_1'
+                'physical_group': DOMAIN_WIRE_POSITIVE,
+                'wire_name': 'wire_1'
             },
             1: {
                 'original_index': 1,
                 'point': Point(2.0, 1.0),
                 'color': Color("blue", (0, 0, 255)),
                 'gmsh_point_tag': 2,
-                'physical_group': DOMAIN_COIL_NEGATIVE,
-                'coil_name': 'coil_2'
+                'physical_group': DOMAIN_WIRE_NEGATIVE,
+                'wire_name': 'wire_2'
             }
         }
         
-        summary = mesher.get_electrode_summary(mock_results)
+        summary = preprocessor.get_wire_summary(mock_results)
         
         # Basic checks on summary content
-        assert "Point Electrode Summary (sorted order):" in summary
-        assert "Electrode 1:" in summary
-        assert "Electrode 2:" in summary
+        assert "Wire Summary (sorted order):" in summary
+        assert "Wire 1:" in summary
+        assert "Wire 2:" in summary
         assert "Position: (1.000, 2.000)" in summary
         assert "Position: (2.000, 1.000)" in summary
         assert "Color: red" in summary
         assert "Color: blue" in summary
-        assert "Coil Name: coil_1" in summary
-        assert "Coil Name: coil_2" in summary
-        assert "Physical Group: domain_coil_positive" in summary
-        assert "Physical Group: domain_coil_negative" in summary
-        assert "Current Sign: Positive (+)" in summary
-        assert "Current Sign: Negative (-)" in summary
+        assert "Wire Name: wire_1" in summary
+        assert "Wire Name: wire_2" in summary
         assert "Gmsh Point Tag: 1" in summary
         assert "Gmsh Point Tag: 2" in summary
     
-    def test_get_electrode_summary_empty(self, mock_factory, temp_config_file):
+    def test_get_wire_summary_empty(self):
         """Test summary generation with empty results."""
-        mesher = PointElectrodeMesher(mock_factory, temp_config_file)
+        preprocessor = WirePreprocessor()
         
-        summary = mesher.get_electrode_summary({})
+        summary = preprocessor.get_wire_summary({})
         
-        assert "Point Electrode Summary (sorted order):" in summary
-        assert "Electrode 1:" not in summary  # No electrode entries
-        assert "Electrode 2:" not in summary  # No electrode entries
+        assert summary == "No wires processed."

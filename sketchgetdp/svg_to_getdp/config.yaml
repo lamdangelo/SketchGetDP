@@ -1,21 +1,21 @@
 # SVG To Getdp Configuration
 
-## coil current directions
+## wire current directions
 # Positive current flows out of the page.
 # Counting order: Top to bottom, left to right.
-coil_currents: 
-  coil_1: 1
-  coil_2: -1
-  coil_3: 1
-  coil_4: -1
-  coil_5: 1
-  coil_6: -1
-  coil_7: 1
-  coil_8: -1
-  coil_9: 1
-  coil_10: -1
-  coil_11: 1
-  coil_12: -1
+wire_currents: 
+  wire_1: 1
+  wire_2: -1
+  wire_3: 1
+  wire_4: -1
+  wire_5: 1
+  wire_6: -1
+  wire_7: 1
+  wire_8: -1
+  wire_9: 1
+  wire_10: -1
+  wire_11: 1
+  wire_12: -1
 
 ## mesh settings
 # Set the mesh size for Gmsh

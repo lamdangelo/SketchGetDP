@@ -22,24 +22,24 @@ class ConvertSVGToGeometry:
     
     def execute(self, svg_file_path: str) -> Tuple[List[BoundaryCurve], List[Tuple[Point, Color]], dict]:
         """
-        Convert SVG file to boundary curves with Bézier representations and point electrodes.
+        Convert SVG file to boundary curves with Bézier representations and wires.
         """
         # Step 1: Parse SVG to get raw boundaries grouped by color
         colored_boundaries = self.svg_parser.extract_boundaries_by_color(svg_file_path)
         
         boundary_curves = []
-        point_electrodes = []
+        wires = []
         
         # Process each color group
         for color, raw_boundaries in colored_boundaries.items():
             for raw_boundary in raw_boundaries:
                 if color == Color.RED:
-                    # For red elements: treat as point electrodes
+                    # For red elements: treat as wires
                     if len(raw_boundary.points) == 1:
-                        point_electrodes.append((raw_boundary.points[0], color))
+                        wires.append((raw_boundary.points[0], color))
                     else:
                         center = raw_boundary.points[0]
-                        point_electrodes.append((center, color))
+                        wires.append((center, color))
                 else:
                     # For green/blue elements: process as boundary curves
                     
@@ -63,7 +63,7 @@ class ConvertSVGToGeometry:
                     
                     boundary_curves.append(boundary_curve)
         
-        return boundary_curves, point_electrodes, colored_boundaries
+        return boundary_curves, wires, colored_boundaries
     
     def _ensure_proper_closure(self, points: List[Point], is_closed: bool) -> List[Point]:
         """

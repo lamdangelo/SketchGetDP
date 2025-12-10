@@ -70,7 +70,7 @@ class DebugWriter:
         
         print(f"SVG parser debug information written to: {debug_filename}")
         
-    def save_results(boundary_curves, point_electrodes, output_path: str):
+    def save_results(boundary_curves, wires, output_path: str):
         """Save conversion results to file with coordinates"""
         with open(output_path, 'w') as f:
             f.write("SVG to Geometry Conversion Results\n")
@@ -108,12 +108,12 @@ class DebugWriter:
                 
                 f.write("\n")
             
-            # Point Electrodes Section
-            f.write("POINT ELECTRODES\n")
+            # Wires Section
+            f.write("WIRES\n")
             f.write("=" * 50 + "\n\n")
             
-            for i, (point, color) in enumerate(point_electrodes):
-                f.write(f"Point Electrode {i+1}:\n")
+            for i, (point, color) in enumerate(wires):
+                f.write(f"Wire {i+1}:\n")
                 f.write(f"  Color: {color.name}\n")
                 f.write(f"  Position: ({point.x:.6f}, {point.y:.6f})\n\n")
         

@@ -16,7 +16,7 @@ from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
 from svg_to_getdp.core.entities.color import Color
 from svg_to_getdp.core.entities.physical_group import (
     DOMAIN_VA, DOMAIN_VI_IRON, DOMAIN_VI_AIR, BOUNDARY_GAMMA, BOUNDARY_OUT,
-    DOMAIN_COIL_POSITIVE, DOMAIN_COIL_NEGATIVE
+    DOMAIN_WIRE_POSITIVE, DOMAIN_WIRE_NEGATIVE
 )
 
 # Import use case
@@ -25,16 +25,16 @@ from svg_to_getdp.core.use_cases.convert_geometry_to_gmsh import ConvertGeometry
 # Import REAL implementations instead of interfaces
 from svg_to_getdp.infrastructure.boundary_curve_grouper import BoundaryCurveGrouper
 from svg_to_getdp.infrastructure.boundary_curve_mesher import BoundaryCurveMesher
-from svg_to_getdp.infrastructure.point_electrode_mesher import PointElectrodeMesher
+from sketchgetdp.svg_to_getdp.infrastructure.wire_preprocessor import WirePreprocessor
 
 
 @pytest.fixture
 def sample_config_file():
     """Create a temporary config file for testing."""
     config_content = {
-        "coil_currents": {
-            "coil_1": 1,
-            "coil_2": -1
+        "wire_currents": {
+            "wire_1": 1,
+            "wire_2": -1
         },
         "mesh_size": 0.1
     }
@@ -81,8 +81,8 @@ def sample_boundary_curves():
 
 
 @pytest.fixture
-def sample_point_electrodes():
-    """Create sample point electrodes for testing."""
+def sample_wires():
+    """Create sample wires for testing."""
     return [
         (Point(0.3, 0.3), Color.RED),
         (Point(0.7, 0.7), Color.RED),
@@ -108,17 +108,17 @@ class TestConvertGeometryToGmsh:
         return BoundaryCurveMesher()  # No factory in constructor
     
     @pytest.fixture
-    def point_electrode_mesher(self):
+    def wire_preprocessor(self):
         """Return real implementation WITHOUT factory - factory is passed to method."""
-        return PointElectrodeMesher()  # No factory in constructor
+        return WirePreprocessor()  # No factory in constructor
     
     @pytest.fixture
-    def converter(self, boundary_curve_grouper, boundary_curve_mesher, point_electrode_mesher):
+    def converter(self, boundary_curve_grouper, boundary_curve_mesher, wire_preprocessor):
         """Create the converter with real implementations."""
         return ConvertGeometryToGmsh(
             boundary_curve_grouper,
             boundary_curve_mesher,
-            point_electrode_mesher
+            wire_preprocessor
         )
     
     @pytest.fixture
@@ -142,23 +142,23 @@ class TestConvertGeometryToGmsh:
                 'factory': mock_factory
             }
     
-    def test_initialization(self, boundary_curve_grouper, boundary_curve_mesher, point_electrode_mesher):
+    def test_initialization(self, boundary_curve_grouper, boundary_curve_mesher, wire_preprocessor):
         """Test that the use case initializes correctly with real implementations."""
         converter = ConvertGeometryToGmsh(
             boundary_curve_grouper,
             boundary_curve_mesher,
-            point_electrode_mesher
+            wire_preprocessor
         )
         
         assert converter.boundary_curve_grouper == boundary_curve_grouper
         assert converter.boundary_curve_mesher == boundary_curve_mesher
-        assert converter.point_electrode_mesher == point_electrode_mesher
+        assert converter.wire_preprocessor == wire_preprocessor
         assert isinstance(converter.boundary_curve_grouper, BoundaryCurveGrouper)
         assert isinstance(converter.boundary_curve_mesher, BoundaryCurveMesher)
-        assert isinstance(converter.point_electrode_mesher, PointElectrodeMesher)
+        assert isinstance(converter.wire_preprocessor, WirePreprocessor)
     
     def test_execute_successful_conversion(
-        self, converter, sample_boundary_curves, sample_point_electrodes, 
+        self, converter, sample_boundary_curves, sample_wires, 
         sample_config_file, mock_gmsh_toolbox
     ):
         """Test successful execution of the geometry to Gmsh conversion."""
@@ -167,30 +167,30 @@ class TestConvertGeometryToGmsh:
         
         # Mock the methods of the real implementations
         # Since we're using real classes, we need to patch their methods
-        with patch.object(converter.point_electrode_mesher, 'mesh_electrodes') as mock_mesh_electrodes, \
+        with patch.object(converter.wire_preprocessor, 'prepare_wires') as mock_prepare_wires, \
              patch.object(converter.boundary_curve_grouper, 'group_boundary_curves') as mock_group_boundary_curves, \
              patch.object(converter.boundary_curve_mesher, 'mesh_boundary_curves') as mock_mesh_boundary_curves:
             
             # Setup return values
-            electrode_results = {
+            wire_results = {
                 0: {
                     'original_index': 0,
                     'point': Point(0.3, 0.3),
                     'color': Color.RED,
                     'gmsh_point_tag': 1,
-                    'physical_group': DOMAIN_COIL_POSITIVE,
-                    'coil_name': 'coil_1'
+                    'physical_group': DOMAIN_WIRE_POSITIVE,
+                    'wire_name': 'wire_1'
                 },
                 1: {
                     'original_index': 1,
                     'point': Point(0.7, 0.7),
                     'color': Color.RED,
                     'gmsh_point_tag': 2,
-                    'physical_group': DOMAIN_COIL_NEGATIVE,
-                    'coil_name': 'coil_2'
+                    'physical_group': DOMAIN_WIRE_NEGATIVE,
+                    'wire_name': 'wire_2'
                 }
             }
-            mock_mesh_electrodes.return_value = electrode_results
+            mock_prepare_wires.return_value = wire_results
             
             grouping_result = [
                 {
@@ -207,11 +207,10 @@ class TestConvertGeometryToGmsh:
             # Execute with updated parameter order
             result = converter.execute(
                 boundary_curves=sample_boundary_curves,
-                point_electrodes=sample_point_electrodes,
+                wires=sample_wires,
                 config_file_path=sample_config_file,
                 model_name="test_model",
                 output_filename="test_mesh",
-                mesh_size=0.05,
                 dimension=2,
                 show_gui=False
             )
@@ -221,13 +220,13 @@ class TestConvertGeometryToGmsh:
             mock_gmsh_toolbox['initialize_gmsh'].assert_called_once_with("test_model")
             
             # Verify mesh size setting
-            mock_gmsh_toolbox['set_characteristic_mesh_length'].assert_called_once_with(0.05)
+            mock_gmsh_toolbox['set_characteristic_mesh_length'].assert_called_once_with(0.1)  # From config
             
-            # Verify point electrode processing
-            mock_mesh_electrodes.assert_called_once_with(
+            # Verify wire preparation
+            mock_prepare_wires.assert_called_once_with(
                 mock_gmsh_toolbox['factory'],  # factory first
                 sample_config_file,            # config_path second
-                sample_point_electrodes,       # electrodes third
+                sample_wires,                  # wires third
             )
             
             # Verify boundary curve grouping
@@ -255,11 +254,11 @@ class TestConvertGeometryToGmsh:
             # Verify result structure
             assert result["model_name"] == "test_model"
             assert result["output_filename"] == "test_mesh"
-            assert result["mesh_size"] == 0.05
+            assert result["mesh_size"] == 0.1  # From config
             assert result["dimension"] == 2
             assert result["factory_initialized"] is True
             assert result["mesh_size_set"] is True
-            assert result["electrode_results"] == electrode_results
+            assert result["wire_results"] == wire_results
             assert result["grouping_result"] == grouping_result
             assert result["boundary_mesher"] == converter.boundary_curve_mesher
             assert result["geometry_synchronized"] is True
@@ -267,28 +266,27 @@ class TestConvertGeometryToGmsh:
             assert "gui_shown" not in result  # Since show_gui=False
     
     def test_execute_with_gui(
-        self, converter, sample_boundary_curves, sample_point_electrodes, 
+        self, converter, sample_boundary_curves, sample_wires, 
         sample_config_file, mock_gmsh_toolbox
     ):
         """Test execution with GUI enabled."""
         # Setup mocks
         mock_gmsh_toolbox['initialize_gmsh'].return_value = mock_gmsh_toolbox['factory']
         
-        with patch.object(converter.point_electrode_mesher, 'mesh_electrodes') as mock_mesh_electrodes, \
+        with patch.object(converter.wire_preprocessor, 'prepare_wires') as mock_prepare_wires, \
              patch.object(converter.boundary_curve_grouper, 'group_boundary_curves') as mock_group_boundary_curves, \
              patch.object(converter.boundary_curve_mesher, 'mesh_boundary_curves') as mock_mesh_boundary_curves:
             
-            mock_mesh_electrodes.return_value = {}
+            mock_prepare_wires.return_value = {}
             mock_group_boundary_curves.return_value = []
             
             # Execute with show_gui=True
             result = converter.execute(
                 boundary_curves=sample_boundary_curves,
-                point_electrodes=sample_point_electrodes,
+                wires=sample_wires,
                 config_file_path=sample_config_file,
                 model_name="test_model",
                 output_filename="test_mesh",
-                mesh_size=0.05,
                 dimension=2,
                 show_gui=True  # GUI enabled
             )
@@ -297,54 +295,54 @@ class TestConvertGeometryToGmsh:
             mock_gmsh_toolbox['show_model'].assert_called_once()
             assert result["gui_shown"] is True
     
-    def test_invalid_boundary_curves_type(self, converter, sample_point_electrodes, sample_config_file):
+    def test_invalid_boundary_curves_type(self, converter, sample_wires, sample_config_file):
         """Test error when boundary_curves is not a list."""
         with pytest.raises(ValueError, match="boundary_curves must be a list"):
             converter.execute(
                 boundary_curves="not a list",  # Invalid type
-                point_electrodes=sample_point_electrodes,
+                wires=sample_wires,
                 config_file_path=sample_config_file
             )
     
-    def test_invalid_point_electrodes_type(self, converter, sample_boundary_curves, sample_config_file):
-        """Test error when point_electrodes is not a list."""
-        with pytest.raises(ValueError, match="point_electrodes must be a list"):
+    def test_invalid_wires_type(self, converter, sample_boundary_curves, sample_config_file):
+        """Test error when wires is not a list."""
+        with pytest.raises(ValueError, match="wires must be a list"):
             converter.execute(
                 boundary_curves=sample_boundary_curves,
-                point_electrodes="not a list",  # Invalid type
+                wires="not a list",  # Invalid type
                 config_file_path=sample_config_file
             )
     
-    def test_config_file_not_found(self, converter, sample_boundary_curves, sample_point_electrodes):
+    def test_config_file_not_found(self, converter, sample_boundary_curves, sample_wires):
         """Test error when config file doesn't exist."""
         non_existent_config = "/path/to/nonexistent/config.yaml"
         
         with pytest.raises(FileNotFoundError, match=f"Configuration file not found: {non_existent_config}"):
             converter.execute(
                 boundary_curves=sample_boundary_curves,
-                point_electrodes=sample_point_electrodes,
+                wires=sample_wires,
                 config_file_path=non_existent_config
             )
     
     def test_empty_boundary_curves_warning(
-        self, converter, sample_point_electrodes, sample_config_file, mock_gmsh_toolbox
+        self, converter, sample_wires, sample_config_file, mock_gmsh_toolbox
     ):
         """Test warning when no boundary curves are provided."""
         # Setup mocks
         mock_gmsh_toolbox['initialize_gmsh'].return_value = mock_gmsh_toolbox['factory']
         
-        with patch.object(converter.point_electrode_mesher, 'mesh_electrodes') as mock_mesh_electrodes, \
+        with patch.object(converter.wire_preprocessor, 'prepare_wires') as mock_prepare_wires, \
              patch.object(converter.boundary_curve_grouper, 'group_boundary_curves') as mock_group_boundary_curves, \
              patch.object(converter.boundary_curve_mesher, 'mesh_boundary_curves') as mock_mesh_boundary_curves, \
              patch('builtins.print') as mock_print:
             
-            mock_mesh_electrodes.return_value = {}
+            mock_prepare_wires.return_value = {}
             mock_group_boundary_curves.return_value = []
             
             # Execute with empty boundary curves
             result = converter.execute(
                 boundary_curves=[],  # Empty list
-                point_electrodes=sample_point_electrodes,
+                wires=sample_wires,
                 config_file_path=sample_config_file,
                 show_gui=False
             )
@@ -356,22 +354,22 @@ class TestConvertGeometryToGmsh:
             mock_group_boundary_curves.assert_called_once_with([])
     
     def test_exception_handling(
-        self, converter, sample_boundary_curves, sample_point_electrodes, 
+        self, converter, sample_boundary_curves, sample_wires, 
         sample_config_file, mock_gmsh_toolbox
     ):
         """Test that exceptions are properly handled and Gmsh is finalized."""
         # Setup mocks to raise an exception
         mock_gmsh_toolbox['initialize_gmsh'].return_value = mock_gmsh_toolbox['factory']
         
-        with patch.object(converter.point_electrode_mesher, 'mesh_electrodes') as mock_mesh_electrodes:
-            # Make mesh_electrodes raise an exception
-            mock_mesh_electrodes.side_effect = RuntimeError("Test error")
+        with patch.object(converter.wire_preprocessor, 'prepare_wires') as mock_prepare_wires:
+            # Make prepare_wires raise an exception
+            mock_prepare_wires.side_effect = RuntimeError("Test error")
             
             # Execute and expect exception
             with pytest.raises(RuntimeError, match="Test error"):
                 converter.execute(
                     boundary_curves=sample_boundary_curves,
-                    point_electrodes=sample_point_electrodes,
+                    wires=sample_wires,
                     config_file_path=sample_config_file,
                     show_gui=False
                 )
@@ -388,18 +386,18 @@ class TestConvertGeometryToGmshIntegration:
         """Create converter with real implementations."""
         grouper = BoundaryCurveGrouper()
         mesher = BoundaryCurveMesher()  # No factory in constructor
-        electrode_mesher = PointElectrodeMesher()  # No factory in constructor
+        wire_preprocessor = WirePreprocessor()  # No factory in constructor
         
-        return ConvertGeometryToGmsh(grouper, mesher, electrode_mesher)
+        return ConvertGeometryToGmsh(grouper, mesher, wire_preprocessor)
     
     def test_real_implementations_instantiation(self, converter):
         """Verify that real implementations are used."""
         assert isinstance(converter.boundary_curve_grouper, BoundaryCurveGrouper)
         assert isinstance(converter.boundary_curve_mesher, BoundaryCurveMesher)
-        assert isinstance(converter.point_electrode_mesher, PointElectrodeMesher)
+        assert isinstance(converter.wire_preprocessor, WirePreprocessor)
     
     def test_execute_with_real_implementations(
-        self, converter, sample_boundary_curves, sample_point_electrodes, sample_config_file
+        self, converter, sample_boundary_curves, sample_wires, sample_config_file
     ):
         """Test execution with real implementations (still mocking Gmsh)."""
         # Mock Gmsh functions since we don't want to actually run Gmsh
@@ -415,27 +413,27 @@ class TestConvertGeometryToGmshIntegration:
             mock_init.return_value = mock_factory
             
             # Mock methods of the real implementations to control behavior
-            with patch.object(converter.point_electrode_mesher, 'mesh_electrodes') as mock_mesh_electrodes, \
+            with patch.object(converter.wire_preprocessor, 'prepare_wires') as mock_prepare_wires, \
                 patch.object(converter.boundary_curve_grouper, 'group_boundary_curves') as mock_group_boundary_curves, \
                 patch.object(converter.boundary_curve_mesher, 'mesh_boundary_curves') as mock_mesh_boundary_curves:
                 
                 # Setup return values
-                mock_mesh_electrodes.return_value = {}
+                mock_prepare_wires.return_value = {}
                 mock_group_boundary_curves.return_value = []
                 
                 # Execute
                 result = converter.execute(
                     boundary_curves=sample_boundary_curves,
-                    point_electrodes=sample_point_electrodes,
+                    wires=sample_wires,
                     config_file_path=sample_config_file,
                     show_gui=False
                 )
                 
                 # Verify interactions
-                mock_mesh_electrodes.assert_called_once_with(
+                mock_prepare_wires.assert_called_once_with(
                     mock_factory,
                     sample_config_file,
-                    sample_point_electrodes
+                    sample_wires
                 )
                 mock_group_boundary_curves.assert_called_once()
                 mock_mesh_boundary_curves.assert_called_once_with(

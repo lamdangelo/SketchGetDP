@@ -12,7 +12,7 @@ class CurveVisualizer:
     
     @staticmethod
     def display_boundary_curves(boundary_curves: List[BoundaryCurve], 
-                            point_electrodes: List[tuple] = None,
+                            wires: List[tuple] = None,
                             colored_boundaries: dict = None,
                             show_control_points: bool = True, 
                             show_corners: bool = True,
@@ -22,7 +22,7 @@ class CurveVisualizer:
         
         Args:
             boundary_curves: List of BoundaryCurve objects to plot
-            point_electrodes: List of (Point, Color) tuples for point electrodes
+            wires: List of (Point, Color) tuples for wires
             colored_boundaries: Dictionary of {color: List[RawBoundary]} objects to plot
             show_control_points: Whether to show Bézier control points
             show_corners: Whether to show detected corners
@@ -38,9 +38,9 @@ class CurveVisualizer:
         if colored_boundaries and show_raw_boundaries:
             CurveVisualizer._plot_colored_boundaries(colored_boundaries)
         
-        # Plot point electrodes
-        if point_electrodes:
-            CurveVisualizer._plot_point_electrodes(point_electrodes)
+        # Plot point wires
+        if wires:
+            CurveVisualizer._plot_wires(wires)
         
         plt.grid(True, alpha=0.3)
         plt.axis('equal')
@@ -119,7 +119,7 @@ class CurveVisualizer:
                 # Plot the polyline with lighter styling
                 linestyle = '-' if raw_boundary.is_closed else '--'
                 
-                # Special handling for red dots (point electrodes in raw form)
+                # Special handling for red dots (wires in raw form)
                 if raw_boundary.color.name == 'RED' and len(raw_boundary.points) == 1:
                     # Use light red for single red points
                     light_red = (1.0, 0.7, 0.7)  # Light red
@@ -133,18 +133,18 @@ class CurveVisualizer:
                             label=f'Raw {raw_boundary.color.name} Polyline {i+1}')
                 
     @staticmethod
-    def _plot_point_electrodes(point_electrodes: List[tuple]):
-        """Plot point electrodes."""        
-        for point, color in point_electrodes:
+    def _plot_wires(wires: List[tuple]):
+        """Plot point wires."""        
+        for point, color in wires:
             # Use the actual RGB values from the Color object
             rgb = color.rgb
             plot_color = (rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)  # Normalize to 0-1 for matplotlib
     
             plt.plot(point.x, point.y, 'X', color=plot_color, markersize=12,
-                    markeredgewidth=3, label=f'{color.name} Electrode')
+                    markeredgewidth=3, label=f'{color.name} Wire')
     
     @staticmethod
-    def save_plot_to_file(boundary_curves: List[BoundaryCurve], point_electrodes: List[tuple] = None,
+    def save_plot_to_file(boundary_curves: List[BoundaryCurve], wires: List[tuple] = None,
                         colored_boundaries: dict = None,
                         filename: str = 'bezier_curves_plot.png', **kwargs):
         """
@@ -152,7 +152,7 @@ class CurveVisualizer:
         
         Args:
             boundary_curves: List of BoundaryCurve objects to plot
-            point_electrodes: List of (Point, Color) tuples for point electrodes  
+            wires: List of (Point, Color) tuples for wires  
             colored_boundaries: Dictionary of {color: List[RawBoundary]} objects to plot
             filename: Output filename
             **kwargs: Additional arguments for plot_boundary_curves
@@ -169,9 +169,9 @@ class CurveVisualizer:
         if colored_boundaries and kwargs.get('show_raw_boundaries', True):
             CurveVisualizer._plot_colored_boundaries(colored_boundaries)
         
-        # Plot point electrodes
-        if point_electrodes:
-            CurveVisualizer._plot_point_electrodes(point_electrodes)
+        # Plot wires
+        if wires:
+            CurveVisualizer._plot_wires(wires)
         
         plt.grid(True, alpha=0.3)
         plt.axis('equal')

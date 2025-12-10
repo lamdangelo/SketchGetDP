@@ -1,6 +1,6 @@
 """
 Usecase to convert geometry to Gmsh format.
-Integrates boundary curves, point electrodes, and configuration to create a complete Gmsh model.
+Integrates boundary curves, wires, and configuration to create a complete Gmsh model.
 """
 
 import yaml
@@ -20,7 +20,7 @@ from sketchgetdp.geometry.gmsh_toolbox import (
 )
 from ...interfaces.abstractions.boundary_curve_grouper_interface import BoundaryCurveGrouperInterface as BoundaryCurveGrouper
 from ...interfaces.abstractions.boundary_curve_mesher_interface import BoundaryCurveMesherInterface as BoundaryCurveMesher
-from ...interfaces.abstractions.point_electrode_mesher_interface import PointElectrodeMesherInterface as PointElectrodeMesher
+from ...interfaces.abstractions.wire_preprocessor_interface import WirePreprocessorInterface as WirePreprocessor
 
 
 class ConvertGeometryToGmsh:
@@ -34,7 +34,7 @@ class ConvertGeometryToGmsh:
         self,
         boundary_curve_grouper: BoundaryCurveGrouper,
         boundary_curve_mesher: BoundaryCurveMesher,
-        point_electrode_mesher: PointElectrodeMesher
+        wire_preprocessor: WirePreprocessor
     ):
         """
         Initialize the use case with required dependencies.
@@ -42,16 +42,16 @@ class ConvertGeometryToGmsh:
         Args:
             boundary_curve_grouper: Interface for grouping boundary curves by containment
             boundary_curve_mesher: Interface for meshing boundary curves
-            point_electrode_mesher: Interface for meshing point electrodes
+            wire_preprocessor: Interface for preparing wires for meshing
         """
         self.boundary_curve_grouper = boundary_curve_grouper
         self.boundary_curve_mesher = boundary_curve_mesher
-        self.point_electrode_mesher = point_electrode_mesher
+        self.wire_preprocessor = wire_preprocessor
     
     def execute(
         self,
         boundary_curves: List[BoundaryCurve],
-        point_electrodes: List[Tuple[Point, Color]],
+        wires: List[Tuple[Point, Color]],
         config_file_path: str,
         model_name: str = "geometry_model",
         output_filename: str = "geometry_mesh",
@@ -65,7 +65,7 @@ class ConvertGeometryToGmsh:
         1. Load configuration and extract mesh size
         2. Initialize Gmsh
         3. Set the mesh size from config
-        4. Process point electrodes
+        4. Prepare wires
         5. Group boundary curves with containment hierarchy
         6. Mesh boundary curves
         7. Synchronize before meshing
@@ -74,8 +74,8 @@ class ConvertGeometryToGmsh:
         
         Args:
             boundary_curves: List of BoundaryCurve objects representing domain boundaries
-            point_electrodes: List of (Point, Color) tuples representing electrodes
-            config_file_path: Path to YAML configuration file for coil currents and mesh settings
+            wires: List of (Point, Color) tuples representing wires
+            config_file_path: Path to YAML configuration file for wire currents and mesh settings
             model_name: Name for the Gmsh model (default: "geometry_model")
             output_filename: Base filename for output mesh (without extension)
             dimension: Dimension of mesh (default: 2 for 2D)
@@ -93,8 +93,8 @@ class ConvertGeometryToGmsh:
         if not isinstance(boundary_curves, list):
             raise ValueError("boundary_curves must be a list")
         
-        if not isinstance(point_electrodes, list):
-            raise ValueError("point_electrodes must be a list")
+        if not isinstance(wires, list):
+            raise ValueError("wires must be a list")
         
         config_path = Path(config_file_path)
         if not config_path.exists():
@@ -132,14 +132,14 @@ class ConvertGeometryToGmsh:
             set_characteristic_mesh_length(mesh_size)
             results["mesh_size_set"] = True
             
-            # Step 4: Process point electrodes
-            print(f"Processing {len(point_electrodes)} point electrodes...")
-            electrode_results = self.point_electrode_mesher.mesh_electrodes(
+            # Step 4: Prepare wires
+            print(f"Preparing {len(wires)} wires...")
+            wire_results = self.wire_preprocessor.prepare_wires(
                 factory,
                 config_file_path,
-                point_electrodes
+                wires
             )
-            results["electrode_results"] = electrode_results
+            results["wire_results"] = wire_results
             
             # Step 5: Group boundary curves with containment hierarchy
             print(f"Grouping {len(boundary_curves)} boundary curves...")
@@ -178,3 +178,4 @@ class ConvertGeometryToGmsh:
             # Clean up Gmsh resources
             finalize_gmsh()
             print("Gmsh finalized")
+            

@@ -28,7 +28,7 @@ The project follows Clean Architecture principles with clear separation of conce
   - `bezier_fitter/` - Bézier curve fitting
   - `boundary_curve_grouper/` - Wire grouping logic
   - `boundary_curve_mesher/` - Boundary curve meshing
-  - `point_electrode_mesher/` - Point electrode meshing
+  - `wire_preprocessor/` - Wire preprocessing for meshing
 
 - **`interfaces/`** - Interface adapters
   - `controllers/` - Application flow control
@@ -71,7 +71,7 @@ svg_to_getdp/
 │ ├── bezier_fitter/ # Bézier fitting
 │ ├── boundary_curve_grouper/ # Wire grouping
 │ ├── boundary_curve_mesher/ # Boundary meshing
-│ └── point_electrode_mesher/ # Point electrode meshing
+│ └── wire_preprocessor/ # Wire preprocessing
 ├── interfaces/ # Adapters
 │ ├── arg_parser/ # Command line interface
 │ ├── abstractions/ # Dependency interfaces

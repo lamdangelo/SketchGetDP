@@ -56,7 +56,7 @@ def main():
         from .infrastructure.bezier_fitter import BezierFitter
         from .infrastructure.boundary_curve_grouper import BoundaryCurveGrouper
         from .infrastructure.boundary_curve_mesher import BoundaryCurveMesher
-        from .infrastructure.point_electrode_mesher import PointElectrodeMesher
+        from .infrastructure.wire_preprocessor import WirePreprocessor
         
         # Initialize infrastructure services for SVG conversion
         svg_parser = SVGParser()
@@ -67,17 +67,17 @@ def main():
         converter = ConvertSVGToGeometry(svg_parser, corner_detector, bezier_fitter)
         
         # Execute the SVG conversion use case
-        boundary_curves, point_electrodes, colored_boundaries = converter.execute(args.svg_file)
+        boundary_curves, wires, colored_boundaries = converter.execute(args.svg_file)
         
         # Output conversion results
-        print(f"Successfully converted {len(boundary_curves)} boundary curves and {len(point_electrodes)} point electrodes:")
+        print(f"Successfully converted {len(boundary_curves)} boundary curves and {len(wires)} wires:")
         
         for i, curve in enumerate(boundary_curves):
             print(f"  Curve {i+1}: {len(curve.bezier_segments)} segments, "
                   f"{len(curve.corners)} corners, color: {curve.color.name.lower()}")
         
-        for i, (point, color) in enumerate(point_electrodes):
-            print(f"  Point electrode {i+1}: at ({point.x:.3f}, {point.y:.3f}), color: {color.name.lower()}")
+        for i, (point, color) in enumerate(wires):
+            print(f"  Wire {i+1}: at ({point.x:.3f}, {point.y:.3f}), color: {color.name.lower()}")
         
         # Determine config file path
         config_file_path = Path(args.config)
@@ -90,13 +90,13 @@ def main():
         # Initialize infrastructure services for Gmsh conversion
         boundary_curve_grouper = BoundaryCurveGrouper()
         boundary_curve_mesher = BoundaryCurveMesher()
-        point_electrode_mesher = PointElectrodeMesher()
+        wire_preprocessor = WirePreprocessor()
         
         # Initialize Gmsh conversion use case
         gmsh_converter = ConvertGeometryToGmsh(
             boundary_curve_grouper=boundary_curve_grouper,
             boundary_curve_mesher=boundary_curve_mesher,
-            point_electrode_mesher=point_electrode_mesher
+            wire_preprocessor=wire_preprocessor
         )
         
         # Determine mesh name (output filename)
@@ -111,7 +111,7 @@ def main():
         # Execute Gmsh conversion
         gmsh_results = gmsh_converter.execute(
             boundary_curves=boundary_curves,
-            point_electrodes=point_electrodes,
+            wires=wires,
             config_file_path=str(config_file_path),
             model_name="svg_geometry",
             output_filename=mesh_name,
@@ -164,7 +164,7 @@ def main():
                     # Save plot to file
                     CurveVisualizer.save_plot_to_file(
                         boundary_curves=boundary_curves,
-                        point_electrodes=point_electrodes,
+                        wires=wires,
                         colored_boundaries=colored_boundaries,
                         filename=args.output_plot,
                         show_control_points=True,
@@ -176,7 +176,7 @@ def main():
                     print("\nGenerating visualization...")
                     CurveVisualizer.display_boundary_curves(
                         boundary_curves=boundary_curves,
-                        point_electrodes=point_electrodes,
+                        wires=wires,
                         colored_boundaries=colored_boundaries,
                         show_control_points=colored_boundaries,
                         show_corners=True,
@@ -192,7 +192,7 @@ def main():
         # Save intermediate results to file if specified (optional)
         if args.output:
             from .interfaces.debug.debug_writer import DebugWriter
-            DebugWriter.save_results(boundary_curves, point_electrodes, args.output)
+            DebugWriter.save_results(boundary_curves, wires, args.output)
             print(f"Intermediate results saved to: {args.output}")
             
     except FileNotFoundError as e:
