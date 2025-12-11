@@ -30,9 +30,14 @@ class CurveVisualizer:
         """
         plt.figure(figsize=(12, 10))
         
+        # Track which colors we've already added to the legend
+        color_in_legend = {}
+        corner_color_in_legend = {}
+        
         # Plot each boundary curve
         for i, curve in enumerate(boundary_curves):
-            CurveVisualizer._plot_single_curve(curve, i, show_control_points, show_corners)
+            CurveVisualizer._plot_single_curve(curve, i, show_control_points, show_corners,
+                                            color_in_legend, corner_color_in_legend)
         
         # Plot colored boundaries (polylines) if requested
         if colored_boundaries and show_raw_boundaries:
@@ -53,7 +58,8 @@ class CurveVisualizer:
     
     @staticmethod
     def _plot_single_curve(curve: BoundaryCurve, curve_index: int, 
-                        show_control_points: bool, show_corners: bool):
+                        show_control_points: bool, show_corners: bool,
+                        color_in_legend: dict, corner_color_in_legend: dict):
         """Plot a single boundary curve."""
         # Use the actual RGB values from the Color object
         rgb = curve.color.rgb
@@ -66,9 +72,15 @@ class CurveVisualizer:
         x_curve = [p.x for p in curve_points]
         y_curve = [p.y for p in curve_points]
         
+        # Determine label for the curve (only add to legend if not already added for this color)
+        if curve.color.name not in color_in_legend:
+            label = f'{curve.color.name} Curves'
+            color_in_legend[curve.color.name] = True
+        else:
+            label = None
+        
         # Plot the curve itself
-        plt.plot(x_curve, y_curve, color=plot_color, linewidth=2, 
-                label=f'{curve.color.name} Curve {curve_index+1}')
+        plt.plot(x_curve, y_curve, color=plot_color, linewidth=2, label=label)
         
         # Plot control points if requested
         if show_control_points:
@@ -76,7 +88,7 @@ class CurveVisualizer:
                 cp_x = [p.x for p in segment.control_points]
                 cp_y = [p.y for p in segment.control_points]
                 
-                # Plot control points
+                # Plot control points without adding to legend
                 plt.plot(cp_x, cp_y, 'o--', color=plot_color, alpha=0.7, 
                         linewidth=1, markersize=4)
         
@@ -84,13 +96,25 @@ class CurveVisualizer:
         if show_corners and curve.corners:
             corner_x = [c.x for c in curve.corners]
             corner_y = [c.y for c in curve.corners]
+            
+            # Only add corner label to legend if not already added for this color
+            if curve.color.name not in corner_color_in_legend:
+                corner_label = f'{curve.color.name} Corners'
+                corner_color_in_legend[curve.color.name] = True
+            else:
+                corner_label = None
+            
             plt.plot(corner_x, corner_y, 's', color=plot_color, 
                     markersize=10, markerfacecolor='none', markeredgewidth=2,
-                    label=f'{curve.color.name} Corners')
+                    label=corner_label)
     
     @staticmethod
     def _plot_colored_boundaries(colored_boundaries: dict):
         """Plot colored polyline boundaries with lighter colors."""
+        # Track which colors we've already added to the legend for raw boundaries
+        raw_color_in_legend = {}
+        raw_point_color_in_legend = {}
+        
         for color, raw_boundaries in colored_boundaries.items():
             for i, raw_boundary in enumerate(raw_boundaries):
                 rgb = raw_boundary.color.rgb
@@ -117,25 +141,49 @@ class CurveVisualizer:
                 if raw_boundary.color.name == 'RED' and len(raw_boundary.points) == 1:
                     # Use light red for single red points
                     light_red = (1.0, 0.7, 0.7)  # Light red
+                    
+                    # Only add to legend once for red points
+                    if raw_boundary.color.name not in raw_point_color_in_legend:
+                        label = 'Raw RED Points'
+                        raw_point_color_in_legend[raw_boundary.color.name] = True
+                    else:
+                        label = None
+                        
                     plt.plot(x_points, y_points, 'x', color=light_red, markersize=8,
-                            markeredgewidth=1.5, alpha=0.7, 
-                            label=f'Raw {raw_boundary.color.name} Point')
+                            markeredgewidth=1.5, alpha=0.7, label=label)
                 else:
                     # For polylines, use lighter colors and thinner lines
+                    # Only add to legend once per color for raw polylines
+                    if raw_boundary.color.name not in raw_color_in_legend:
+                        label = f'Raw {raw_boundary.color.name} Polylines'
+                        raw_color_in_legend[raw_boundary.color.name] = True
+                    else:
+                        label = None
+                        
                     plt.plot(x_points, y_points, linestyle, color=plot_color, 
                             linewidth=1.0, alpha=0.6, marker='.', markersize=4,
-                            label=f'Raw {raw_boundary.color.name} Polyline {i+1}')
-                
+                            label=label)
+    
     @staticmethod
     def _plot_wires(wires: List[tuple]):
-        """Plot point wires."""        
+        """Plot point wires."""
+        # Track which wire colors we've already added to the legend
+        wire_color_in_legend = {}
+        
         for point, color in wires:
             # Use the actual RGB values from the Color object
             rgb = color.rgb
             plot_color = (rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)  # Normalize to 0-1 for matplotlib
-    
+
+            # Only add wire label to legend once per color
+            if color.name not in wire_color_in_legend:
+                label = f'{color.name} Wires'
+                wire_color_in_legend[color.name] = True
+            else:
+                label = None
+                
             plt.plot(point.x, point.y, 'X', color=plot_color, markersize=12,
-                    markeredgewidth=3, label=f'{color.name} Wire')
+                    markeredgewidth=3, label=label)
     
     @staticmethod
     def save_plot_to_file(boundary_curves: List[BoundaryCurve], wires: List[tuple] = None,
@@ -153,11 +201,16 @@ class CurveVisualizer:
         """
         plt.figure(figsize=(12, 10))
         
+        # Track which colors we've already added to the legend
+        color_in_legend = {}
+        corner_color_in_legend = {}
+        
         # Plot each boundary curve
         for i, curve in enumerate(boundary_curves):
             CurveVisualizer._plot_single_curve(curve, i, 
                                             kwargs.get('show_control_points', True),
-                                            kwargs.get('show_corners', True))
+                                            kwargs.get('show_corners', True),
+                                            color_in_legend, corner_color_in_legend)
         
         # Plot colored boundaries (polylines) if requested
         if colored_boundaries and kwargs.get('show_raw_boundaries', True):
