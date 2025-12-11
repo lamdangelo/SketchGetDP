@@ -7,18 +7,18 @@ wire_currents:
   wire_1: 1
   wire_2: 1
   wire_3: 1
-  wire_4: 1
-  wire_5: 1
-  wire_6: 1
+  wire_4: -1
+  wire_5: -1
+  wire_6: -1
   wire_7: 1
   wire_8: 1
   wire_9: 1
   wire_10: -1
   wire_11: -1
   wire_12: -1
-  wire_13: -1
-  wire_14: -1
-  wire_15: -1
+  wire_13: 1
+  wire_14: 1
+  wire_15: 1
   wire_16: -1
   wire_17: -1
   wire_18: -1

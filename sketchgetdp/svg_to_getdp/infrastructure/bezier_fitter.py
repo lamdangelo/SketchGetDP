@@ -57,12 +57,12 @@ class BezierFitter(BezierFitterInterface):
         point_count = len(points)
         
         if corner_indices:
-            base_segments = max(len(corner_indices), 20)
+            base_segments = max(len(corner_indices), 100)
         else:
-            base_segments = max(100, point_count // 30)
+            base_segments = max(200, point_count // 10)
             
-        minimum_segments = 20
-        maximum_segments = min(100, point_count // 10)
+        minimum_segments = 100
+        maximum_segments = min(200, point_count // 10)
         
         return min(maximum_segments, max(minimum_segments, base_segments))
     
