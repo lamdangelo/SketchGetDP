@@ -58,25 +58,214 @@ class SVGParser(SVGParserInterface):
             ValueError: If the SVG file is invalid or cannot be parsed
         """
         try:
-            # Parse all paths with their attributes
-            paths, attributes = svg2paths(svg_file_path)
+            # Parse the XML tree to access all elements
             tree = ET.parse(svg_file_path)
             root = tree.getroot()
+            
+            # Parse paths with svgpathtools
+            paths, attributes = svg2paths(svg_file_path)
+            
         except Exception as e:
             raise ValueError(f"Invalid SVG file: {e}")
         
         viewbox = self._parse_viewbox(root.get('viewBox'))
         svg_width, svg_height = self._get_svg_dimensions(root)
         
-        boundaries_by_color = self._convert_paths_to_boundaries(
+        # Parse paths from svgpathtools - SKIP RED PATHS (these are circle conversions)
+        path_boundaries = self._convert_paths_to_boundaries(
             paths, attributes, viewbox, svg_width, svg_height
         )
+        
+        # Parse circle elements separately - ONLY FOR RED
+        # (other colors come from svg2paths as paths)
+        circle_boundaries = {}
+        
+        # Find all circle elements
+        for circle_elem in root.iter(f'{self.namespace}circle'):
+            try:
+                style = circle_elem.get('style', '')
+                color = self._extract_color_from_style(style)
+                
+                # Only process red circles - skip other colors
+                if color != Color.RED:
+                    continue
+                    
+                transform = circle_elem.get('transform', '')
+                cx = float(circle_elem.get('cx', '0'))
+                cy = float(circle_elem.get('cy', '0'))
+                
+                # Apply transform if present
+                if transform:
+                    transformed_point = self._apply_transform_to_point(cx, cy, transform)
+                    cx, cy = transformed_point
+                
+                # Scale to unit coordinates
+                point = Point(cx, cy)
+                scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
+                
+                boundary = RawBoundary(
+                    points=[scaled_point],
+                    color=color,
+                    is_closed=True
+                )
+                
+                if color not in circle_boundaries:
+                    circle_boundaries[color] = []
+                circle_boundaries[color].append(boundary)
+                
+            except Exception as e:
+                print(f"WARNING: Failed to process circle element: {e}")
+                continue
+        
+        # Merge both results
+        boundaries_by_color = self._merge_boundaries(path_boundaries, circle_boundaries)
         
         # Apply post-processing resampling to ensure even point distribution
         resampled_boundaries = self._resample_all_boundaries(boundaries_by_color)
         
         # Remove duplicate points from all boundaries after resampling
         return self._remove_duplicates_from_all_boundaries(resampled_boundaries)
+    
+    def _convert_paths_to_boundaries(self, paths: List[Path], attributes: List[dict],
+                                   viewbox: Optional[Tuple[float, float, float, float]],
+                                   svg_width: float, svg_height: float) -> Dict[Color, List[RawBoundary]]:
+        """
+        Convert all SVG paths to boundary objects grouped by color.
+        SKIP RED PATHS - red should only come from circle elements.
+        """
+        boundaries_by_color = {}
+        
+        for path_index, (path, attr) in enumerate(zip(paths, attributes)):
+            try:
+                color = self._extract_color_from_attributes(attr)
+                
+                # Skip red paths - they're handled by circle parsing
+                # svg2paths converts circles to paths, so we skip those
+                if color == Color.RED:
+                    continue
+                    
+                points = self._convert_path_to_points(path, viewbox, svg_width, svg_height)
+                
+                if not points:
+                    raise ValueError("Path contains no valid points")
+                
+                is_closed = self._is_path_closed(path)
+                
+                boundary = RawBoundary(
+                    points=points,
+                    color=color,
+                    is_closed=is_closed
+                )
+                
+                if boundary.color not in boundaries_by_color:
+                    boundaries_by_color[boundary.color] = []
+                boundaries_by_color[boundary.color].append(boundary)
+                
+            except Exception as e:
+                print(f"WARNING: Failed to process path {path_index}: {e}")
+                continue
+        
+        return boundaries_by_color
+    
+    def _extract_color_from_style(self, style_string: str) -> Color:
+        """
+        Extract color from SVG style attribute.
+        """
+        if not style_string:
+            raise ValueError("No style attribute found")
+        
+        # Parse style string
+        style_parts = [part.strip() for part in style_string.split(';')]
+        color_str = None
+        
+        for part in style_parts:
+            if part.startswith('fill:'):
+                color_parts = part.split(':', 1)
+                if len(color_parts) == 2:
+                    color_str = color_parts[1].strip()
+                    break
+        
+        if not color_str or color_str == 'none':
+            raise ValueError(f"No valid fill color found in style: {style_string}")
+        
+        return self._parse_color_string(color_str)
+    
+    def _apply_transform_to_point(self, x: float, y: float, transform_str: str) -> Tuple[float, float]:
+        """
+        Apply SVG transform to a point.
+        Handles matrix(), rotate(), scale(), and translate() transforms.
+        """
+        if not transform_str:
+            return x, y
+        
+        # Parse matrix transform: matrix(a,b,c,d,e,f)
+        matrix_match = re.match(r'matrix\s*\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)', transform_str)
+        
+        if matrix_match:
+            a, b, c, d, e, f = map(float, matrix_match.groups())
+            # Apply matrix transformation
+            new_x = a * x + c * y + e
+            new_y = b * x + d * y + f
+            return new_x, new_y
+        
+        # Parse rotate transform: rotate(angle, cx, cy) or rotate(angle)
+        rotate_match = re.match(r'rotate\s*\(\s*([-\d.]+)\s*(?:,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*)?\)', transform_str)
+        
+        if rotate_match:
+            angle = float(rotate_match.group(1))
+            # Convert to radians
+            angle_rad = math.radians(angle)
+            
+            if rotate_match.group(2) and rotate_match.group(3):
+                # Has center point
+                cx = float(rotate_match.group(2))
+                cy = float(rotate_match.group(3))
+                # Translate to origin, rotate, translate back
+                x_translated = x - cx
+                y_translated = y - cy
+                new_x = x_translated * math.cos(angle_rad) - y_translated * math.sin(angle_rad) + cx
+                new_y = x_translated * math.sin(angle_rad) + y_translated * math.cos(angle_rad) + cy
+            else:
+                # No center point, rotate around origin (0,0)
+                new_x = x * math.cos(angle_rad) - y * math.sin(angle_rad)
+                new_y = x * math.sin(angle_rad) + y * math.cos(angle_rad)
+            
+            return new_x, new_y
+        
+        # Handle translate transforms
+        translate_match = re.match(r'translate\s*\(\s*([-\d.]+)\s*(?:,\s*([-\d.]+)\s*)?\)', transform_str)
+        if translate_match:
+            tx = float(translate_match.group(1))
+            ty = float(translate_match.group(2)) if translate_match.group(2) else 0
+            return x + tx, y + ty
+        
+        # Handle scale transforms: scale(sx, sy) or scale(s)
+        scale_match = re.match(r'scale\s*\(\s*([-\d.]+)\s*(?:,\s*([-\d.]+)\s*)?\)', transform_str)
+        if scale_match:
+            sx = float(scale_match.group(1))
+            sy = float(scale_match.group(2)) if scale_match.group(2) else sx
+            return x * sx, y * sy
+        
+        # Return original point if transform not recognized
+        print(f"WARNING: Unsupported transform format: {transform_str}")
+        return x, y
+    
+    def _merge_boundaries(self, boundaries1: Dict[Color, List[RawBoundary]], 
+                        boundaries2: Dict[Color, List[RawBoundary]]) -> Dict[Color, List[RawBoundary]]:
+        """
+        Merge two dictionaries of boundaries.
+        """
+        merged = {}
+        all_colors = set(boundaries1.keys()) | set(boundaries2.keys())
+        
+        for color in all_colors:
+            merged[color] = []
+            if color in boundaries1:
+                merged[color].extend(boundaries1[color])
+            if color in boundaries2:
+                merged[color].extend(boundaries2[color])
+        
+        return merged
     
     def _resample_all_boundaries(self, boundaries_by_color: Dict[Color, List[RawBoundary]]) -> Dict[Color, List[RawBoundary]]:
         """
@@ -160,53 +349,6 @@ class SVGParser(SVGParserInterface):
         
         return resampled_points
     
-    def _convert_paths_to_boundaries(self, paths: List[Path], attributes: List[dict],
-                                   viewbox: Optional[Tuple[float, float, float, float]],
-                                   svg_width: float, svg_height: float) -> Dict[Color, List[RawBoundary]]:
-        """
-        Convert all SVG paths to boundary objects grouped by color.
-        """
-        boundaries_by_color = {}
-        
-        for path_index, (path, attr) in enumerate(zip(paths, attributes)):
-            try:
-                boundary = self._create_boundary_from_path(path, attr, viewbox, svg_width, svg_height)
-                
-                if boundary.color not in boundaries_by_color:
-                    boundaries_by_color[boundary.color] = []
-                boundaries_by_color[boundary.color].append(boundary)
-                
-            except Exception as e:
-                print(f"WARNING: Failed to process path {path_index}: {e}")
-                continue
-        
-        return boundaries_by_color
-    
-    def _create_boundary_from_path(self, path: Path, attributes: dict,
-                                 viewbox: Optional[Tuple[float, float, float, float]],
-                                 svg_width: float, svg_height: float) -> RawBoundary:
-        """
-        Create a RawBoundary from an SVG path and its attributes.
-        """
-        color = self._extract_color_from_attributes(attributes)
-        points = self._convert_path_to_points(path, viewbox, svg_width, svg_height)
-        
-        if not points:
-            raise ValueError("Path contains no valid points")
-        
-        if color == Color.RED:
-            center_point = self._calculate_center_point(points)
-            points = [center_point]
-            is_closed = True
-        else:
-            is_closed = self._is_path_closed(path)
-        
-        return RawBoundary(
-            points=points,
-            color=color,
-            is_closed=is_closed
-        )
-    
     def _convert_path_to_points(self, path: Path, viewbox: Optional[Tuple[float, float, float, float]],
                               svg_width: float, svg_height: float) -> List[Point]:
         """
@@ -280,15 +422,6 @@ class SVGParser(SVGParserInterface):
         except:
             return False
     
-    def _calculate_center_point(self, points: List[Point]) -> Point:
-        """Calculate the center point of a set of points."""
-        if not points:
-            raise ValueError("Cannot calculate center of empty point list")
-        
-        avg_x = sum(p.x for p in points) / len(points)
-        avg_y = sum(p.y for p in points) / len(points)
-        return Point(avg_x, avg_y)
-    
     def _extract_color_from_attributes(self, attributes: dict) -> Color:
         """
         Extract color from svgpathtools attributes dictionary.
@@ -352,7 +485,8 @@ class SVGParser(SVGParserInterface):
         """Check if color string represents a red color."""
         red_representations = {
             '#ff0000', 'red', '#f00', '#ff0000ff',
-            'rgb(255,0,0)', 'rgb(255, 0, 0)'
+            'rgb(255,0,0)', 'rgb(255, 0, 0)',
+            '#fa0000'  # Added for your SVG
         }
         return color_string in red_representations
     
@@ -360,7 +494,8 @@ class SVGParser(SVGParserInterface):
         """Check if color string represents a green color."""
         green_representations = {
             '#00ff00', 'green', '#0f0', '#00ff00ff',
-            'rgb(0,255,0)', 'rgb(0, 255, 0)'
+            'rgb(0,255,0)', 'rgb(0, 255, 0)',
+            '#00f700'  # Added for your SVG
         }
         return color_string in green_representations
     
@@ -368,7 +503,8 @@ class SVGParser(SVGParserInterface):
         """Check if color string represents a blue color."""
         blue_representations = {
             '#0000ff', 'blue', '#00f', '#0000ffff',
-            'rgb(0,0,255)', 'rgb(0, 0, 255)'
+            'rgb(0,0,255)', 'rgb(0, 0, 255)',
+            '#0000fb'  # Added for your SVG
         }
         return color_string in blue_representations
     
@@ -520,4 +656,3 @@ class SVGParser(SVGParserInterface):
                     cleaned_boundaries[color].append(cleaned_boundary)
         
         return cleaned_boundaries
-    
