@@ -79,6 +79,61 @@ def main():
         for i, (point, color) in enumerate(wires):
             print(f"  Wire {i+1}: at ({point.x:.3f}, {point.y:.3f}), color: {color.name.lower()}")
         
+        # Handle debug output BEFORE meshing if requested (optional)
+        if args.debug:
+            try:
+                from .interfaces.debug.debug_writer import DebugWriter
+                
+                DebugWriter()._write_svg_parser_debug_info(
+                    svg_file_path=args.svg_file,
+                    colored_boundaries=colored_boundaries
+                )
+            
+            except ImportError:
+                print("Debug output unavailable: required module not found")
+            except Exception as e:
+                print(f"Debug output error: {e}")
+        
+        # Handle visualization BEFORE meshing if requested (optional)
+        if args.visualize or args.output_plot:
+            try:
+                from .interfaces.debug.curve_visualizer import CurveVisualizer
+                
+                if args.output_plot:
+                    # Save plot to file
+                    CurveVisualizer.save_plot_to_file(
+                        boundary_curves=boundary_curves,
+                        wires=wires,
+                        colored_boundaries=colored_boundaries,
+                        filename=args.output_plot,
+                        show_control_points=True,
+                        show_corners=True
+                    )
+                    print(f"Visualization saved to: {args.output_plot}")
+                elif args.visualize:
+                    # Display interactive plot
+                    print("\nGenerating visualization...")
+                    CurveVisualizer.display_boundary_curves(
+                        boundary_curves=boundary_curves,
+                        wires=wires,
+                        colored_boundaries=colored_boundaries,
+                        show_control_points=colored_boundaries,
+                        show_corners=True,
+                        show_raw_boundaries=True
+                    )
+                    
+            except ImportError:
+                print("Visualization unavailable: matplotlib not installed")
+                print("Install with: pip install matplotlib")
+            except Exception as e:
+                print(f"Visualization error: {e}")
+        
+        # Save intermediate results to file if specified (optional)
+        if args.output:
+            from .interfaces.debug.debug_writer import DebugWriter
+            DebugWriter.save_results(boundary_curves, wires, args.output)
+            print(f"Intermediate results saved to: {args.output}")
+        
         # Determine config file path
         config_file_path = Path(args.config)
         if not config_file_path.exists():
@@ -139,61 +194,6 @@ def main():
             
             print(f"\n✓ GetDP simulation completed successfully!")
             print(f"  Results saved to: results/")
-        
-        # Handle debug output if requested (optional)
-        if args.debug:
-            try:
-                from .interfaces.debug.debug_writer import DebugWriter
-                
-                DebugWriter()._write_svg_parser_debug_info(
-                    svg_file_path=args.svg_file,
-                    colored_boundaries=colored_boundaries
-                )
-            
-            except ImportError:
-                print("Debug output unavailable: required module not found")
-            except Exception as e:
-                print(f"Debug output error: {e}")
-        
-        # Handle visualization if requested (optional)
-        if args.visualize or args.output_plot:
-            try:
-                from .interfaces.debug.curve_visualizer import CurveVisualizer
-                
-                if args.output_plot:
-                    # Save plot to file
-                    CurveVisualizer.save_plot_to_file(
-                        boundary_curves=boundary_curves,
-                        wires=wires,
-                        colored_boundaries=colored_boundaries,
-                        filename=args.output_plot,
-                        show_control_points=True,
-                        show_corners=True
-                    )
-                    print(f"Visualization saved to: {args.output_plot}")
-                elif args.visualize:
-                    # Display interactive plot
-                    print("\nGenerating visualization...")
-                    CurveVisualizer.display_boundary_curves(
-                        boundary_curves=boundary_curves,
-                        wires=wires,
-                        colored_boundaries=colored_boundaries,
-                        show_control_points=colored_boundaries,
-                        show_corners=True,
-                        show_raw_boundaries=True
-                    )
-                    
-            except ImportError:
-                print("Visualization unavailable: matplotlib not installed")
-                print("Install with: pip install matplotlib")
-            except Exception as e:
-                print(f"Visualization error: {e}")
-        
-        # Save intermediate results to file if specified (optional)
-        if args.output:
-            from .interfaces.debug.debug_writer import DebugWriter
-            DebugWriter.save_results(boundary_curves, wires, args.output)
-            print(f"Intermediate results saved to: {args.output}")
             
     except FileNotFoundError as e:
         print(f"Error: File not found - {e}")
