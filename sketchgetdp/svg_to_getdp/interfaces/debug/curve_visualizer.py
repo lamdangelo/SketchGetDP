@@ -79,12 +79,6 @@ class CurveVisualizer:
                 # Plot control points
                 plt.plot(cp_x, cp_y, 'o--', color=plot_color, alpha=0.7, 
                         linewidth=1, markersize=4)
-                
-                # Annotate control points
-                for cp_idx, (x, y) in enumerate(zip(cp_x, cp_y)):
-                    plt.annotate(f'S{seg_idx}P{cp_idx}', (x, y), 
-                            xytext=(5, 5), textcoords='offset points', 
-                            fontsize=8, alpha=0.7)
         
         # Plot corners if requested
         if show_corners and curve.corners:
