@@ -1,610 +1,916 @@
 import numpy as np
-from typing import List, Tuple
+from typing import List, Optional, Tuple, Dict
 from ..core.entities.point import Point
 from ..interfaces.abstractions.corner_detector_interface import CornerDetectorInterface
 
 
 class CornerDetector(CornerDetectorInterface):
     """
-    Identifies corner points in boundary point sequences by analyzing changes
-    in direction vectors across sliding windows, then refines them locally
-    using angle-based detection.
+    Enhanced corner detector with improved handling for complex shapes like crosses.
+    Returns structured debug data along with corner indices.
+    
+    The detector uses multiple complementary methods to identify corners:
+    1. Local angle analysis
+    2. Direction change detection
+    3. Curvature peak analysis
+    
+    Results are combined, clustered, refined, and filtered to produce final corner points.
     """
     
-    def __init__(self, window_size: int = 20, direction_change_threshold: float = 1.0, angle_threshold: float = np.pi/4):
+    def __init__(
+        self, 
+        window_size: int = 15, 
+        direction_change_threshold: float = 0.8, 
+        angle_threshold: float = np.pi / 6,
+        minimum_corner_distance: int = 5,
+        smoothness_threshold: float = 0.72,
+        corner_strength_threshold: float = 0.45,
+        ellipse_aspect_ratio_threshold: float = 1.2,
+        debug_enabled: bool = True
+    ):
+        """
+        Initialize the corner detector with configurable parameters.
+        
+        Args:
+            window_size: Size of the analysis window for direction vectors
+            direction_change_threshold: Minimum angle change (radians) to consider a direction change
+            angle_threshold: Minimum interior angle (radians) to qualify as a corner
+            minimum_corner_distance: Minimum distance between detected corners (pixels)
+            smoothness_threshold: Threshold for detecting smooth/elliptical shapes
+            corner_strength_threshold: Minimum strength score for a valid corner
+            ellipse_aspect_ratio_threshold: Maximum aspect ratio for ellipse detection
+            debug_enabled: Whether to collect and return debug information
+        """
         self.window_size = window_size
         self.direction_change_threshold = direction_change_threshold
         self.angle_threshold = angle_threshold
+        self.minimum_corner_distance = minimum_corner_distance
+        self.smoothness_threshold = smoothness_threshold
+        self.corner_strength_threshold = corner_strength_threshold
+        self.ellipse_aspect_ratio_threshold = ellipse_aspect_ratio_threshold
+        self.debug_enabled = debug_enabled
     
-    def detect_corners(self, boundary_points: List[Point]) -> List[int]:
+    def detect_corners(self, boundary_points: List[Point]) -> Tuple[List[int], Dict]:
         """
         Identifies indices of corner points in the boundary point sequence.
-        """
-        if len(boundary_points) < self.window_size * 2:
-            # Special handling for small shapes (like small ellipses)
-            if len(boundary_points) < 30:
-                if self._is_likely_small_ellipse(boundary_points):
-                    return []
-            return []
         
+        The detection process involves:
+        1. Early shape analysis (ellipse/smooth shape detection)
+        2. Candidate detection using multiple methods
+        3. Strength calculation for each candidate
+        4. Clustering of nearby candidates
+        5. Refinement of corner positions
+        6. Final filtering and spacing enforcement
+        
+        Args:
+            boundary_points: List of ordered points representing a closed boundary
+            
+        Returns:
+            Tuple containing:
+                - List of corner indices in the boundary_points list
+                - Dictionary containing debug information if debug_enabled is True
+        """
+        debug_data = self._initialize_debug_data()
+        self._record_debug_step(debug_data, f"Starting corner detection for {len(boundary_points)} boundary points")
+        
+        # Early return for shapes that are likely ellipses or too smooth
+        if self._should_skip_corner_detection(boundary_points, debug_data):
+            return [], debug_data
+        
+        # Convert points to coordinate arrays for efficient computation
         x_coordinates = np.array([point.x for point in boundary_points])
         y_coordinates = np.array([point.y for point in boundary_points])
         
-        window_directions = self._calculate_window_directions(x_coordinates, y_coordinates)
+        self._record_bounding_box_info(x_coordinates, y_coordinates, debug_data)
         
-        if len(window_directions) < 2:
-            return []
+        # Step 1: Detect candidate corners using multiple complementary methods
+        candidate_corners = self._detect_candidate_corners(boundary_points, x_coordinates, y_coordinates, debug_data)
         
-        # Step 1: coarse detection
-        coarse_corner_indices = self._find_corner_indices_with_adaptive_threshold(
-            window_directions, x_coordinates, y_coordinates, len(boundary_points)
-        )
+        if not candidate_corners:
+            self._record_debug_step(debug_data, "No strong corners found: returning empty list")
+            return [], debug_data
         
-        # Step 2: refine locally using *both* adjacent windows
-        refined_corner_indices = []
-        for coarse_index in coarse_corner_indices:
-            # refine at coarse_index
-            refined_index = self._refine_corner(boundary_points, coarse_index, self.window_size)
-            if refined_index is not None:
-                refined_corner_indices.append(refined_index)
+        # Step 2: Cluster nearby candidates to avoid duplicates
+        clustered_corners = self._cluster_nearby_candidates(boundary_points, candidate_corners, debug_data)
         
-        # Step 3: Post-process to remove false positives while preserving true corners
-        final_corners = self._post_process_corners(boundary_points, refined_corner_indices)
-            
-        return sorted(set(final_corners))
+        # Step 3: Refine corner positions within each cluster
+        refined_corners = self._refine_corner_positions(boundary_points, clustered_corners, debug_data)
+        
+        # Step 4: Filter corners by strength
+        strong_corners = self._filter_corners_by_strength(boundary_points, refined_corners)
+        
+        # Step 5: Ensure minimum spacing between corners
+        final_corners = self._enforce_minimum_corner_spacing(boundary_points, strong_corners, debug_data)
+        
+        self._record_final_results(boundary_points, final_corners, debug_data)
+        self._record_debug_step(debug_data, f"Final result: {len(final_corners)} corners detected")
+        
+        return sorted(final_corners), debug_data
     
-    def _is_likely_small_ellipse(self, points: List[Point]) -> bool:
-        """Check if a small point set is likely an ellipse."""
-        n = len(points)
-        if n < 10:
-            return True  # Very small sets are usually smooth
-        
-        # Calculate compactness (area/perimeter^2)
-        # Ellipses have higher compactness than polygons with corners
-        area = self._calculate_polygon_area(points)
-        perimeter = self._calculate_polygon_perimeter(points)
-        
-        if perimeter > 0:
-            compactness = 4 * np.pi * area / (perimeter * perimeter)
-            # Ellipses have compactness close to 1, polygons with corners have lower compactness
-            return compactness > 0.7
-        
-        return True
+    # ==================== Helper Methods ====================
     
-    def _calculate_polygon_area(self, points: List[Point]) -> float:
-        """Calculate area of polygon using shoelace formula."""
-        n = len(points)
-        if n < 3:
-            return 0.0
-        
-        area = 0.0
-        for i in range(n):
-            j = (i + 1) % n
-            area += points[i].x * points[j].y
-            area -= points[j].x * points[i].y
-        
-        return abs(area) / 2.0
+    def _initialize_debug_data(self) -> Dict:
+        """Initialize the debug data structure."""
+        return {
+            'shape_analysis': {},
+            'candidate_detection': {},
+            'strength_calculations': {},
+            'clustering': {},
+            'refinement_details': [],
+            'final_decisions': {},
+            'all_steps': []
+        }
     
-    def _calculate_polygon_perimeter(self, points: List[Point]) -> float:
-        """Calculate perimeter of polygon."""
-        n = len(points)
-        if n < 2:
-            return 0.0
-        
-        perimeter = 0.0
-        for i in range(n):
-            j = (i + 1) % n
-            dx = points[j].x - points[i].x
-            dy = points[j].y - points[i].y
-            perimeter += np.sqrt(dx*dx + dy*dy)
-        
-        return perimeter
+    def _record_debug_step(self, debug_data: Dict, message: str) -> None:
+        """Record a debug step if debugging is enabled."""
+        if self.debug_enabled:
+            debug_data['all_steps'].append(message)
     
-    def _calculate_window_directions(self, x_coordinates: np.ndarray, y_coordinates: np.ndarray) -> List[np.ndarray]:
-        """Calculates normalized direction vectors for each sliding window."""
-        total_windows = len(x_coordinates) // self.window_size
-        window_directions = []
+    def _should_skip_corner_detection(self, boundary_points: List[Point], debug_data: Dict) -> bool:
+        """
+        Check if the shape is likely an ellipse or too smooth for corner detection.
         
-        for window_index in range(total_windows):
-            window_start = window_index * self.window_size
-            window_end = window_start + self.window_size
-            
-            if window_end >= len(x_coordinates):
-                continue
-                
-            direction_vector = self._compute_window_direction(
-                x_coordinates, y_coordinates, window_start, window_end
-            )
-            window_directions.append(direction_vector)
+        Returns True if corner detection should be skipped for this shape.
+        """
+        point_count = len(boundary_points)
         
-        return window_directions
-    
-    def _compute_window_direction(self, x_coordinates: np.ndarray, y_coordinates: np.ndarray, 
-                                start_index: int, end_index: int) -> np.ndarray:
-        """Computes the average direction vector for a specific window of points."""
-        vector_sum_x = 0.0
-        vector_sum_y = 0.0
-        
-        for point_index in range(start_index, end_index - 1):
-            delta_x = x_coordinates[point_index + 1] - x_coordinates[point_index]
-            delta_y = y_coordinates[point_index + 1] - y_coordinates[point_index]
-            
-            vector_sum_x += delta_x
-            vector_sum_y += delta_y
-        
-        direction_vector = np.array([vector_sum_x, vector_sum_y])
-        vector_magnitude = np.linalg.norm(direction_vector)
-        
-        if vector_magnitude > 1e-10:
-            return direction_vector / vector_magnitude
-        else:
-            return np.array([0.0, 0.0])
-    
-    def _find_corner_indices_with_adaptive_threshold(self, window_directions: List[np.ndarray], 
-                                                    x_coords: np.ndarray, y_coords: np.ndarray, 
-                                                    total_points: int) -> List[int]:
-        """Improved corner detection with curvature awareness."""
-        corner_indices = []
-        
-        if len(window_directions) < 2:
-            return corner_indices
-        
-        # Calculate local curvature for each window transition
-        curvature_scores = []
-        
-        for window_index in range(len(window_directions) - 1):
-            direction_change = window_directions[window_index] - window_directions[window_index + 1]
-            change_magnitude = np.linalg.norm(direction_change)
-            
-            # Calculate local curvature at the transition point
-            transition_idx = window_index * self.window_size + self.window_size // 2
-            curvature = self._calculate_local_curvature(x_coords, y_coords, transition_idx)
-            
-            curvature_scores.append((change_magnitude, curvature))
-        
-        if not curvature_scores:
-            return corner_indices
-        
-        # Find peaks in direction change that are NOT in high-curvature smooth regions
-        changes = [score[0] for score in curvature_scores]
-        curvatures = [score[1] for score in curvature_scores]
-        
-        mean_change = np.mean(changes)
-        std_change = np.std(changes)
-        mean_curvature = np.mean(curvatures)
-        
-        # Adjust thresholds for small shapes
-        if total_points < 50:
-            direction_threshold = max(self.direction_change_threshold * 1.5, mean_change + std_change)
-        else:
-            direction_threshold = max(self.direction_change_threshold, mean_change + 0.5 * std_change)
-        
-        for window_index, (change_magnitude, curvature) in enumerate(curvature_scores):
-            # Only detect corners when:
-            # 1. Direction change is significantly above average AND
-            # 2. Not in a uniformly high-curvature region (like an ellipse)
-            is_significant_change = change_magnitude > direction_threshold
-            
-            # Ellipses have uniformly high curvature, real corners have localized high curvature
-            is_localized_corner = curvature > 2 * mean_curvature or change_magnitude > mean_change + 1.5 * std_change
-            
-            if is_significant_change and is_localized_corner:
-                corner_index = window_index * self.window_size + self.window_size // 2
-                corner_indices.append(corner_index)
-        
-        # Check closure point
-        if len(window_directions) >= 2:
-            closure_direction_change = window_directions[-1] - window_directions[0]
-            closure_change_magnitude = np.linalg.norm(closure_direction_change)
-            
-            # Calculate the actual angle at point 0 to see if it's a real corner
-            closure_angle = self._calculate_point_angle(x_coords, y_coords, 0, total_points)
-            
-            # For polygons, closure should be a corner with sharp angle
-            # For ellipses, closure should be smooth (small angle)
-            if (closure_change_magnitude > direction_threshold and 
-                closure_angle > self.angle_threshold):
-                closure_corner_index = 0
-                corner_indices.append(closure_corner_index)
-        
-        return corner_indices
-    
-    def _calculate_point_angle(self, x_coords: np.ndarray, y_coords: np.ndarray, 
-                             point_idx: int, total_points: int, window_size: int = 10) -> float:
-        """Calculate the angle at a specific point."""
-        n = total_points
-        
-        prev_idx = (point_idx - window_size) % n
-        next_idx = (point_idx + window_size) % n
-        
-        v1 = np.array([x_coords[point_idx] - x_coords[prev_idx], 
-                      y_coords[point_idx] - y_coords[prev_idx]])
-        v2 = np.array([x_coords[next_idx] - x_coords[point_idx], 
-                      y_coords[next_idx] - y_coords[point_idx]])
-        
-        norm_v1 = np.linalg.norm(v1)
-        norm_v2 = np.linalg.norm(v2)
-        
-        if norm_v1 < 1e-8 or norm_v2 < 1e-8:
-            return 0.0
-        
-        cos_angle = np.dot(v1, v2) / (norm_v1 * norm_v2)
-        cos_angle = np.clip(cos_angle, -1.0, 1.0)
-        return np.arccos(cos_angle)
-    
-    def _calculate_local_curvature(self, x_coords: np.ndarray, y_coords: np.ndarray, center_idx: int, radius: int = 10) -> float:
-        """Calculate local curvature around a point."""
-        n = len(x_coords)
-        curvatures = []
-        
-        # Sample curvature at different scales
-        for r in [radius // 2, radius]:
-            start_idx = max(0, center_idx - r)
-            end_idx = min(n - 1, center_idx + r)
-            
-            if end_idx - start_idx < 4:
-                continue
-            
-            # Use a small window for curvature estimation
-            window_x = x_coords[start_idx:end_idx + 1]
-            window_y = y_coords[start_idx:end_idx + 1]
-            
-            # Simple curvature approximation: change in angle per unit length
-            angles = []
-            for i in range(1, len(window_x) - 1):
-                v1 = np.array([window_x[i] - window_x[i-1], window_y[i] - window_y[i-1]])
-                v2 = np.array([window_x[i+1] - window_x[i], window_y[i+1] - window_y[i]])
-                
-                norm_v1 = np.linalg.norm(v1)
-                norm_v2 = np.linalg.norm(v2)
-                
-                if norm_v1 > 1e-8 and norm_v2 > 1e-8:
-                    cos_angle = np.dot(v1, v2) / (norm_v1 * norm_v2)
-                    cos_angle = np.clip(cos_angle, -1.0, 1.0)
-                    angle = np.arccos(cos_angle)
-                    angles.append(angle)
-            
-            if angles:
-                avg_angle = np.mean(angles)
-                # Convert to curvature (angle per unit length approximation)
-                segment_length = np.sqrt((window_x[-1] - window_x[0])**2 + (window_y[-1] - window_y[0])**2)
-                if segment_length > 1e-8:
-                    curvature = avg_angle / segment_length
-                    curvatures.append(curvature)
-        
-        return np.mean(curvatures) if curvatures else 0.0
-    
-    def _post_process_corners(self, points: List[Point], corner_indices: List[int]) -> List[int]:
-        """Post-process corners to remove false positives while keeping true corners."""
-        if len(corner_indices) <= 1:
-            # Special case: check if single corner is legitimate
-            if len(corner_indices) == 1:
-                idx = corner_indices[0]
-                # Check compactness - ellipses are more compact
-                if len(points) < 100:  # Only for smaller shapes
-                    compactness = self._calculate_compactness(points)
-                    if compactness > 0.8:  # Very compact = likely ellipse
-                        return []
-            return corner_indices
-        
-        n = len(points)
-        filtered_corners = []
-        
-        for i, idx in enumerate(corner_indices):
-            # Check if this is a real corner by examining its neighborhood
-            is_real_corner = self._is_real_corner(points, idx, corner_indices)
-            
-            if is_real_corner:
-                filtered_corners.append(idx)
-        
-        # Ensure corners are not too close to each other
-        merged_corners = self._merge_close_corners(points, filtered_corners)
-        
-        return merged_corners
-    
-    def _calculate_compactness(self, points: List[Point]) -> float:
-        """Calculate shape compactness (4πA/P²). Higher = more circle-like."""
-        area = self._calculate_polygon_area(points)
-        perimeter = self._calculate_polygon_perimeter(points)
-        
-        if perimeter > 0:
-            return 4 * np.pi * area / (perimeter * perimeter)
-        return 0.0
-    
-    def _is_likely_ellipse(self, points: List[Point]) -> bool:
-        """Check if shape is likely an ellipse/oval."""
-        n = len(points)
-        if n < 20:
-            return True  # Small shapes are usually smooth
-        
-        # Use compactness as primary indicator
-        compactness = self._calculate_compactness(points)
-        if compactness > 0.85:
+        # Early ellipse detection for small shapes
+        if point_count < 100 and self._is_likely_small_ellipse(boundary_points):
+            debug_data['shape_analysis']['early_ellipse_detection'] = True
+            debug_data['shape_analysis']['ellipse_reason'] = "Small shape with ellipse-like properties"
+            self._record_debug_step(debug_data, "Early ellipse detection: returning no corners")
             return True
         
-        # Also check curvature uniformity
-        curvature_samples = []
-        sample_step = max(1, n // 20)
-        x_coords = np.array([p.x for p in points])
-        y_coords = np.array([p.y for p in points])
-        
-        for i in range(0, n, sample_step):
-            curvature = self._calculate_local_curvature(x_coords, y_coords, i, radius=min(10, n // 10))
-            curvature_samples.append(curvature)
-        
-        if curvature_samples:
-            curv_array = np.array(curvature_samples)
-            mean_curv = np.mean(curv_array)
-            std_curv = np.std(curv_array)
+        # Enhanced smoothness check for larger shapes
+        if point_count > 30:
+            smoothness_score, is_ellipse = self._calculate_shape_smoothness(boundary_points)
             
-            # Ellipses have moderate, relatively uniform curvature
-            if mean_curv > 0 and std_curv / mean_curv < 0.6:
+            debug_data['shape_analysis']['smoothness_score'] = smoothness_score
+            debug_data['shape_analysis']['is_ellipse'] = is_ellipse
+            
+            if is_ellipse:
+                debug_data['shape_analysis']['ellipse_reason'] = "Enhanced smoothness detection"
+                self._record_debug_step(debug_data, 
+                    f"Ellipse detection (smoothness={smoothness_score:.3f}): returning no corners")
                 return True
+            
+            if smoothness_score > self.smoothness_threshold:
+                debug_data['shape_analysis']['too_smooth'] = True
+                self._record_debug_step(debug_data,
+                    f"Too smooth (score={smoothness_score:.3f} > threshold={self.smoothness_threshold}): returning no corners")
+                return True
+        
+        # Check if shape is too small for reliable corner detection
+        if point_count < self.window_size * 2:
+            debug_data['shape_analysis']['too_small'] = True
+            self._record_debug_step(debug_data, f"Shape too small: {point_count} points")
+            
+            if point_count < 30 and self._is_likely_small_ellipse(boundary_points):
+                debug_data['shape_analysis']['small_ellipse'] = True
+                self._record_debug_step(debug_data, "Small shape detected as ellipse: returning no corners")
+                return True
+            
+            return True
         
         return False
     
-    def _has_sharp_corners(self, points: List[Point], corner_indices: List[int]) -> bool:
-        """Check if shape has genuinely sharp corners."""
-        if not corner_indices:
-            return False
-        
-        # Calculate angles at detected corners
-        sharp_corner_count = 0
-        for idx in corner_indices:
-            angle = self._calculate_corner_angle(points, idx)
-            if angle > np.pi / 3:  # 60 degrees or more
-                sharp_corner_count += 1
-        
-        # Need at least 2 sharp corners for a polygonal shape
-        return sharp_corner_count >= 2
+    def _record_bounding_box_info(self, x_coordinates: np.ndarray, y_coordinates: np.ndarray, debug_data: Dict) -> None:
+        """Record bounding box information for debugging."""
+        debug_data['shape_analysis']['bounding_box'] = {
+            'x_min': float(np.min(x_coordinates)),
+            'x_max': float(np.max(x_coordinates)),
+            'y_min': float(np.min(y_coordinates)),
+            'y_max': float(np.max(y_coordinates)),
+            'width': float(np.max(x_coordinates) - np.min(x_coordinates)),
+            'height': float(np.max(y_coordinates) - np.min(y_coordinates))
+        }
     
-    def _is_real_corner(self, points: List[Point], corner_idx: int, all_corners: List[int]) -> bool:
-        """Determine if a detected corner is a real corner or a false positive."""
-        n = len(points)
+    def _detect_candidate_corners(
+        self, 
+        boundary_points: List[Point], 
+        x_coordinates: np.ndarray, 
+        y_coordinates: np.ndarray,
+        debug_data: Dict
+    ) -> List[int]:
+        """
+        Detect candidate corners using multiple complementary methods.
         
-        # Find the angle at this point
-        window_size = min(10, n // 20)
-        angle = self._calculate_corner_angle(points, corner_idx, window_size)
+        Combines results from:
+        1. Local angle analysis
+        2. Direction change detection
+        3. Curvature peak analysis
+        """
+        # Apply each detection method independently
+        angle_based_corners = self._detect_corners_by_local_angle(boundary_points)
+        direction_based_corners = self._detect_corners_by_direction_change(x_coordinates, y_coordinates)
+        curvature_based_corners = self._detect_corners_by_curvature_peaks(x_coordinates, y_coordinates)
         
-        # Real corners should have significant angles
-        if angle < self.angle_threshold:
-            return False
+        # Record detection results for debugging
+        debug_data['candidate_detection'] = {
+            'angle_method': angle_based_corners,
+            'direction_method': direction_based_corners,
+            'curvature_method': curvature_based_corners,
+            'all_candidates': list(set(angle_based_corners + direction_based_corners + curvature_based_corners))
+        }
         
-        # For small shapes, be more careful
-        if n < 100:
-            # Check if this "corner" has neighbors with similar angles
-            # (ellipses have many similar moderate angles, real corners stand out)
-            similar_angle_count = 0
-            test_points = [corner_idx - 10, corner_idx - 5, corner_idx + 5, corner_idx + 10]
-            
-            for test_idx in test_points:
-                if 0 <= test_idx < n:
-                    test_angle = self._calculate_corner_angle(points, test_idx, window_size=5)
-                    if abs(test_angle - angle) < np.pi / 6:  # Within 30 degrees
-                        similar_angle_count += 1
-            
-            # If many nearby points have similar angles, it's likely an ellipse
-            if similar_angle_count >= 2:
-                return False
+        self._record_debug_step(debug_data, f"Angle method found {len(angle_based_corners)} corners")
+        self._record_debug_step(debug_data, f"Direction method found {len(direction_based_corners)} corners")
+        self._record_debug_step(debug_data, f"Curvature method found {len(curvature_based_corners)} corners")
         
-        # Check if this corner is part of a smooth curve by looking at neighbors
-        corner_positions = np.array(all_corners)
-        distances = np.abs(corner_positions - corner_idx)
-        distances = distances[distances > 0]  # Remove self
+        # Calculate strength for all candidates
+        all_candidates = debug_data['candidate_detection']['all_candidates']
+        candidate_strengths = self._calculate_candidate_strengths(boundary_points, all_candidates)
+        debug_data['strength_calculations'] = candidate_strengths
         
-        if len(distances) > 0:
-            min_distance = np.min(distances)
-            
-            # If corners are too regularly spaced, might be on an ellipse
-            if min_distance < n // 6:  # More than 6 corners in total circumference
-                # Check if this is part of a regularly spaced pattern
-                regularity_score = self._check_regularity(points, all_corners)
-                if regularity_score > 0.7:  # Moderately regular pattern
-                    # But if angles are very sharp, keep them (could be a polygon)
-                    if angle < np.pi / 2:  # Less than 90 degrees
-                        return False
+        # Combine results with method-specific weights
+        weighted_candidates = self._combine_candidate_methods(
+            angle_based_corners, 
+            direction_based_corners, 
+            curvature_based_corners, 
+            candidate_strengths
+        )
+        debug_data['candidate_detection']['combined_votes'] = weighted_candidates
         
-        return True
+        # Filter weak candidates based on votes and strength
+        strong_candidates = self._filter_weak_candidates(weighted_candidates, candidate_strengths)
+        debug_data['candidate_detection']['coarse_corners'] = strong_candidates
+        self._record_debug_step(debug_data, f"After filtering: {len(strong_candidates)} strong candidates")
+        
+        return strong_candidates
     
-    def _check_regularity(self, points: List[Point], corner_indices: List[int]) -> float:
-        """Check if corners are regularly spaced (indicative of ellipse false positives)."""
-        if len(corner_indices) < 4:
-            return 0.0
+    def _combine_candidate_methods(
+        self,
+        angle_corners: List[int],
+        direction_corners: List[int],
+        curvature_corners: List[int],
+        candidate_strengths: Dict[int, float]
+    ) -> Dict[int, float]:
+        """Combine results from multiple detection methods with weights."""
+        weighted_candidates = {}
         
-        # Calculate distances between consecutive corners
-        sorted_indices = sorted(corner_indices)
-        n = len(points)
+        # Method weights reflect confidence in each detection approach
+        method_weights = {
+            'angle': 1.0,      # Most reliable for clear corners
+            'direction': 0.8,  # Good for gradual direction changes
+            'curvature': 0.6   # Sensitive to local shape changes
+        }
         
-        distances = []
-        for i in range(len(sorted_indices)):
-            next_idx = sorted_indices[(i + 1) % len(sorted_indices)]
-            current_idx = sorted_indices[i]
+        # Add candidates from each method with their respective weights
+        for idx in angle_corners:
+            if candidate_strengths.get(idx, 0) >= self.corner_strength_threshold * 0.5:
+                weighted_candidates[idx] = weighted_candidates.get(idx, 0) + method_weights['angle']
+        
+        for idx in direction_corners:
+            if candidate_strengths.get(idx, 0) >= self.corner_strength_threshold * 0.5:
+                weighted_candidates[idx] = weighted_candidates.get(idx, 0) + method_weights['direction']
+        
+        for idx in curvature_corners:
+            if candidate_strengths.get(idx, 0) >= self.corner_strength_threshold * 0.5:
+                weighted_candidates[idx] = weighted_candidates.get(idx, 0) + method_weights['curvature']
+        
+        return weighted_candidates
+    
+    def _filter_weak_candidates(
+        self, 
+        weighted_candidates: Dict[int, float], 
+        candidate_strengths: Dict[int, float]
+    ) -> List[int]:
+        """Filter out candidates with insufficient votes or low strength."""
+        minimum_votes = 1.0
+        strong_candidates = []
+        
+        for idx, votes in weighted_candidates.items():
+            strength = candidate_strengths.get(idx, 0)
+            if votes >= minimum_votes and strength >= self.corner_strength_threshold:
+                strong_candidates.append(idx)
+        
+        return strong_candidates
+    
+    def _cluster_nearby_candidates(
+        self, 
+        boundary_points: List[Point], 
+        candidates: List[int], 
+        debug_data: Dict
+    ) -> List[List[int]]:
+        """Group nearby candidate corners to avoid duplicates."""
+        if not candidates or len(candidates) == 1:
+            return [candidates] if candidates else []
+        
+        # Calculate candidate strengths for clustering decisions
+        candidate_strengths = self._calculate_candidate_strengths(boundary_points, candidates)
+        
+        # Cluster candidates that are close to each other
+        clusters = self._form_candidate_clusters(boundary_points, candidates)
+        
+        debug_data['clustering']['clusters'] = clusters
+        self._record_debug_step(debug_data, f"Clustering created {len(clusters)} candidate clusters")
+        
+        return clusters
+    
+    def _form_candidate_clusters(self, boundary_points: List[Point], candidates: List[int]) -> List[List[int]]:
+        """Group candidates that are within minimum distance of each other."""
+        point_count = len(boundary_points)
+        sorted_candidates = sorted(candidates)
+        clusters = []
+        current_cluster = [sorted_candidates[0]]
+        
+        for i in range(1, len(sorted_candidates)):
+            previous_idx = sorted_candidates[i-1]
+            current_idx = sorted_candidates[i]
             
-            if next_idx >= current_idx:
-                distance = next_idx - current_idx
+            # Calculate circular distance along the boundary
+            distance = min(abs(current_idx - previous_idx), point_count - abs(current_idx - previous_idx))
+            
+            if distance < self.minimum_corner_distance * 3:
+                current_cluster.append(current_idx)
             else:
-                distance = (n - current_idx) + next_idx
-            
-            distances.append(distance)
+                clusters.append(current_cluster)
+                current_cluster = [current_idx]
         
-        # Calculate coefficient of variation (regularity metric)
-        mean_dist = np.mean(distances)
-        std_dist = np.std(distances)
+        if current_cluster:
+            clusters.append(current_cluster)
         
-        if mean_dist > 0:
-            cv = std_dist / mean_dist
-            # Low CV indicates regular spacing
-            regularity = 1.0 - min(cv, 1.0)
-            return regularity
-        
-        return 0.0
+        return clusters
     
-    def _merge_close_corners(self, points: List[Point], corner_indices: List[int], min_distance: int = 15) -> List[int]:
-        """Merge corners that are too close to each other."""
-        if len(corner_indices) <= 1:
-            return corner_indices
+    def _refine_corner_positions(
+        self, 
+        boundary_points: List[Point], 
+        clustered_corners: List[List[int]], 
+        debug_data: Dict
+    ) -> List[int]:
+        """Refine corner positions within each cluster."""
+        refined_corners = []
         
-        sorted_corners = sorted(corner_indices)
-        n = len(points)
-        merged = []
+        for cluster_index, cluster in enumerate(clustered_corners):
+            if not cluster:
+                continue
+                
+            # Select the strongest candidate from the cluster
+            candidate_strengths = self._calculate_candidate_strengths(boundary_points, cluster)
+            best_candidate = max(cluster, key=lambda idx: candidate_strengths.get(idx, 0))
+            
+            # Refine the corner position
+            refined_candidate = self._refine_corner_position(boundary_points, best_candidate)
+            
+            # Record refinement details for debugging
+            refinement_detail = self._record_refinement_details(
+                cluster, best_candidate, refined_candidate, boundary_points, debug_data
+            )
+            
+            if refined_candidate is not None and refinement_detail.get('accepted', False):
+                refined_corners.append(refined_candidate)
+        
+        return refined_corners
+    
+    def _record_refinement_details(
+        self,
+        cluster: List[int],
+        best_candidate: int,
+        refined_candidate: Optional[int],
+        boundary_points: List[Point],
+        debug_data: Dict
+    ) -> Dict:
+        """Record details of the refinement process for debugging."""
+        refinement_detail = {
+            'cluster': cluster,
+            'best_candidate': best_candidate,
+            'refined_candidate': refined_candidate
+        }
+        
+        if refined_candidate is not None:
+            refined_strength = self._calculate_corner_strength(boundary_points, refined_candidate)
+            refinement_detail['refined_strength'] = refined_strength
+            
+            if refined_strength >= self.corner_strength_threshold * 0.8:
+                refinement_detail['accepted'] = True
+                self._record_debug_step(debug_data,
+                    f"Cluster accepted: refined {best_candidate} → {refined_candidate} (strength={refined_strength:.3f})")
+            else:
+                refinement_detail['accepted'] = False
+                self._record_debug_step(debug_data,
+                    f"Cluster rejected: refined {best_candidate} → {refined_candidate} (strength={refined_strength:.3f} < threshold)")
+        else:
+            refinement_detail['accepted'] = False
+            self._record_debug_step(debug_data, f"Cluster: candidate {best_candidate} could not be refined")
+        
+        debug_data['refinement_details'].append(refinement_detail)
+        return refinement_detail
+    
+    def _filter_corners_by_strength(self, boundary_points: List[Point], corners: List[int]) -> List[int]:
+        """Filter out corners that don't meet the strength threshold."""
+        return [
+            idx for idx in corners
+            if self._calculate_corner_strength(boundary_points, idx) >= self.corner_strength_threshold
+        ]
+    
+    def _enforce_minimum_corner_spacing(
+        self, 
+        boundary_points: List[Point], 
+        corners: List[int], 
+        debug_data: Dict
+    ) -> List[int]:
+        """Ensure corners are spaced at least minimum_corner_distance apart."""
+        if len(corners) <= 1:
+            return corners
+        
+        point_count = len(boundary_points)
+        candidate_strengths = self._calculate_candidate_strengths(boundary_points, corners)
+        
+        sorted_corners = sorted(corners)
+        well_spaced_corners = []
+        
         i = 0
-        
         while i < len(sorted_corners):
-            current = sorted_corners[i]
+            current_corner = sorted_corners[i]
+            well_spaced_corners.append(current_corner)
             
-            # Look ahead to find close corners
+            # Skip any corners that are too close to the current one
             j = i + 1
-            close_corners = [current]
-            
             while j < len(sorted_corners):
                 next_corner = sorted_corners[j]
-                # Handle circular boundary
-                distance = min(abs(next_corner - current), 
-                              n - abs(next_corner - current))
+                distance = min(abs(next_corner - current_corner),
+                             point_count - abs(next_corner - current_corner))
                 
-                if distance < min_distance:
-                    close_corners.append(next_corner)
+                if distance < self.minimum_corner_distance:
+                    # Keep the stronger corner when two are too close
+                    current_strength = candidate_strengths.get(current_corner, 0)
+                    next_strength = candidate_strengths.get(next_corner, 0)
+                    
+                    if next_strength > current_strength * 1.1:
+                        well_spaced_corners[-1] = next_corner
+                        current_corner = next_corner
+                    
                     j += 1
                 else:
                     break
             
-            # Merge close corners by taking the one with the sharpest angle
-            if len(close_corners) > 1:
-                best_corner = self._select_best_corner(points, close_corners)
-                merged.append(best_corner)
-            else:
-                merged.append(current)
-            
             i = j
         
-        return merged
+        debug_data['clustering']['refined_corners'] = corners
+        debug_data['clustering']['quality_corners'] = well_spaced_corners
+        
+        return sorted(well_spaced_corners)
     
-    def _select_best_corner(self, points: List[Point], corner_candidates: List[int]) -> int:
-        """Select the best corner from a set of close candidates."""
-        best_idx = corner_candidates[0]
-        best_angle = 0.0
+    def _record_final_results(
+        self, 
+        boundary_points: List[Point], 
+        final_corners: List[int], 
+        debug_data: Dict
+    ) -> None:
+        """Record final corner detection results for debugging."""
+        candidate_strengths = self._calculate_candidate_strengths(boundary_points, final_corners)
         
-        for idx in corner_candidates:
-            angle = self._calculate_corner_angle(points, idx)
-            if angle > best_angle:
-                best_angle = angle
-                best_idx = idx
-        
-        return best_idx
+        debug_data['final_decisions']['final_corners'] = final_corners
+        debug_data['final_decisions']['corner_coordinates'] = {
+            idx: boundary_points[idx] for idx in final_corners
+        }
+        debug_data['final_decisions']['corner_strengths'] = {
+            idx: candidate_strengths.get(idx, 0) for idx in final_corners
+        }
     
-    def _calculate_corner_angle(self, points: List[Point], corner_idx: int, window_size: int = 10) -> float:
-        """Calculate the angle at a corner point."""
-        n = len(points)
+    # ==================== Geometric Calculations ====================
+    
+    def _calculate_shape_smoothness(self, boundary_points: List[Point]) -> Tuple[float, bool]:
+        """
+        Calculate a smoothness score for the shape and detect if it's ellipse-like.
         
-        prev_idx = (corner_idx - window_size) % n
-        next_idx = (corner_idx + window_size) % n
+        Returns:
+            Tuple containing:
+                - Smoothness score (higher = smoother)
+                - Boolean indicating if shape is likely an ellipse
+        """
+        point_count = len(boundary_points)
         
-        v1 = np.array([
-            points[corner_idx].x - points[prev_idx].x,
-            points[corner_idx].y - points[prev_idx].y
+        x_coordinates = np.array([point.x for point in boundary_points])
+        y_coordinates = np.array([point.y for point in boundary_points])
+        
+        # Calculate curvatures at sample points
+        curvatures = self._calculate_sampled_curvatures(x_coordinates, y_coordinates, point_count)
+        
+        # Check if shape is ellipse-like
+        is_ellipse = self._is_shape_ellipse_like(boundary_points, curvatures)
+        
+        # Calculate angles at sample points
+        angles = self._calculate_sampled_angles(boundary_points, point_count)
+        
+        # Compute smoothness score from angle and curvature statistics
+        smoothness_score = self._compute_smoothness_score(angles, curvatures)
+        
+        return smoothness_score, is_ellipse
+    
+    def _calculate_sampled_curvatures(
+        self, 
+        x_coordinates: np.ndarray, 
+        y_coordinates: np.ndarray, 
+        point_count: int
+    ) -> List[float]:
+        """Calculate curvatures at regularly sampled points along the boundary."""
+        sample_step = max(1, point_count // 50)
+        curvatures = []
+        
+        for i in range(0, point_count, sample_step):
+            curvature = self._calculate_local_curvature(x_coordinates, y_coordinates, i, 5)
+            curvatures.append(curvature)
+        
+        return curvatures
+    
+    def _calculate_sampled_angles(self, boundary_points: List[Point], point_count: int) -> List[float]:
+        """Calculate angles at regularly sampled points along the boundary."""
+        sample_step = max(1, point_count // 50)
+        angles = []
+        
+        for i in range(0, point_count, sample_step):
+            angle = self._calculate_point_angle(boundary_points, i, 7)
+            angles.append(angle)
+        
+        return angles
+    
+    def _compute_smoothness_score(self, angles: List[float], curvatures: List[float]) -> float:
+        """Compute a combined smoothness score from angle and curvature statistics."""
+        if not angles:
+            return 1.0
+        
+        # Angle-based smoothness: shapes with smaller maximum angles are smoother
+        max_angle = max(angles)
+        angle_score = 1.0 - min(max_angle / (np.pi * 0.5), 1.0)
+        
+        # Curvature-based smoothness: shapes with consistent curvature are smoother
+        if curvatures:
+            curvature_std = np.std(curvatures)
+            curvature_mean = np.mean(curvatures)
+            
+            if curvature_mean > 1e-8:
+                curvature_variation = curvature_std / curvature_mean
+                curvature_score = 1.0 / (1.0 + curvature_variation)
+            else:
+                curvature_score = 1.0
+        else:
+            curvature_score = 1.0
+        
+        # Weighted combination of angle and curvature smoothness
+        return angle_score * 0.6 + curvature_score * 0.4
+    
+    def _is_shape_ellipse_like(self, boundary_points: List[Point], curvatures: List[float]) -> bool:
+        """Determine if the shape is likely an ellipse based on curvature consistency."""
+        point_count = len(boundary_points)
+        
+        # Large shapes are less likely to be simple ellipses
+        if point_count > 200:
+            return False
+        
+        # Check curvature consistency
+        if curvatures:
+            curvature_std = np.std(curvatures)
+            curvature_mean = np.mean(curvatures)
+            
+            if curvature_mean > 1e-8:
+                coefficient_of_variation = curvature_std / curvature_mean
+                if coefficient_of_variation < 0.3:
+                    return True
+        
+        # Check distance to center consistency
+        x_coordinates = np.array([point.x for point in boundary_points])
+        y_coordinates = np.array([point.y for point in boundary_points])
+        
+        center_x = np.mean(x_coordinates)
+        center_y = np.mean(y_coordinates)
+        
+        distances = np.sqrt((x_coordinates - center_x)**2 + (y_coordinates - center_y)**2)
+        distance_mean = np.mean(distances)
+        
+        if distance_mean > 0:
+            distance_variation = np.std(distances) / distance_mean
+            if distance_variation < 0.2:
+                return True
+        
+        return False
+    
+    def _is_likely_small_ellipse(self, boundary_points: List[Point]) -> bool:
+        """Check if a small shape is likely an ellipse."""
+        point_count = len(boundary_points)
+        
+        if point_count < 10:
+            return False
+        
+        x_coordinates = np.array([point.x for point in boundary_points])
+        y_coordinates = np.array([point.y for point in boundary_points])
+        
+        width = np.max(x_coordinates) - np.min(x_coordinates)
+        height = np.max(y_coordinates) - np.min(y_coordinates)
+        
+        # Check curvature consistency
+        curvatures = []
+        sample_step = max(1, point_count // 20)
+        for i in range(0, point_count, sample_step):
+            curvature = self._calculate_local_curvature(x_coordinates, y_coordinates, i, 3)
+            curvatures.append(curvature)
+        
+        if curvatures:
+            curvature_std = np.std(curvatures)
+            curvature_mean = np.mean(curvatures)
+            if curvature_mean > 1e-8:
+                coefficient_of_variation = curvature_std / curvature_mean
+                if coefficient_of_variation < 0.25:
+                    return True
+        
+        # Check aspect ratio and closure
+        if width > 0 and height > 0:
+            aspect_ratio = max(width, height) / min(width, height)
+            if aspect_ratio < self.ellipse_aspect_ratio_threshold:
+                start_end_distance = np.sqrt(
+                    (x_coordinates[0] - x_coordinates[-1])**2 + 
+                    (y_coordinates[0] - y_coordinates[-1])**2
+                )
+                if start_end_distance < min(width, height) * 0.1:
+                    return True
+        
+        return False
+    
+    def _calculate_point_angle(self, boundary_points: List[Point], point_index: int, window_size: int) -> float:
+        """
+        Calculate the interior angle at a specific boundary point.
+        
+        Uses vectors to previous and next points to compute the angle.
+        """
+        point_count = len(boundary_points)
+        
+        previous_index = (point_index - window_size) % point_count
+        next_index = (point_index + window_size) % point_count
+        
+        # Vector from previous point to current point
+        vector_to_current = np.array([
+            boundary_points[point_index].x - boundary_points[previous_index].x,
+            boundary_points[point_index].y - boundary_points[previous_index].y
         ])
-        v2 = np.array([
-            points[next_idx].x - points[corner_idx].x,
-            points[next_idx].y - points[corner_idx].y
+        
+        # Vector from current point to next point
+        vector_from_current = np.array([
+            boundary_points[next_index].x - boundary_points[point_index].x,
+            boundary_points[next_index].y - boundary_points[point_index].y
         ])
         
-        norm_v1 = np.linalg.norm(v1)
-        norm_v2 = np.linalg.norm(v2)
+        vector_to_current_norm = np.linalg.norm(vector_to_current)
+        vector_from_current_norm = np.linalg.norm(vector_from_current)
         
-        if norm_v1 < 1e-8 or norm_v2 < 1e-8:
+        if vector_to_current_norm > 1e-8 and vector_from_current_norm > 1e-8:
+            cosine_angle = np.dot(vector_to_current, vector_from_current) / (vector_to_current_norm * vector_from_current_norm)
+            cosine_angle = np.clip(cosine_angle, -1.0, 1.0)
+            return np.arccos(cosine_angle)
+        
+        return 0.0
+    
+    def _calculate_local_curvature(
+        self, 
+        x_coordinates: np.ndarray, 
+        y_coordinates: np.ndarray, 
+        point_index: int, 
+        window_size: int
+    ) -> float:
+        """
+        Calculate the curvature at a specific point along the boundary.
+        
+        Curvature is defined as the rate of change of direction per unit arc length.
+        """
+        point_count = len(x_coordinates)
+        
+        previous_index = (point_index - window_size) % point_count
+        next_index = (point_index + window_size) % point_count
+        
+        # Vectors from previous to current and current to next
+        vector_to_current = np.array([
+            x_coordinates[point_index] - x_coordinates[previous_index],
+            y_coordinates[point_index] - y_coordinates[previous_index]
+        ])
+        
+        vector_from_current = np.array([
+            x_coordinates[next_index] - x_coordinates[point_index],
+            y_coordinates[next_index] - y_coordinates[point_index]
+        ])
+        
+        vector_to_current_norm = np.linalg.norm(vector_to_current)
+        vector_from_current_norm = np.linalg.norm(vector_from_current)
+        
+        if vector_to_current_norm < 1e-8 or vector_from_current_norm < 1e-8:
             return 0.0
         
-        cos_angle = np.dot(v1, v2) / (norm_v1 * norm_v2)
-        cos_angle = np.clip(cos_angle, -1.0, 1.0)
-        return np.arccos(cos_angle)
+        # Calculate angle between vectors
+        cosine_angle = np.dot(vector_to_current, vector_from_current) / (vector_to_current_norm * vector_from_current_norm)
+        cosine_angle = np.clip(cosine_angle, -1.0, 1.0)
+        angle = np.arccos(cosine_angle)
+        
+        # Calculate average arc length
+        arc_length = (vector_to_current_norm + vector_from_current_norm) / 2
+        
+        return angle / arc_length if arc_length > 0 else 0.0
     
-    def _refine_corner(self, boundary_points: List[Point], coarse_index: int, search_radius: int) -> int:
-        """
-        Refines a coarse corner using adaptive vector method to handle oversampled corners.
-        """
-        best_index = None
-        max_angle = 0.0
-        n = len(boundary_points)
-        coarse_index = coarse_index % n
-
-        start = coarse_index - search_radius
-        end = coarse_index + search_radius
-
-        for offset in range(start, end + 1):
-            i = offset % n
-            
-            # Skip if too close to boundaries for proper vector calculation
-            if i < 1 or i >= n - 1:
-                continue
-
-            # Use adaptive window to find non-zero vectors
-            window_size = self._find_minimal_window(boundary_points, i, max_window=min(10, n//4))
-            
-            if window_size == 0:
-                continue
-
-            prev_idx = (i - window_size) % n
-            next_idx = (i + window_size) % n
-
-            v1 = np.array([
-                boundary_points[i].x - boundary_points[prev_idx].x,
-                boundary_points[i].y - boundary_points[prev_idx].y
-            ])
-            v2 = np.array([
-                boundary_points[next_idx].x - boundary_points[i].x,
-                boundary_points[next_idx].y - boundary_points[i].y
-            ])
-
-            norm_v1 = np.linalg.norm(v1)
-            norm_v2 = np.linalg.norm(v2)
-
-            if norm_v1 < 1e-8 or norm_v2 < 1e-8:
-                continue
-
-            angle = self._angle_between_vectors(v1, v2)
-
-            if angle > self.angle_threshold and angle > max_angle:
-                max_angle = angle
-                best_index = i
-
-        if best_index is None:
-            best_index = coarse_index
-
-        return best_index
-
-    def _find_minimal_window(self, points: List[Point], center_idx: int, max_window: int = 10) -> int:
-        """
-        Find the smallest window size that gives non-zero vectors.
-        Returns 0 if no valid window found.
-        """
-        n = len(points)
+    def _detect_corners_by_local_angle(self, boundary_points: List[Point]) -> List[int]:
+        """Detect corners by analyzing local interior angles at each point."""
+        point_count = len(boundary_points)
+        if point_count < 10:
+            return []
         
-        for window in range(1, max_window + 1):
-            prev_idx = (center_idx - window) % n
-            next_idx = (center_idx + window) % n
+        angle_window = max(3, min(10, point_count // 50))
+        angle_threshold = self.angle_threshold * 0.8
+        
+        corners = []
+        
+        for i in range(point_count):
+            angle = self._calculate_point_angle(boundary_points, i, angle_window)
+            if angle > angle_threshold:
+                corners.append(i)
+        
+        return corners
+    
+    def _detect_corners_by_direction_change(
+        self, 
+        x_coordinates: np.ndarray, 
+        y_coordinates: np.ndarray
+    ) -> List[int]:
+        """Detect corners by analyzing changes in direction along the boundary."""
+        point_count = len(x_coordinates)
+        if point_count < self.window_size * 2:
+            return []
+        
+        corners = []
+        
+        for i in range(point_count):
+            # Compute direction vectors before and after the point
+            previous_direction = self._compute_direction_vector(
+                x_coordinates, y_coordinates, i, self.window_size, backward=True
+            )
+            next_direction = self._compute_direction_vector(
+                x_coordinates, y_coordinates, i, self.window_size, backward=False
+            )
             
-            # Avoid using the same point (wrap-around edge case)
-            if prev_idx == next_idx:
-                continue
+            previous_direction_norm = np.linalg.norm(previous_direction)
+            next_direction_norm = np.linalg.norm(next_direction)
+            
+            if previous_direction_norm > 1e-8 and next_direction_norm > 1e-8:
+                previous_direction_normalized = previous_direction / previous_direction_norm
+                next_direction_normalized = next_direction / next_direction_norm
                 
-            v1 = np.array([
-                points[center_idx].x - points[prev_idx].x,
-                points[center_idx].y - points[prev_idx].y
-            ])
-            v2 = np.array([
-                points[next_idx].x - points[center_idx].x,
-                points[next_idx].y - points[center_idx].y
-            ])
-            
-            norm1, norm2 = np.linalg.norm(v1), np.linalg.norm(v2)
-            
-            if norm1 > 1e-8 and norm2 > 1e-8:
-                return window
+                dot_product = np.clip(np.dot(previous_direction_normalized, next_direction_normalized), -1.0, 1.0)
+                angle_change = np.arccos(dot_product)
+                
+                if angle_change > self.direction_change_threshold:
+                    corners.append(i)
         
-        return 0
-
-    def _angle_between_vectors(self, v1: np.ndarray, v2: np.ndarray) -> float:
-        """Calculate angle between two vectors in radians"""
-        cos_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
-        cos_angle = np.clip(cos_angle, -1.0, 1.0)
-        return np.arccos(cos_angle)
+        return corners
+    
+    def _compute_direction_vector(
+        self, 
+        x_coordinates: np.ndarray, 
+        y_coordinates: np.ndarray,
+        point_index: int, 
+        window_size: int, 
+        backward: bool
+    ) -> np.ndarray:
+        """Compute the average direction vector over a window of points."""
+        point_count = len(x_coordinates)
+        
+        if backward:
+            start_index = (point_index - window_size) % point_count
+            end_index = point_index
+        else:
+            start_index = point_index
+            end_index = (point_index + window_size) % point_count
+        
+        # Extract coordinates from the window (handling circular boundary)
+        if start_index < end_index:
+            x_window = x_coordinates[start_index:end_index]
+            y_window = y_coordinates[start_index:end_index]
+        else:
+            x_window = np.concatenate([x_coordinates[start_index:], x_coordinates[:end_index]])
+            y_window = np.concatenate([y_coordinates[start_index:], y_coordinates[:end_index]])
+        
+        if len(x_window) < 2:
+            return np.array([0.0, 0.0])
+        
+        # Direction vector from first to last point in the window
+        return np.array([
+            x_window[-1] - x_window[0],
+            y_window[-1] - y_window[0]
+        ])
+    
+    def _detect_corners_by_curvature_peaks(
+        self, 
+        x_coordinates: np.ndarray, 
+        y_coordinates: np.ndarray
+    ) -> List[int]:
+        """Detect corners as local peaks in the curvature profile."""
+        point_count = len(x_coordinates)
+        if point_count < 20:
+            return []
+        
+        curvature_window = max(3, point_count // 100)
+        curvatures = []
+        
+        # Calculate curvature at each point
+        for i in range(point_count):
+            curvature = self._calculate_local_curvature(x_coordinates, y_coordinates, i, curvature_window)
+            curvatures.append(curvature)
+        
+        # Find local peaks above threshold
+        average_curvature = np.mean(curvatures)
+        curvature_std = np.std(curvatures)
+        curvature_threshold = average_curvature + curvature_std * 1.0
+        
+        corners = []
+        
+        for i in range(point_count):
+            previous_index = (i - 1) % point_count
+            next_index = (i + 1) % point_count
+            
+            is_local_peak = (
+                curvatures[i] > curvatures[previous_index] and 
+                curvatures[i] > curvatures[next_index] and
+                curvatures[i] > curvature_threshold
+            )
+            
+            if is_local_peak:
+                corners.append(i)
+        
+        return corners
+    
+    def _calculate_corner_strength(self, boundary_points: List[Point], point_index: int) -> float:
+        """
+        Calculate a strength score (0-1) for a potential corner.
+        
+        Combines:
+        1. Interior angle (larger angles are stronger corners)
+        2. Local curvature contrast (corners should stand out from neighbors)
+        """
+        point_count = len(boundary_points)
+        
+        # Angle component: corners have larger interior angles
+        angle = self._calculate_point_angle(boundary_points, point_index, 7)
+        angle_score = min(angle / (np.pi * 0.8), 1.0)
+        
+        # Curvature contrast component: corners should have higher curvature than neighbors
+        x_coordinates = np.array([point.x for point in boundary_points])
+        y_coordinates = np.array([point.y for point in boundary_points])
+        
+        local_curvature = self._calculate_local_curvature(x_coordinates, y_coordinates, point_index, 5)
+        
+        # Compare with neighboring curvatures
+        neighbor_window = min(10, point_count // 20)
+        neighbor_curvatures = []
+        
+        for offset in range(-neighbor_window, neighbor_window + 1):
+            if offset != 0:
+                neighbor_index = (point_index + offset) % point_count
+                curvature = self._calculate_local_curvature(x_coordinates, y_coordinates, neighbor_index, 5)
+                neighbor_curvatures.append(curvature)
+        
+        if neighbor_curvatures:
+            average_neighbor_curvature = np.mean(neighbor_curvatures)
+            if average_neighbor_curvature > 1e-8:
+                curvature_contrast = local_curvature / average_neighbor_curvature
+                contrast_score = min(curvature_contrast / 3.0, 1.0)
+            else:
+                contrast_score = 1.0
+        else:
+            contrast_score = 0.5
+        
+        # Weighted combination: angle is more important than contrast
+        return angle_score * 0.7 + contrast_score * 0.3
+    
+    def _calculate_candidate_strengths(
+        self, 
+        boundary_points: List[Point], 
+        candidate_indices: List[int]
+    ) -> Dict[int, float]:
+        """Calculate strength scores for multiple candidate corners."""
+        return {
+            idx: self._calculate_corner_strength(boundary_points, idx)
+            for idx in candidate_indices
+        }
+    
+    def _refine_corner_position(self, boundary_points: List[Point], coarse_index: int) -> Optional[int]:
+        """
+        Refine a corner position by searching locally for the point with maximum interior angle.
+        
+        Args:
+            boundary_points: List of boundary points
+            coarse_index: Initial estimate of corner location
+            
+        Returns:
+            Refined corner index, or None if no good corner found nearby
+        """
+        point_count = len(boundary_points)
+        search_radius = min(10, point_count // 20)
+        
+        best_index = coarse_index
+        best_angle = 0.0
+        
+        # Search within radius for point with maximum interior angle
+        for offset in range(-search_radius, search_radius + 1):
+            test_index = (coarse_index + offset) % point_count
+            angle = self._calculate_point_angle(boundary_points, test_index, 5)
+            
+            if angle > best_angle:
+                best_angle = angle
+                best_index = test_index
+        
+        # Only return if the refined point has a sufficiently large angle
+        return best_index if best_angle > self.angle_threshold * 0.5 else None

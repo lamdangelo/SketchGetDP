@@ -48,21 +48,17 @@ class SVGParser(SVGParserInterface):
         """
         Parse SVG file and extract boundary curves grouped by color.
         
-        Args:
-            svg_file_path: Path to the SVG file
-            
-        Returns:
-            Dictionary mapping colors to lists of RawBoundary objects containing raw points.
-            
-        Raises:
-            ValueError: If the SVG file is invalid or cannot be parsed
+        Strategy:
+        1. Use svg2paths for all non-red paths (green, blue, black)
+        2. Parse circle/ellipse elements directly from XML for red structures
+           (more flexible approach that works with arbitrary red structures)
         """
         try:
             # Parse the XML tree to access all elements
             tree = ET.parse(svg_file_path)
             root = tree.getroot()
             
-            # Parse paths with svgpathtools
+            # Parse paths with svgpathtools (will skip red paths in _convert_paths_to_boundaries)
             paths, attributes = svg2paths(svg_file_path)
             
         except Exception as e:
@@ -71,67 +67,395 @@ class SVGParser(SVGParserInterface):
         viewbox = self._parse_viewbox(root.get('viewBox'))
         svg_width, svg_height = self._get_svg_dimensions(root)
         
-        # Parse paths from svgpathtools - SKIP RED PATHS (these are circle conversions)
+        # Parse paths from svgpathtools
+        # Red paths will be handled separately via XML parsing for more flexibility
         path_boundaries = self._convert_paths_to_boundaries(
             paths, attributes, viewbox, svg_width, svg_height
         )
         
-        # Parse circle elements separately - ONLY FOR RED
-        # (other colors come from svg2paths as paths)
-        circle_boundaries = {}
+        # Parse circle AND ellipse elements separately - ONLY FOR RED
+        # This gives us more flexibility to handle arbitrary red structures
+        red_dots_boundaries = {}
         
-        # Find all circle elements
-        for circle_elem in root.iter(f'{self.namespace}circle'):
-            try:
-                style = circle_elem.get('style', '')
-                color = self._extract_color_from_style(style)
-                
-                # Only process red circles - skip other colors
-                if color != Color.RED:
-                    continue
+        # Find all circle and ellipse elements
+        for element_name in ['circle', 'ellipse']:
+            for elem in root.iter(f'{self.namespace}{element_name}'):
+                try:
+                    style = elem.get('style', '')
+                    color = self._extract_color_from_style(style)
                     
-                transform = circle_elem.get('transform', '')
-                cx = float(circle_elem.get('cx', '0'))
-                cy = float(circle_elem.get('cy', '0'))
-                
-                # Apply transform if present
-                if transform:
-                    transformed_point = self._apply_transform_to_point(cx, cy, transform)
-                    cx, cy = transformed_point
-                
-                # Scale to unit coordinates
-                point = Point(cx, cy)
-                scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
-                
-                boundary = RawBoundary(
-                    points=[scaled_point],
-                    color=color,
-                    is_closed=True
-                )
-                
-                if color not in circle_boundaries:
-                    circle_boundaries[color] = []
-                circle_boundaries[color].append(boundary)
-                
-            except Exception as e:
-                print(f"WARNING: Failed to process circle element: {e}")
-                continue
+                    # Only process red circles/ellipses - skip other colors
+                    if color != Color.RED:
+                        continue
+                        
+                    transform = elem.get('transform', '')
+                    cx = float(elem.get('cx', '0'))
+                    cy = float(elem.get('cy', '0'))
+                    
+                    # Apply transform if present
+                    if transform:
+                        transformed_point = self._apply_transform_to_point(cx, cy, transform)
+                        cx, cy = transformed_point
+                    
+                    # Scale to unit coordinates
+                    point = Point(cx, cy)
+                    scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
+                    
+                    # For red dots, we just want the center point
+                    boundary = RawBoundary(
+                        points=[scaled_point],
+                        color=color,
+                        is_closed=True
+                    )
+                    
+                    if color not in red_dots_boundaries:
+                        red_dots_boundaries[color] = []
+                    red_dots_boundaries[color].append(boundary)
+                    
+                except Exception as e:
+                    print(f"WARNING: Failed to process {element_name} element: {e}")
+                    continue
         
-        # Merge both results
-        boundaries_by_color = self._merge_boundaries(path_boundaries, circle_boundaries)
+        # Merge both results - path boundaries (green, blue, black) and red dots
+        boundaries_by_color = self._merge_boundaries(path_boundaries, red_dots_boundaries)
         
         # Apply post-processing resampling to ensure even point distribution
         resampled_boundaries = self._resample_all_boundaries(boundaries_by_color)
         
         # Remove duplicate points from all boundaries after resampling
-        return self._remove_duplicates_from_all_boundaries(resampled_boundaries)
+        clean_boundaries = self._remove_duplicates_from_all_boundaries(resampled_boundaries)
+        
+        # Merge nearby boundaries of the same color
+        merged_boundaries = self._merge_nearby_boundaries(clean_boundaries, distance_threshold=0.02)
+        
+        return merged_boundaries
+
+    def _process_all_svg_elements(self, root: ET.Element, 
+                                viewbox: Optional[Tuple[float, float, float, float]],
+                                svg_width: float, svg_height: float) -> Dict[Color, List[RawBoundary]]:
+        """
+        Process all SVG elements to extract boundaries by color.
+        Handles paths, circles, ellipses, rectangles, lines, polygons, and polylines.
+        """
+        boundaries_by_color = {}
+        
+        # Element types to process
+        element_types = [
+            'path', 'circle', 'ellipse', 'rect', 
+            'line', 'polygon', 'polyline'
+        ]
+        
+        for element_name in element_types:
+            for elem in root.iter(f'{self.namespace}{element_name}'):
+                try:
+                    # Skip elements with no style or display:none
+                    style = elem.get('style', '')
+                    if 'display:none' in style:
+                        continue
+                        
+                    # Extract color from the element
+                    color = self._extract_color_from_element(elem)
+                    
+                    # Process the element based on its type
+                    if element_name == 'path':
+                        boundaries = self._process_path_element(elem, viewbox, svg_width, svg_height)
+                    elif element_name == 'circle':
+                        boundaries = self._process_circle_element(elem, viewbox, svg_width, svg_height)
+                    elif element_name == 'ellipse':
+                        boundaries = self._process_ellipse_element(elem, viewbox, svg_width, svg_height)
+                    elif element_name == 'rect':
+                        boundaries = self._process_rect_element(elem, viewbox, svg_width, svg_height)
+                    elif element_name == 'line':
+                        boundaries = self._process_line_element(elem, viewbox, svg_width, svg_height)
+                    elif element_name == 'polygon':
+                        boundaries = self._process_polygon_element(elem, viewbox, svg_width, svg_height)
+                    elif element_name == 'polyline':
+                        boundaries = self._process_polyline_element(elem, viewbox, svg_width, svg_height)
+                    else:
+                        continue
+                    
+                    # Add boundaries with their color
+                    for boundary in boundaries:
+                        boundary_with_color = RawBoundary(
+                            points=boundary['points'],
+                            color=color,
+                            is_closed=boundary['is_closed']
+                        )
+                        
+                        if color not in boundaries_by_color:
+                            boundaries_by_color[color] = []
+                        boundaries_by_color[color].append(boundary_with_color)
+                    
+                except Exception as e:
+                    print(f"WARNING: Failed to process {element_name} element: {e}")
+                    continue
+        
+        return boundaries_by_color
+
+    def _extract_color_from_element(self, elem: ET.Element) -> Color:
+        """
+        Extract color from an SVG element.
+        Checks style, fill, and stroke attributes.
+        """
+        # Get style attribute
+        style = elem.get('style', '')
+        if style:
+            try:
+                return self._extract_color_from_style(style)
+            except:
+                pass
+        
+        # Check fill attribute directly
+        fill = elem.get('fill', '')
+        if fill and fill != 'none':
+            return self._parse_color_string(fill)
+        
+        # Check stroke attribute directly
+        stroke = elem.get('stroke', '')
+        if stroke and stroke != 'none':
+            return self._parse_color_string(stroke)
+        
+        # Raise error if no color found
+        raise ValueError(f"No color found in element: {elem.tag}")
+
+    def _process_circle_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
+        """Process a circle element."""
+        cx = float(elem.get('cx', '0'))
+        cy = float(elem.get('cy', '0'))
+        r = float(elem.get('r', '0'))
+        
+        # Get transform
+        transform = elem.get('transform', '')
+        
+        # Sample points around the circle
+        points = []
+        num_samples = 32  # Number of points to sample around the circle
+        
+        for i in range(num_samples):
+            angle = 2 * math.pi * i / num_samples
+            x = cx + r * math.cos(angle)
+            y = cy + r * math.sin(angle)
+            
+            # Apply transform if present
+            if transform:
+                x, y = self._apply_transform_to_point(x, y, transform)
+            
+            point = Point(x, y)
+            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
+            points.append(scaled_point)
+        
+        # Close the circle
+        if points and points[0] != points[-1]:
+            points.append(points[0])
+        
+        return [{'points': points, 'is_closed': True}]
+
+    def _process_ellipse_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
+        """Process an ellipse element."""
+        cx = float(elem.get('cx', '0'))
+        cy = float(elem.get('cy', '0'))
+        rx = float(elem.get('rx', '0'))
+        ry = float(elem.get('ry', '0'))
+        
+        # Get transform
+        transform = elem.get('transform', '')
+        
+        # Sample points around the ellipse
+        points = []
+        num_samples = 32  # Number of points to sample around the ellipse
+        
+        for i in range(num_samples):
+            angle = 2 * math.pi * i / num_samples
+            x = cx + rx * math.cos(angle)
+            y = cy + ry * math.sin(angle)
+            
+            # Apply transform if present
+            if transform:
+                x, y = self._apply_transform_to_point(x, y, transform)
+            
+            point = Point(x, y)
+            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
+            points.append(scaled_point)
+        
+        # Close the ellipse
+        if points and points[0] != points[-1]:
+            points.append(points[0])
+        
+        return [{'points': points, 'is_closed': True}]
+
+    def _process_path_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
+        """Process a path element using svgpathtools."""
+        # Extract path data
+        d = elem.get('d', '')
+        if not d:
+            return []
+        
+        # Get transform
+        transform = elem.get('transform', '')
+        
+        try:
+            # Create a simple path from the d attribute
+            from svgpathtools import parse_path
+            path = parse_path(d)
+            
+            # Apply transform if present
+            if transform:
+                # Note: svgpathtools has transform methods, but for simplicity
+                # we'll apply to sampled points
+                pass
+            
+            # Convert path to points
+            points = []
+            for segment in path:
+                segment_points = self._sample_segment_points(segment, self.samples_per_segment)
+                points.extend(segment_points)
+            
+            points = self._remove_consecutive_duplicate_points(points)
+            
+            # Scale points
+            scaled_points = [self._scale_to_unit_coordinates(p, viewbox, svg_width, svg_height) for p in points]
+            
+            # Apply transform to scaled points
+            if transform:
+                transformed_points = []
+                for point in scaled_points:
+                    x, y = self._apply_transform_to_point(point.x, point.y, transform)
+                    transformed_points.append(Point(x, y))
+                scaled_points = transformed_points
+            
+            # Check if path is closed
+            is_closed = self._is_path_closed(path)
+            
+            return [{'points': scaled_points, 'is_closed': is_closed}]
+            
+        except Exception as e:
+            print(f"WARNING: Failed to parse path: {e}")
+            return []
+
+    def _process_rect_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
+        """Process a rectangle element."""
+        x = float(elem.get('x', '0'))
+        y = float(elem.get('y', '0'))
+        width = float(elem.get('width', '0'))
+        height = float(elem.get('height', '0'))
+        
+        # Get transform
+        transform = elem.get('transform', '')
+        
+        # Create rectangle points
+        points_data = [
+            (x, y),
+            (x + width, y),
+            (x + width, y + height),
+            (x, y + height)
+        ]
+        
+        points = []
+        for px, py in points_data:
+            # Apply transform if present
+            if transform:
+                px, py = self._apply_transform_to_point(px, py, transform)
+            
+            point = Point(px, py)
+            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
+            points.append(scaled_point)
+        
+        # Close the rectangle
+        if points and points[0] != points[-1]:
+            points.append(points[0])
+        
+        return [{'points': points, 'is_closed': True}]
+
+    def _process_line_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
+        """Process a line element."""
+        x1 = float(elem.get('x1', '0'))
+        y1 = float(elem.get('y1', '0'))
+        x2 = float(elem.get('x2', '0'))
+        y2 = float(elem.get('y2', '0'))
+        
+        # Get transform
+        transform = elem.get('transform', '')
+        
+        points_data = [(x1, y1), (x2, y2)]
+        
+        points = []
+        for px, py in points_data:
+            # Apply transform if present
+            if transform:
+                px, py = self._apply_transform_to_point(px, py, transform)
+            
+            point = Point(px, py)
+            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
+            points.append(scaled_point)
+        
+        return [{'points': points, 'is_closed': False}]
+
+    def _process_polygon_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
+        """Process a polygon element."""
+        points_str = elem.get('points', '')
+        if not points_str:
+            return []
+        
+        # Parse points string (format: "x1,y1 x2,y2 x3,y3 ...")
+        points_data = []
+        for coord_pair in points_str.strip().split():
+            if ',' in coord_pair:
+                x, y = map(float, coord_pair.split(','))
+                points_data.append((x, y))
+        
+        # Get transform
+        transform = elem.get('transform', '')
+        
+        points = []
+        for px, py in points_data:
+            # Apply transform if present
+            if transform:
+                px, py = self._apply_transform_to_point(px, py, transform)
+            
+            point = Point(px, py)
+            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
+            points.append(scaled_point)
+        
+        # Close the polygon (already closed by definition)
+        if points and points[0] != points[-1]:
+            points.append(points[0])
+        
+        return [{'points': points, 'is_closed': True}]
+
+    def _process_polyline_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
+        """Process a polyline element."""
+        points_str = elem.get('points', '')
+        if not points_str:
+            return []
+        
+        # Parse points string (format: "x1,y1 x2,y2 x3,y3 ...")
+        points_data = []
+        for coord_pair in points_str.strip().split():
+            if ',' in coord_pair:
+                x, y = map(float, coord_pair.split(','))
+                points_data.append((x, y))
+        
+        # Get transform
+        transform = elem.get('transform', '')
+        
+        points = []
+        for px, py in points_data:
+            # Apply transform if present
+            if transform:
+                px, py = self._apply_transform_to_point(px, py, transform)
+            
+            point = Point(px, py)
+            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
+            points.append(scaled_point)
+        
+        return [{'points': points, 'is_closed': False}]
     
     def _convert_paths_to_boundaries(self, paths: List[Path], attributes: List[dict],
-                                   viewbox: Optional[Tuple[float, float, float, float]],
-                                   svg_width: float, svg_height: float) -> Dict[Color, List[RawBoundary]]:
+                                viewbox: Optional[Tuple[float, float, float, float]],
+                                svg_width: float, svg_height: float) -> Dict[Color, List[RawBoundary]]:
         """
         Convert all SVG paths to boundary objects grouped by color.
-        SKIP RED PATHS - red should only come from circle elements.
+        svg2paths converts circles/ellipses to paths, but we handle red ones separately.
         """
         boundaries_by_color = {}
         
@@ -139,8 +463,8 @@ class SVGParser(SVGParserInterface):
             try:
                 color = self._extract_color_from_attributes(attr)
                 
-                # Skip red paths - they're handled by circle parsing
-                # svg2paths converts circles to paths, so we skip those
+                # SKIP RED PATHS - these are typically converted circles/ellipses
+                # that we'll handle separately via XML parsing for more flexibility
                 if color == Color.RED:
                     continue
                     
@@ -656,3 +980,128 @@ class SVGParser(SVGParserInterface):
                     cleaned_boundaries[color].append(cleaned_boundary)
         
         return cleaned_boundaries
+
+    def _merge_nearby_boundaries(self, boundaries_by_color: Dict[Color, List[RawBoundary]], 
+                                distance_threshold: float = 0.02) -> Dict[Color, List[RawBoundary]]:
+        """
+        Merge boundaries of the same color that are close to each other and not already closed.
+        
+        Args:
+            boundaries_by_color: Dictionary of boundaries grouped by color
+            distance_threshold: Maximum distance between endpoints to consider for merging (in unit coordinates)
+            
+        Returns:
+            Dictionary with merged boundaries
+        """
+        merged_boundaries = {}
+        
+        for color, boundaries in boundaries_by_color.items():
+            if color == Color.RED:
+                # Don't merge red dots (they're single points)
+                merged_boundaries[color] = boundaries
+                continue
+            
+            # Skip if only one boundary or all boundaries are already closed
+            if len(boundaries) <= 1 or all(b.is_closed for b in boundaries):
+                merged_boundaries[color] = boundaries
+                continue
+            
+            # Create a list of open boundaries to process
+            open_boundaries = [b for b in boundaries if not b.is_closed]
+            closed_boundaries = [b for b in boundaries if b.is_closed]
+            
+            # Try to merge open boundaries
+            merged = self._merge_open_boundaries(open_boundaries, distance_threshold)
+            
+            # Combine merged boundaries with closed ones
+            merged_boundaries[color] = closed_boundaries + merged
+        
+        return merged_boundaries
+    
+    def _merge_open_boundaries(self, open_boundaries: List[RawBoundary], 
+                              distance_threshold: float) -> List[RawBoundary]:
+        """
+        Merge open boundaries by connecting endpoints that are close together.
+        """
+        if not open_boundaries:
+            return []
+        
+        merged_boundaries = []
+        processed = [False] * len(open_boundaries)
+        
+        for i, boundary in enumerate(open_boundaries):
+            if processed[i]:
+                continue
+            
+            # Start a new merged boundary with this one
+            current_points = boundary.points.copy()
+            start_point = current_points[0]
+            end_point = current_points[-1]
+            
+            processed[i] = True
+            merged_with_something = True
+            
+            # Keep trying to merge until no more merges are possible
+            while merged_with_something:
+                merged_with_something = False
+                
+                for j, other_boundary in enumerate(open_boundaries):
+                    if processed[j]:
+                        continue
+                    
+                    other_start = other_boundary.points[0]
+                    other_end = other_boundary.points[-1]
+                    
+                    # Check for possible connections
+                    start_to_start = self._distance_between_points(start_point, other_start)
+                    start_to_end = self._distance_between_points(start_point, other_end)
+                    end_to_start = self._distance_between_points(end_point, other_start)
+                    end_to_end = self._distance_between_points(end_point, other_end)
+                    
+                    min_distance = min(start_to_start, start_to_end, end_to_start, end_to_end)
+                    
+                    if min_distance <= distance_threshold:
+                        # Merge the boundaries
+                        if min_distance == start_to_start:
+                            # Reverse other boundary and prepend to current
+                            other_points_reversed = other_boundary.points[::-1]
+                            current_points = other_points_reversed + current_points[1:]
+                            start_point = other_end  # After reversal, start becomes end
+                        elif min_distance == start_to_end:
+                            # Prepend other boundary to current
+                            current_points = other_boundary.points[:-1] + current_points
+                            start_point = other_start
+                        elif min_distance == end_to_start:
+                            # Append other boundary to current
+                            current_points = current_points[:-1] + other_boundary.points
+                            end_point = other_end
+                        elif min_distance == end_to_end:
+                            # Reverse other boundary and append to current
+                            other_points_reversed = other_boundary.points[::-1]
+                            current_points = current_points[:-1] + other_points_reversed
+                            end_point = other_start  # After reversal, end becomes start
+                        
+                        processed[j] = True
+                        merged_with_something = True
+                        break
+            
+            # Check if the merged boundary is now closed
+            is_closed = self._distance_between_points(start_point, end_point) <= distance_threshold
+            
+            if is_closed:
+                # Ensure proper closure
+                if self._distance_between_points(current_points[0], current_points[-1]) > distance_threshold:
+                    current_points.append(current_points[0])
+            
+            merged_boundary = RawBoundary(
+                points=current_points,
+                color=boundary.color,
+                is_closed=is_closed
+            )
+            merged_boundaries.append(merged_boundary)
+        
+        return merged_boundaries
+    
+    def _distance_between_points(self, p1: Point, p2: Point) -> float:
+        """Calculate Euclidean distance between two points."""
+        return math.sqrt((p2.x - p1.x)**2 + (p2.y - p1.y)**2)

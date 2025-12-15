@@ -2,7 +2,7 @@
 Core use case: Convert SVG to Geometry
 """
 
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from ...core.entities.boundary_curve import BoundaryCurve
 from ...core.entities.point import Point
 from ...core.entities.color import Color
@@ -20,19 +20,21 @@ class ConvertSVGToGeometry:
         self.corner_detector = corner_detector
         self.bezier_fitter = bezier_fitter
     
-    def execute(self, svg_file_path: str) -> Tuple[List[BoundaryCurve], List[Tuple[Point, Color]], dict]:
+    def execute(self, svg_file_path: str) -> Tuple[List[BoundaryCurve], List[Tuple[Point, Color]], dict, dict]:
         """
         Convert SVG file to boundary curves with Bézier representations and wires.
+        Returns: (boundary_curves, wires, colored_boundaries, corner_debug_data)
         """
         # Step 1: Parse SVG to get raw boundaries grouped by color
         colored_boundaries = self.svg_parser.extract_boundaries_by_color(svg_file_path)
         
         boundary_curves = []
         wires = []
+        corner_debug_data = {}
         
         # Process each color group
         for color, raw_boundaries in colored_boundaries.items():
-            for raw_boundary in raw_boundaries:
+            for boundary_idx, raw_boundary in enumerate(raw_boundaries):
                 if color == Color.RED:
                     # For red elements: treat as wires
                     if len(raw_boundary.points) == 1:
@@ -46,8 +48,19 @@ class ConvertSVGToGeometry:
                     # Step 1: Ensure proper closure for closed curves
                     points = self._ensure_proper_closure(raw_boundary.points, raw_boundary.is_closed)
                     
-                    # Step 2: Detect corners in the boundary
-                    corner_indices = self.corner_detector.detect_corners(points)
+                    # Step 2: Detect corners in the boundary with debug data
+                    corner_indices, boundary_debug = self.corner_detector.detect_corners(points)
+                    
+                    # Store debug data with unique key
+                    key = f"{color.name}_boundary_{boundary_idx}"
+                    corner_debug_data[key] = {
+                        'color': color.name,
+                        'boundary_index': boundary_idx,
+                        'points_count': len(points),
+                        'is_closed': raw_boundary.is_closed,
+                        'corner_indices': corner_indices,
+                        'debug': boundary_debug
+                    }
                     
                     # Step 3: Fit piecewise Bézier curves
                     boundary_curve = self.bezier_fitter.fit_boundary_curve(
@@ -63,7 +76,7 @@ class ConvertSVGToGeometry:
                     
                     boundary_curves.append(boundary_curve)
         
-        return boundary_curves, wires, colored_boundaries
+        return boundary_curves, wires, colored_boundaries, corner_debug_data
     
     def _ensure_proper_closure(self, points: List[Point], is_closed: bool) -> List[Point]:
         """

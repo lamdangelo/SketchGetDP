@@ -60,14 +60,14 @@ def main():
         
         # Initialize infrastructure services for SVG conversion
         svg_parser = SVGParser()
-        corner_detector = CornerDetector()
+        corner_detector = CornerDetector(debug_enabled=True)  # Enable debug mode
         bezier_fitter = BezierFitter()
         
         # Initialize SVG conversion use case with dependencies
         converter = ConvertSVGToGeometry(svg_parser, corner_detector, bezier_fitter)
         
-        # Execute the SVG conversion use case
-        boundary_curves, wires, colored_boundaries = converter.execute(args.svg_file)
+        # Execute the SVG conversion use case with debug data collection
+        boundary_curves, wires, colored_boundaries, corner_debug_data = converter.execute(args.svg_file)
         
         # Output conversion results
         print(f"Successfully converted {len(boundary_curves)} boundary curves and {len(wires)} wires:")
@@ -83,16 +83,49 @@ def main():
         if args.debug:
             try:
                 from .interfaces.debug.debug_writer import DebugWriter
+                debug_writer = DebugWriter()
                 
-                DebugWriter()._write_svg_parser_debug_info(
+                # Write SVG parser debug info
+                print(f"\n=== Writing SVG Parser Debug ===")
+                debug_writer._write_svg_parser_debug_info(
                     svg_file_path=args.svg_file,
                     colored_boundaries=colored_boundaries
                 )
-            
-            except ImportError:
-                print("Debug output unavailable: required module not found")
+                
+                # Write corner detection debug info
+                print(f"\n=== Writing Corner Detection Debug ===")
+                print(f"Corner debug data keys: {list(corner_debug_data.keys()) if corner_debug_data else 'None'}")
+                
+                if corner_debug_data:
+                    for key, data in corner_debug_data.items():
+                        print(f"  {key}: {data.get('points_count', 'N/A')} points, "
+                              f"{len(data.get('corner_indices', []))} corners")
+                    
+                    debug_writer._write_corner_detection_debug_info(
+                        svg_file_path=args.svg_file,
+                        corner_debug_data=corner_debug_data,
+                        boundary_curves=boundary_curves
+                    )
+                    
+                    # Write detailed decision process if verbose mode
+                    if hasattr(args, 'verbose') and args.verbose:
+                        print(f"\n=== Writing Detailed Decision Process ===")
+                        debug_writer._write_detailed_decision_process(
+                            svg_file_path=args.svg_file,
+                            corner_debug_data=corner_debug_data
+                        )
+                    
+                    print(f"\n✓ Corner detection debug information generated")
+                    print(f"  Check 'debug/' directory for timestamped files")
+                else:
+                    print("  Warning: No corner debug data available")
+                
+            except ImportError as e:
+                print(f"Debug output unavailable: {e}")
             except Exception as e:
                 print(f"Debug output error: {e}")
+                import traceback
+                traceback.print_exc()
         
         # Handle visualization BEFORE meshing if requested (optional)
         if args.visualize or args.output_plot:
