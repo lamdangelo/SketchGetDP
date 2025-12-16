@@ -89,14 +89,18 @@ svg_to_getdp/
 Configure wire currents, mesh settings, and simulation parameters in `config.yaml`:
 
 ```yaml
-# Coil current directions
-# Positive current flows out of the page
-coil_currents: 
-  coil_1: 1
-  coil_2: -1
-  coil_3: 1
-  coil_4: -1
-
+## Wire cluster configuration
+# Clusters are identified from top to bottom, left to right
+# Each cluster has: number of wires and current direction (1 for positive, -1 for negative)
+# Positive current flows out of the page.
+wire_clusters:
+  cluster_1:
+    wire_count: 3
+    current_sign: 1
+  cluster_2:
+    wire_count: 3
+    current_sign: -1
+    
 # Mesh settings
 mesh_size: 0.1
 
