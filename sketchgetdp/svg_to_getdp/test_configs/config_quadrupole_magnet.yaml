@@ -1,77 +1,26 @@
 # SVG To Getdp Configuration
 
-## wire current directions
+## Wire cluster configuration
+# Clusters are identified from top to bottom, left to right
+# Each cluster has: number of wires and current direction (1 for positive, -1 for negative)
 # Positive current flows out of the page.
-# Counting order: Top to bottom, left to right.
-wire_currents: 
-  wire_1: 1
-  wire_2: 1
-  wire_3: 1
-  wire_4: 1
-  wire_5: 1
-  wire_6: 1
-  wire_7: 1
-  wire_8: 1
-  wire_9: 1
-  wire_10: 1
-  wire_11: 1
-  wire_12: 1
-  wire_13: 1
-  wire_14: 1
-  wire_15: 1
-  wire_16: 1
-  wire_17: -1
-  wire_18: -1
-  wire_19: -1
-  wire_20: -1
-  wire_21: -1
-  wire_22: -1
-  wire_23: -1
-  wire_24: -1
-  wire_25: -1
-  wire_26: -1
-  wire_27: -1
-  wire_28: -1
-  wire_29: -1
-  wire_30: -1
-  wire_31: -1
-  wire_32: -1
-  wire_33: -1
-  wire_34: -1
-  wire_35: -1
-  wire_36: -1
-  wire_37: -1
-  wire_38: -1
-  wire_39: -1
-  wire_40: -1
-  wire_41: -1
-  wire_42: -1
-  wire_43: -1
-  wire_44: -1
-  wire_45: -1
-  wire_46: -1
-  wire_47: -1
-  wire_48: -1
-  wire_49: 1
-  wire_50: 1
-  wire_51: 1
-  wire_52: 1
-  wire_53: 1
-  wire_54: 1
-  wire_55: 1
-  wire_56: 1
-  wire_57: 1
-  wire_58: 1
-  wire_59: 1
-  wire_60: 1
-  wire_61: 1
-  wire_62: 1
-  wire_63: 1
-  wire_64: 1  
+wire_clusters:
+  cluster_1:
+    wire_count: 16
+    current_sign: 1
+  cluster_2:
+    wire_count: 16
+    current_sign: -1
+  cluster_3:
+    wire_count: 16
+    current_sign: -1
+  cluster_4:
+    wire_count: 16
+    current_sign: 1
 
 ## mesh settings
 # Set the mesh size for Gmsh
-mesh_size: 0.075
+mesh_size: 0.1
 
 ## GetDP simulation settings
 # Physical values for the simulation

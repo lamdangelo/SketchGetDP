@@ -1,5 +1,7 @@
 import yaml
+import math
 from typing import List, Tuple, Any
+from dataclasses import dataclass
 from ..core.entities.point import Point
 from ..core.entities.color import Color
 from ..core.entities.physical_group import (
@@ -8,22 +10,44 @@ from ..core.entities.physical_group import (
 )
 from ..interfaces.abstractions.wire_preprocessor_interface import WirePreprocessorInterface
 
+
+@dataclass
+class Wire:
+    """Represents a single wire."""
+    point: Point
+    color: Color
+    original_index: int
+
+
+@dataclass
+class WireCluster:
+    """Represents a cluster of wires that are close to each other."""
+    name: str  # e.g., "cluster_1"
+    wire_count: int
+    current_sign: int  # 1 for positive, -1 for negative
+    wires: List[Wire] = None
+    
+    def __post_init__(self):
+        if self.wires is None:
+            self.wires = []
+
+
 class WirePreprocessor(WirePreprocessorInterface):
     """
-    Preprocessor for wires that sorts them and creates Gmsh entities with physical groups.
-    Prepares wire geometry for meshing but doesn't perform the meshing itself.
+    Preprocessor for wires that clusters them by proximity and creates Gmsh entities.
     """
     
     def __init__(self):
         self.factory = None
-        self.wire_currents = {}
+        self.wire_clusters: List[WireCluster] = []
+        self.all_wires: List[Wire] = []
     
     def prepare_wires(self, 
                       factory: Any,
                       config_path: str,
                       wires: List[Tuple[Point, Color]]) -> dict:
         """
-        Prepare Gmsh entities for wires with physical groups.
+        Prepare Gmsh entities for wires with physical groups using cluster configuration.
         
         Args:
             factory: Gmsh factory object
@@ -34,41 +58,63 @@ class WirePreprocessor(WirePreprocessorInterface):
             Dictionary mapping wire indices to their Gmsh tags and physical groups
         """
         self.factory = factory
-        self.wire_currents = self._load_wire_currents(config_path)
+        self.wire_clusters = self._load_wire_clusters(config_path)
         
         if not wires:
             print("Warning: No wires provided")
             return {}
         
-        sorted_wires = self._sort_wires(wires)
+        # Convert to Wire objects
+        self.all_wires = [Wire(point=p, color=c, original_index=i) 
+                         for i, (p, c) in enumerate(wires)]
         
-        # Collect points by their polarity
+        # First, sort all wires from top to bottom and left to right
+        sorted_wires = self._sort_wires(self.all_wires)
+        
+        # Validate total wire count matches cluster configuration
+        total_cluster_wires = sum(cluster.wire_count for cluster in self.wire_clusters)
+        if total_cluster_wires != len(sorted_wires):
+            raise ValueError(
+                f"Number of wires ({len(sorted_wires)}) doesn't match cluster configuration "
+                f"({total_cluster_wires} wires defined in {len(self.wire_clusters)} clusters)"
+            )
+        
+        # Now cluster the wires based on proximity
+        self._perform_clustering(sorted_wires)
+        
+        # Create Gmsh entities and collect results
         positive_point_tags = []
         negative_point_tags = []
         results = {}
         
-        for i, (point, color) in enumerate(sorted_wires):
-            # Create Gmsh point entity
-            point_tag = self.factory.addPoint(point.x, point.y, 0.0)
-            physical_group = self._get_physical_group_for_wire(i, color)
-            
-            # Store point tag based on polarity
-            if physical_group == DOMAIN_COIL_POSITIVE:
-                positive_point_tags.append(point_tag)
-            elif physical_group == DOMAIN_COIL_NEGATIVE:
-                negative_point_tags.append(point_tag)
-            else:
-                raise ValueError(f"Unknown physical group type: {physical_group}")
-            
-            # Store results
-            results[i] = {
-                'original_index': i,
-                'point': point,
-                'color': color,
-                'gmsh_point_tag': point_tag,
-                'physical_group': physical_group,
-                'wire_name': f"wire_{i + 1}"
-            }
+        for cluster_idx, cluster in enumerate(self.wire_clusters):
+            for wire_idx_in_cluster, wire in enumerate(cluster.wires):
+                # Create Gmsh point entity
+                point_tag = self.factory.addPoint(wire.point.x, wire.point.y, 0.0)
+                
+                # Get physical group based on cluster
+                physical_group = self._get_physical_group_for_cluster(cluster)
+                
+                # Store point tag based on polarity
+                if physical_group == DOMAIN_COIL_POSITIVE:
+                    positive_point_tags.append(point_tag)
+                elif physical_group == DOMAIN_COIL_NEGATIVE:
+                    negative_point_tags.append(point_tag)
+                else:
+                    raise ValueError(f"Unknown physical group type: {physical_group}")
+                
+                # Store results
+                results[wire.original_index] = {
+                    'point': wire.point,
+                    'color': wire.color,
+                    'gmsh_point_tag': point_tag,
+                    'physical_group': physical_group,
+                    'wire_index': wire.original_index,
+                    'wire_name': f"wire_{wire.original_index + 1}",
+                    'cluster_name': cluster.name,
+                    'wire_in_cluster_index': wire_idx_in_cluster,
+                    'cluster_index': cluster_idx
+                }
         
         # Create ONE physical group for all positive points
         if positive_point_tags:
@@ -86,77 +132,194 @@ class WirePreprocessor(WirePreprocessorInterface):
         print(f"Total wires processed: {len(wires)}")
         print(f"  Positive: {len(positive_point_tags)}")
         print(f"  Negative: {len(negative_point_tags)}")
+        print(f"  Clusters: {len(self.wire_clusters)}")
             
         return results
     
-    def _load_wire_currents(self, config_path: str) -> dict:
+    def _load_wire_clusters(self, config_path: str) -> List[WireCluster]:
         """
-        Load wire current directions from the YAML configuration file.
+        Load wire cluster configuration from the YAML configuration file.
         
         Args:
             config_path: Path to the configuration file
             
         Returns:
-            Dictionary mapping wire names to current directions
+            List of WireCluster objects sorted by cluster name
         """
         try:
             with open(config_path, 'r') as file:
                 config = yaml.safe_load(file)
-                return config.get('wire_currents', {})
-        except Exception as e:
-            print(f"Warning: Could not load config file {config_path}: {e}")
-            return {}
+                
+                if 'wire_clusters' not in config:
+                    raise ValueError("Config file must contain 'wire_clusters' section")
+                
+                wire_clusters_config = config['wire_clusters']
+                
+                if not isinstance(wire_clusters_config, dict):
+                    raise ValueError("'wire_clusters' must be a dictionary")
+                
+                # Create clusters from configuration
+                clusters = []
+                for cluster_name, cluster_config in wire_clusters_config.items():
+                    if not isinstance(cluster_config, dict):
+                        raise ValueError(f"Cluster '{cluster_name}' configuration must be a dictionary")
+                    
+                    if 'wire_count' not in cluster_config:
+                        raise ValueError(f"Cluster '{cluster_name}' must have 'wire_count'")
+                    
+                    if 'current_sign' not in cluster_config:
+                        raise ValueError(f"Cluster '{cluster_name}' must have 'current_sign'")
+                    
+                    wire_count = cluster_config['wire_count']
+                    current_sign = cluster_config['current_sign']
+                    
+                    # Validate current_sign
+                    if current_sign not in [1, -1]:
+                        raise ValueError(f"Cluster '{cluster_name}': current_sign must be 1 or -1, got {current_sign}")
+                    
+                    # Validate wire_count
+                    if not isinstance(wire_count, int) or wire_count <= 0:
+                        raise ValueError(f"Cluster '{cluster_name}': wire_count must be a positive integer, got {wire_count}")
+                    
+                    clusters.append(WireCluster(
+                        name=cluster_name,
+                        wire_count=wire_count,
+                        current_sign=current_sign
+                    ))
+                
+                # Sort clusters by name to ensure consistent ordering
+                clusters.sort(key=lambda c: c.name)
+                
+                if not clusters:
+                    raise ValueError("No wire clusters defined in configuration")
+                
+                return clusters
+                
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Configuration file not found: {config_path}")
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML in configuration file: {e}")
     
-    def _sort_wires(self, wires: List[Tuple[Point, Color]]) -> List[Tuple[Point, Color]]:
+    def _sort_wires(self, wires: List[Wire]) -> List[Wire]:
         """
         Sort wires from top to bottom and left to right.
         
         Args:
-            wires: List of (point, color) tuples
+            wires: List of Wire objects
             
         Returns:
             Sorted list of wires
         """
-        return sorted(wires, key=self._wire_sort_key)
-
-    def _wire_sort_key(self, elem: Tuple[Point, Color]) -> Tuple[float, float]:
+        return sorted(wires, key=lambda w: (-w.point.y, w.point.x))
+    
+    def _calculate_distance(self, wire1: Wire, wire2: Wire) -> float:
         """
-        Key function for sorting wires from top to bottom and left to right.
+        Calculate Euclidean distance between two wires.
         
         Args:
-            elem: A tuple containing (Point, Color) where Point has x and y coordinates
+            wire1: First wire
+            wire2: Second wire
             
         Returns:
-            Tuple suitable for sorting: (-y, x) to sort higher y first (top to bottom),
-            then lower x first (left to right)
+            Distance between wires
         """
-        point, color = elem
-        return (-point.y, point.x)
+        dx = wire1.point.x - wire2.point.x
+        dy = wire1.point.y - wire2.point.y
+        return math.sqrt(dx*dx + dy*dy)
     
-    def _get_physical_group_for_wire(self, index: int, color: Color):
+    def _find_closest_wire(self, seed_wire: Wire, available_wires: List[Wire]) -> Wire:
         """
-        Get the appropriate physical group for a wire based on its index and color.
+        Find the wire closest to the seed wire.
         
         Args:
-            index: Wire index (0-based)
-            color: Wire color
+            seed_wire: Reference wire
+            available_wires: List of wires to search from
+            
+        Returns:
+            Closest wire
+        """
+        if not available_wires:
+            return None
+        
+        closest_wire = None
+        min_distance = float('inf')
+        
+        for wire in available_wires:
+            distance = self._calculate_distance(seed_wire, wire)
+            if distance < min_distance:
+                min_distance = distance
+                closest_wire = wire
+        
+        return closest_wire
+    
+    def _perform_clustering(self, sorted_wires: List[Wire]):
+        """
+        Perform proximity-based clustering of wires.
+        
+        Args:
+            sorted_wires: All wires sorted from top to bottom, left to right
+        """
+        available_wires = sorted_wires.copy()
+        
+        for cluster in self.wire_clusters:
+            # Clear any existing wires in cluster
+            cluster.wires.clear()
+            
+            if not available_wires:
+                raise ValueError(f"Not enough wires for cluster {cluster.name}. "
+                               f"Need {cluster.wire_count}, but no wires left.")
+            
+            # Start with the first available wire as seed
+            seed_wire = available_wires[0]
+            cluster.wires.append(seed_wire)
+            available_wires.remove(seed_wire)
+            
+            # Find remaining wires for this cluster
+            while len(cluster.wires) < cluster.wire_count:
+                if not available_wires:
+                    raise ValueError(f"Not enough wires for cluster {cluster.name}. "
+                                   f"Need {cluster.wire_count}, but only have {len(cluster.wires)}.")
+                
+                # Find the closest wire to any wire already in the cluster
+                closest_wire = None
+                min_distance = float('inf')
+                
+                for cluster_wire in cluster.wires:
+                    for candidate_wire in available_wires:
+                        distance = self._calculate_distance(cluster_wire, candidate_wire)
+                        if distance < min_distance:
+                            min_distance = distance
+                            closest_wire = candidate_wire
+                
+                if closest_wire is None:
+                    raise ValueError(f"Cannot find wire close enough for cluster {cluster.name}")
+                
+                cluster.wires.append(closest_wire)
+                available_wires.remove(closest_wire)
+            
+            # Sort wires within cluster for consistent ordering
+            cluster.wires.sort(key=lambda w: (-w.point.y, w.point.x))
+    
+    def _get_physical_group_for_cluster(self, cluster: WireCluster):
+        """
+        Get the appropriate physical group for a cluster.
+        
+        Args:
+            cluster: WireCluster object
             
         Returns:
             Appropriate PhysicalGroup instance
         """
-        wire_name = f"wire_{index + 1}"
-        current_sign = self.wire_currents.get(wire_name)
-        
-        if current_sign == 1:
+        if cluster.current_sign == 1:
             return DOMAIN_COIL_POSITIVE
-        elif current_sign == -1:
+        elif cluster.current_sign == -1:
             return DOMAIN_COIL_NEGATIVE
         else:
-            raise ValueError(f"Invalid current sign {current_sign} for {wire_name}")
+            raise ValueError(f"Invalid current sign {cluster.current_sign} for cluster {cluster.name}")
     
     def get_wire_summary(self, results: dict) -> str:
         """
-        Generate a summary of the created wires.
+        Generate a summary of the created wires with cluster information.
         
         Args:
             results: Results dictionary from prepare_wires
@@ -173,20 +336,98 @@ class WirePreprocessor(WirePreprocessorInterface):
         negative_count = sum(1 for data in results.values() 
                             if data['physical_group'] == DOMAIN_COIL_NEGATIVE)
         
-        summary = ["Wire Summary (sorted order):"]
-        summary.append("-" * 50)
-        summary.append(f"Total wires: {len(results)}")
-        summary.append(f"Positive wires (+): {positive_count} (physical group tag: {DOMAIN_COIL_POSITIVE.value})")
-        summary.append(f"Negative wires (-): {negative_count} (physical group tag: {DOMAIN_COIL_NEGATIVE.value})")
-        summary.append("-" * 50)
+        # Group wires by cluster
+        clusters_summary = {}
+        for data in results.values():
+            cluster_name = data['cluster_name']
+            if cluster_name not in clusters_summary:
+                clusters_summary[cluster_name] = {
+                    'current_sign': data['physical_group'].current_sign,
+                    'wire_count': 0,
+                    'wires': [],
+                    'positions': []
+                }
+            clusters_summary[cluster_name]['wire_count'] += 1
+            clusters_summary[cluster_name]['wires'].append(data['wire_name'])
+            clusters_summary[cluster_name]['positions'].append(
+                (data['point'].x, data['point'].y)
+            )
         
-        for i, data in results.items():
-            polarity = "Positive (+)" if data['physical_group'] == DOMAIN_COIL_POSITIVE else "Negative (-)"
-            summary.append(f"Wire {i+1} ({polarity}):")
-            summary.append(f"  Position: ({data['point'].x:.3f}, {data['point'].y:.3f})")
-            summary.append(f"  Color: {data['color'].name}")
-            summary.append(f"  Wire Name: {data['wire_name']}")
-            summary.append(f"  Gmsh Point Tag: {data['gmsh_point_tag']}")
-            summary.append("")
+        # Calculate cluster statistics
+        for cluster_name, info in clusters_summary.items():
+            positions = info['positions']
+            # Calculate cluster center
+            avg_x = sum(p[0] for p in positions) / len(positions)
+            avg_y = sum(p[1] for p in positions) / len(positions)
+            
+            # Calculate max distance from center (cluster radius)
+            max_distance = 0
+            for x, y in positions:
+                distance = math.sqrt((x - avg_x)**2 + (y - avg_y)**2)
+                max_distance = max(max_distance, distance)
+            
+            info['center'] = (avg_x, avg_y)
+            info['max_radius'] = max_distance
+        
+        summary = ["Wire Summary (clustered by proximity):"]
+        summary.append("=" * 60)
+        summary.append(f"Total wires: {len(results)}")
+        summary.append(f"Positive wires (+): {positive_count}")
+        summary.append(f"Negative wires (-): {negative_count}")
+        summary.append(f"Clusters: {len(clusters_summary)}")
+        summary.append("=" * 60)
+        
+        # Cluster details
+        for cluster_name, cluster_info in sorted(clusters_summary.items()):
+            polarity = "+" if cluster_info['current_sign'] == 1 else "-"
+            center_x, center_y = cluster_info['center']
+            
+            summary.append(f"{cluster_name} ({polarity}): {cluster_info['wire_count']} wires")
+            summary.append(f"  Center: ({center_x:.3f}, {center_y:.3f})")
+            summary.append(f"  Max radius: {cluster_info['max_radius']:.3f}")
+            summary.append(f"  Wires: {', '.join(cluster_info['wires'])}")
+            
+            # Show wire positions within cluster
+            for i, (wire_name, (x, y)) in enumerate(zip(cluster_info['wires'], cluster_info['positions'])):
+                distance_from_center = math.sqrt((x - center_x)**2 + (y - center_y)**2)
+                summary.append(f"    {wire_name}: ({x:.3f}, {y:.3f}) [distance from center: {distance_from_center:.3f}]")
+        
+        summary.append("=" * 60)
+        
+        # Individual wire details (optional, can be commented out for large numbers of wires)
+        if len(results) <= 50:  # Only show individual details for reasonable numbers
+            summary.append("\nIndividual Wire Details:")
+            for i, data in sorted(results.items()):
+                polarity = "+" if data['physical_group'] == DOMAIN_COIL_POSITIVE else "-"
+                summary.append(f"Wire {data['wire_name']} ({data['cluster_name']}, wire {data['wire_in_cluster_index'] + 1}, {polarity}):")
+                summary.append(f"  Position: ({data['point'].x:.3f}, {data['point'].y:.3f})")
+                summary.append(f"  Gmsh Point Tag: {data['gmsh_point_tag']}")
+        
+        return "\n".join(summary)
+    
+    def get_cluster_config_summary(self) -> str:
+        """
+        Generate a summary of the loaded cluster configuration.
+        
+        Returns:
+            Formatted summary string
+        """
+        if not self.wire_clusters:
+            return "No cluster configuration loaded."
+        
+        summary = ["Wire Cluster Configuration:"]
+        summary.append("=" * 40)
+        
+        total_wires = 0
+        for cluster in self.wire_clusters:
+            total_wires += cluster.wire_count
+            polarity = "Positive (+)" if cluster.current_sign == 1 else "Negative (-)"
+            summary.append(f"{cluster.name}:")
+            summary.append(f"  Wires: {cluster.wire_count}")
+            summary.append(f"  Current: {polarity}")
+        
+        summary.append("=" * 40)
+        summary.append(f"Total clusters: {len(self.wire_clusters)}")
+        summary.append(f"Total wires: {total_wires}")
         
         return "\n".join(summary)

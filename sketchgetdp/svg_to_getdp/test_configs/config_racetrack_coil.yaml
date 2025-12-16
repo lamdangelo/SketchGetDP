@@ -1,27 +1,16 @@
 # SVG To Getdp Configuration
 
-## wire current directions
+## Wire cluster configuration
+# Clusters are identified from top to bottom, left to right
+# Each cluster has: number of wires and current direction (1 for positive, -1 for negative)
 # Positive current flows out of the page.
-# Counting order: Top to bottom, left to right.
-wire_currents: 
-  wire_1: 1
-  wire_2: 1
-  wire_3: 1
-  wire_4: -1
-  wire_5: -1
-  wire_6: -1
-  wire_7: 1
-  wire_8: 1
-  wire_9: 1
-  wire_10: -1
-  wire_11: -1
-  wire_12: -1
-  wire_13: 1
-  wire_14: 1
-  wire_15: 1
-  wire_16: -1
-  wire_17: -1
-  wire_18: -1
+wire_clusters:
+  cluster_1:
+    wire_count: 9
+    current_sign: 1
+  cluster_2:
+    wire_count: 9
+    current_sign: -1
 
 ## mesh settings
 # Set the mesh size for Gmsh
