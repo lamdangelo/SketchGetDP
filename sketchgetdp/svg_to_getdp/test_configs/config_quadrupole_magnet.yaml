@@ -71,7 +71,7 @@ wire_currents:
 
 ## mesh settings
 # Set the mesh size for Gmsh
-mesh_size: 0.1
+mesh_size: 0.075
 
 ## GetDP simulation settings
 # Physical values for the simulation
