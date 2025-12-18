@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import math
 
 from ..core.entities.bezier_segment import BezierSegment
@@ -86,7 +86,9 @@ class BezierFitter(BezierFitterInterface):
             if len(segment_points) < 2:
                 continue
                 
-            segment_type = self._classify_segment_type(start_index, end_index, corner_regions, corner_indices)
+            segment_type = self._classify_segment_type(
+                start_index, end_index, corner_regions, corner_indices, points
+            )
             
             if segment_type == "corner_region":
                 fitted_segment = self._fit_constrained_corner_segment(segment_points)
@@ -336,39 +338,249 @@ class BezierFitter(BezierFitterInterface):
         return corner_regions
     
     def _classify_segment_type(self, start_index: int, end_index: int, 
-                            corner_regions: List[Tuple[int, int]], corner_indices: List[int]) -> str:
-        """Classify segment based on its relationship to corner regions."""
-        # Check if segment falls entirely within a corner region
+                             corner_regions: List[Tuple[int, int]], corner_indices: List[int],
+                             points: List[Point]) -> str:
+        """
+        Classify a segment into one of three types: corner region, straight edge, or curved.
+        
+        Classification is performed through a multi-stage process:
+        1. Check if segment lies entirely within a corner region
+        2. Check if segment contains a corner point in its interior
+        3. Analyze geometric straightness for final classification
+        """
+        segment_points = self._extract_segment_points(points, start_index, end_index)
+        
+        if self._is_within_corner_region(start_index, end_index, corner_regions):
+            return "corner_region"
+        
+        if self._contains_interior_corner(start_index, end_index, corner_indices):
+            return "corner_region"
+        
+        is_connecting_corners = self._is_segment_connecting_corners(start_index, end_index, corner_indices)
+        
+        return self._determine_segment_type_by_geometry(segment_points, is_connecting_corners)
+    
+    def _extract_segment_points(self, points: List[Point], start_index: int, end_index: int) -> List[Point]:
+        """Extract points belonging to a segment from the complete point list."""
+        return points[start_index:end_index + 1]
+    
+    def _is_within_corner_region(self, start_index: int, end_index: int, 
+                                corner_regions: List[Tuple[int, int]]) -> bool:
+        """Check if segment lies completely within any corner region."""
         for region_start, region_end in corner_regions:
             if start_index >= region_start and end_index <= region_end:
-                return "corner_region"
+                return True
+        return False
+    
+    def _contains_interior_corner(self, start_index: int, end_index: int, 
+                                 corner_indices: List[int]) -> bool:
+        """
+        Check if segment contains a corner point that is not at its boundary.
         
-        # Check if segment contains any corner
+        Corner points at segment boundaries don't automatically make the segment
+        a corner region - they may be part of straight edges.
+        """
         for corner_index in corner_indices:
-            if start_index <= corner_index <= end_index:
-                return "corner_region"
+            if start_index < corner_index < end_index:
+                return True
+        return False
+    
+    def _determine_segment_type_by_geometry(self, segment_points: List[Point], 
+                                          is_connecting_corners: bool) -> str:
+        """
+        Classify segment based on geometric analysis.
         
-        # Check if segment connects two consecutive corners (likely straight)
-        if self._is_segment_connecting_corners(start_index, end_index, corner_indices):
-            return "straight_edge"
+        Segments connecting corners are classified as straight edges if geometrically straight.
+        Other straight segments are treated as curved for fitting consistency.
+        """
+        if len(segment_points) < 3:
+            return self._classify_short_segment(segment_points, is_connecting_corners)
+        
+        if self._are_points_geometrically_straight(segment_points):
+            return "straight_edge" if is_connecting_corners else "curved"
         
         return "curved"
-        
-    def _is_segment_connecting_corners(self, start_index: int, end_index: int, corner_indices: List[int]) -> bool:
-        """Check if segment directly connects two consecutive corner points."""
+    
+    def _classify_short_segment(self, segment_points: List[Point], 
+                              is_connecting_corners: bool) -> str:
+        """Handle classification for segments with fewer than 3 points."""
+        if is_connecting_corners:
+            return "straight_edge"
+        return "curved"  # Treat as curved for consistency
+    
+    def _is_segment_connecting_corners(self, start_index: int, end_index: int, 
+                                     corner_indices: List[int]) -> bool:
+        """Check if segment endpoints are consecutive corner points."""
         sorted_corners = sorted(corner_indices)
         
-        # Check consecutive corners in open chain
+        # Check for consecutive corners in sequence
         for i in range(len(sorted_corners) - 1):
             if start_index == sorted_corners[i] and end_index == sorted_corners[i + 1]:
                 return True
         
-        # Check closure for closed curves
+        # Check for closure connection (last to first corner)
         if len(sorted_corners) > 1:
             if start_index == sorted_corners[-1] and end_index == sorted_corners[0]:
                 return True
         
         return False
+    
+    def _are_points_geometrically_straight(self, points: List[Point], 
+                                         relative_tolerance: float = 0.005,
+                                         absolute_tolerance: float = 1e-6) -> Tuple[bool, float]:
+        """
+        Determine if points form a straight line within specified tolerances.
+        
+        Uses multiple geometric checks:
+        1. Maximum deviation from ideal line
+        2. Angle consistency between consecutive segments
+        3. Simplified linear approximation check
+        
+        Returns both boolean result and confidence score (0-1).
+        """
+        if len(points) < 3:
+            return True, 1.0
+        
+        max_deviation = self._calculate_max_deviation_from_line(points)
+        segment_length = points[0].distance_to(points[-1])
+        
+        if segment_length == 0:
+            return True, 1.0
+        
+        normalized_deviation = max_deviation / segment_length
+        angle_variance = self._calculate_angle_variance(points)
+        passes_simplified_check = self._are_points_approximately_linear(points, relative_tolerance)
+        
+        meets_all_criteria = (
+            normalized_deviation < relative_tolerance and
+            max_deviation < absolute_tolerance and
+            angle_variance < 0.01 and
+            passes_simplified_check
+        )
+        
+        confidence = self._calculate_straightness_confidence(
+            normalized_deviation, max_deviation, angle_variance, 
+            relative_tolerance, absolute_tolerance
+        )
+        
+        return meets_all_criteria, confidence
+    
+    def _calculate_max_deviation_from_line(self, points: List[Point]) -> float:
+        """Find maximum perpendicular distance of any point from the line between endpoints."""
+        start_point, end_point = points[0], points[-1]
+        max_deviation = 0.0
+        
+        for point in points:
+            deviation = self._calculate_distance_from_line(start_point, end_point, point)
+            max_deviation = max(max_deviation, deviation)
+        
+        return max_deviation
+    
+    def _calculate_straightness_confidence(self, normalized_deviation: float, 
+                                         max_deviation: float, angle_variance: float,
+                                         relative_tolerance: float, 
+                                         absolute_tolerance: float) -> float:
+        """
+        Calculate confidence score (0-1) for straightness assessment.
+        
+        Combines multiple metrics with weighted contributions:
+        - 40%: Normalized deviation score
+        - 30%: Absolute deviation score  
+        - 30%: Angle variance score
+        """
+        deviation_score = 1.0 - normalized_deviation / max(relative_tolerance, 1e-10)
+        absolute_score = 1.0 - max_deviation / max(absolute_tolerance, 1e-10)
+        angle_score = 1.0 - angle_variance / 0.01
+        
+        confidence = (
+            deviation_score * 0.4 +
+            absolute_score * 0.3 + 
+            angle_score * 0.3
+        )
+        
+        return min(1.0, confidence)
+    
+    def _calculate_angle_variance(self, points: List[Point]) -> float:
+        """Calculate variance of angles between consecutive line segments."""
+        if len(points) < 3:
+            return 0.0
+        
+        angles = self._collect_segment_angles(points)
+        
+        if not angles:
+            return 0.0
+        
+        mean_angle = sum(angles) / len(angles)
+        variance = sum((angle - mean_angle) ** 2 for angle in angles) / len(angles)
+        return variance
+    
+    def _collect_segment_angles(self, points: List[Point]) -> List[float]:
+        """Collect angles between consecutive segments formed by three adjacent points."""
+        angles = []
+        
+        for i in range(1, len(points) - 1):
+            angle = self._calculate_angle_at_point(points[i-1], points[i], points[i+1])
+            if angle is not None:
+                angles.append(angle)
+        
+        return angles
+    
+    def _calculate_angle_at_point(self, previous_point: Point, current_point: Point, 
+                                next_point: Point) -> Optional[float]:
+        """Calculate angle formed by three consecutive points at the middle point."""
+        vector_to_previous = Point(current_point.x - previous_point.x, 
+                                 current_point.y - previous_point.y)
+        vector_to_next = Point(next_point.x - current_point.x, 
+                             next_point.y - current_point.y)
+        
+        dot_product = vector_to_previous.x * vector_to_next.x + vector_to_previous.y * vector_to_next.y
+        previous_length = math.sqrt(vector_to_previous.x**2 + vector_to_previous.y**2)
+        next_length = math.sqrt(vector_to_next.x**2 + vector_to_next.y**2)
+        
+        if previous_length < 1e-10 or next_length < 1e-10:
+            return None
+        
+        cosine = max(-1.0, min(1.0, dot_product / (previous_length * next_length)))
+        return math.acos(cosine)
+    
+    def _calculate_rsquared(self, points: List[Point]) -> float:
+        """Calculate R² coefficient for linear regression fit."""
+        if len(points) < 3:
+            return 1.0
+        
+        x_coordinates = [point.x for point in points]
+        y_coordinates = [point.y for point in points]
+        
+        return self._compute_linear_regression_rsquared(x_coordinates, y_coordinates)
+    
+    def _compute_linear_regression_rsquared(self, x_values: List[float], 
+                                          y_values: List[float]) -> float:
+        """Compute R² value for linear regression with robust error handling."""
+        point_count = len(x_values)
+        
+        x_sum = sum(x_values)
+        y_sum = sum(y_values)
+        xy_sum = sum(x_values[i] * y_values[i] for i in range(point_count))
+        x_squared_sum = sum(x ** 2 for x in x_values)
+        y_squared_sum = sum(y ** 2 for y in y_values)
+        
+        numerator = point_count * xy_sum - x_sum * y_sum
+        x_variance_term = point_count * x_squared_sum - x_sum ** 2
+        y_variance_term = point_count * y_squared_sum - y_sum ** 2
+        
+        # Handle colinear or nearly colinear points
+        if x_variance_term <= 0 or y_variance_term <= 0:
+            return 1.0
+        
+        denominator = math.sqrt(x_variance_term * y_variance_term)
+        
+        if denominator == 0:
+            return 1.0
+        
+        correlation = numerator / denominator
+        r_squared = correlation ** 2
+        
+        return max(0.0, min(1.0, r_squared))
     
     def _fit_constrained_corner_segment(self, points: List[Point]) -> BezierSegment:
         """Fit segments in corner regions with heavy constraints to prevent overshooting."""
