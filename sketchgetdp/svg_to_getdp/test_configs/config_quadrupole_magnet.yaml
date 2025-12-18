@@ -20,10 +20,10 @@ wire_clusters:
 
 ## mesh settings
 # Set the mesh size for Gmsh
-mesh_size: 0.1
+mesh_size: 0.075
 
 ## GetDP simulation settings
 # Physical values for the simulation
 physical_values:
-  Isource: 2.5  # Current source in Amperes [A]
+  Isource: 5000  # Current source in Amperes [A]
   nu_iron_linear: 1/(1000 * 4e-7 * pi)  # Iron reluctivity
