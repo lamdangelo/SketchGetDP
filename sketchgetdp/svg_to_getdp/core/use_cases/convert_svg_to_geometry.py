@@ -2,13 +2,13 @@
 Core use case: Convert SVG to Geometry
 """
 
-from typing import List, Tuple, Dict
-from ...core.entities.boundary_curve import BoundaryCurve
-from ...core.entities.point import Point
-from ...core.entities.color import Color
-from ...interfaces.abstractions.svg_parser_interface import SVGParserInterface as SVGParser
-from ...interfaces.abstractions.corner_detector_interface import CornerDetectorInterface as CornerDetector
-from ...interfaces.abstractions.bezier_fitter_interface import BezierFitterInterface as BezierFitter
+from typing import List, Tuple
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.color import Color
+from svg_to_getdp.interfaces.abstractions.svg_parser_interface import SVGParserInterface as SVGParser
+from svg_to_getdp.interfaces.abstractions.corner_detector_interface import CornerDetectorInterface as CornerDetector
+from svg_to_getdp.interfaces.abstractions.bezier_fitter_interface import BezierFitterInterface as BezierFitter
 
 class ConvertSVGToGeometry:
     """
@@ -111,3 +111,4 @@ class ConvertSVGToGeometry:
             
             # Make last control point of last segment match first control point of first segment
             last_segment.control_points[-1] = first_segment.control_points[0]
+            

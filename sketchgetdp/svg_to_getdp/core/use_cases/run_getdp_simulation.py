@@ -1,6 +1,5 @@
 """
 Use case for running GetDP magnetostatic simulations.
-This follows clean architecture principles by separating business logic from external dependencies.
 """
 
 import yaml

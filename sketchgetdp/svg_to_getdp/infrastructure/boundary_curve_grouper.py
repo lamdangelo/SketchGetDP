@@ -1,8 +1,8 @@
 from typing import List, Dict, Tuple
-from ..core.entities.boundary_curve import BoundaryCurve
-from ..core.entities.physical_group import PhysicalGroup, DOMAIN_VA, DOMAIN_VI_IRON, DOMAIN_VI_AIR, BOUNDARY_GAMMA, BOUNDARY_OUT
-from ..core.entities.point import Point
-from ..interfaces.abstractions.boundary_curve_grouper_interface import BoundaryCurveGrouperInterface
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.physical_group import PhysicalGroup, DOMAIN_VA, DOMAIN_VI_IRON, DOMAIN_VI_AIR, BOUNDARY_GAMMA, BOUNDARY_OUT
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.interfaces.abstractions.boundary_curve_grouper_interface import BoundaryCurveGrouperInterface
 
 class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
     """
@@ -59,7 +59,6 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
         
         # Check which Va curves are inside Vi curves
         va_in_vi_flags = [False] * len(boundary_curves)
-        
         for i, (curve, classification) in enumerate(zip(boundary_curves, classifications)):
             if classification == "va":
                 # Check if this Va curve is inside any Vi curve
@@ -80,7 +79,6 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
             
             # Get physical groups
             physical_groups = BoundaryCurveGrouper.get_physical_groups_for_curve(
-                curve=curve,
                 classification=classifications[i],
                 is_outermost=is_outermost,
                 is_va_in_vi=is_va_in_vi
@@ -218,7 +216,7 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
         n = len(boundary_curves)
         containment_map = {i: [] for i in range(n)}
         
-        # Sort curves by area (approximated by bounding box area) from largest to smallest
+        # Calculate curve areas (approximated by bounding box)
         curve_areas = []
         for i, curve in enumerate(boundary_curves):
             min_x, max_x, min_y, max_y = BoundaryCurveGrouper.get_curve_bounding_box(curve)
@@ -278,8 +276,7 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
             raise ValueError(f"Unknown curve color: {curve.color.name}")
     
     @staticmethod
-    def get_physical_groups_for_curve(curve: BoundaryCurve, 
-                                     classification: str,
+    def get_physical_groups_for_curve(classification: str,
                                      is_outermost: bool = False,
                                      is_va_in_vi: bool = False) -> List[PhysicalGroup]:
         """

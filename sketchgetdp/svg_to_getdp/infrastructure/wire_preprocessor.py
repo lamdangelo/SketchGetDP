@@ -2,13 +2,13 @@ import yaml
 import math
 from typing import List, Tuple, Any
 from dataclasses import dataclass
-from ..core.entities.point import Point
-from ..core.entities.color import Color
-from ..core.entities.physical_group import (
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.color import Color
+from svg_to_getdp.core.entities.physical_group import (
     DOMAIN_COIL_POSITIVE, 
     DOMAIN_COIL_NEGATIVE
 )
-from ..interfaces.abstractions.wire_preprocessor_interface import WirePreprocessorInterface
+from svg_to_getdp.interfaces.abstractions.wire_preprocessor_interface import WirePreprocessorInterface
 
 
 @dataclass
@@ -58,13 +58,14 @@ class WirePreprocessor(WirePreprocessorInterface):
             Dictionary mapping wire indices to their Gmsh tags and physical groups
         """
         self.factory = factory
+        # Load wire cluster configuration
         self.wire_clusters = self._load_wire_clusters(config_path)
         
         if not wires:
             print("Warning: No wires provided")
             return {}
         
-        # Convert to Wire objects
+        # Convert given wires to Wire objects
         self.all_wires = [Wire(point=p, color=c, original_index=i) 
                          for i, (p, c) in enumerate(wires)]
         
@@ -227,31 +228,6 @@ class WirePreprocessor(WirePreprocessorInterface):
         dy = wire1.point.y - wire2.point.y
         return math.sqrt(dx*dx + dy*dy)
     
-    def _find_closest_wire(self, seed_wire: Wire, available_wires: List[Wire]) -> Wire:
-        """
-        Find the wire closest to the seed wire.
-        
-        Args:
-            seed_wire: Reference wire
-            available_wires: List of wires to search from
-            
-        Returns:
-            Closest wire
-        """
-        if not available_wires:
-            return None
-        
-        closest_wire = None
-        min_distance = float('inf')
-        
-        for wire in available_wires:
-            distance = self._calculate_distance(seed_wire, wire)
-            if distance < min_distance:
-                min_distance = distance
-                closest_wire = wire
-        
-        return closest_wire
-    
     def _perform_clustering(self, sorted_wires: List[Wire]):
         """
         Perform proximity-based clustering of wires.
@@ -405,29 +381,3 @@ class WirePreprocessor(WirePreprocessorInterface):
         
         return "\n".join(summary)
     
-    def get_cluster_config_summary(self) -> str:
-        """
-        Generate a summary of the loaded cluster configuration.
-        
-        Returns:
-            Formatted summary string
-        """
-        if not self.wire_clusters:
-            return "No cluster configuration loaded."
-        
-        summary = ["Wire Cluster Configuration:"]
-        summary.append("=" * 40)
-        
-        total_wires = 0
-        for cluster in self.wire_clusters:
-            total_wires += cluster.wire_count
-            polarity = "Positive (+)" if cluster.current_sign == 1 else "Negative (-)"
-            summary.append(f"{cluster.name}:")
-            summary.append(f"  Wires: {cluster.wire_count}")
-            summary.append(f"  Current: {polarity}")
-        
-        summary.append("=" * 40)
-        summary.append(f"Total clusters: {len(self.wire_clusters)}")
-        summary.append(f"Total wires: {total_wires}")
-        
-        return "\n".join(summary)

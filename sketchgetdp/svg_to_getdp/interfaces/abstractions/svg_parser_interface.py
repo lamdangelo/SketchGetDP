@@ -5,8 +5,8 @@ Interface for SVG parsing operations.
 from abc import ABC, abstractmethod
 from typing import Dict, List
 from dataclasses import dataclass
-from ...core.entities.point import Point
-from ...core.entities.color import Color
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.color import Color
 
 @dataclass
 class RawBoundary:

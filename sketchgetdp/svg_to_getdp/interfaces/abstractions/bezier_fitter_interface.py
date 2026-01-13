@@ -5,8 +5,8 @@ Defines the contract for fitting Bézier curves to boundary point data.
 
 from abc import ABC, abstractmethod
 from typing import List
-from ...core.entities.point import Point
-from ...core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
 
 class BezierFitterInterface(ABC):
     """

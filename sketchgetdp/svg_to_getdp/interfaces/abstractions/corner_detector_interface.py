@@ -4,7 +4,7 @@ Interface for corner detection operations.
 
 from abc import ABC, abstractmethod
 from typing import List
-from ...core.entities.point import Point
+from svg_to_getdp.core.entities.point import Point
 
 class CornerDetectorInterface(ABC):
     """

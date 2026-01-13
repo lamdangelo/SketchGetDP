@@ -1,536 +1,462 @@
 """
-Test suite for the Corner Detector infrastructure component.
+Unit tests for CornerDetector class.
+
+Tests corner detection functionality on various geometric shapes,
+including rectangles, circles, ellipses, and complex mixed shapes.
 """
-
 import pytest
-import math
-import numpy as np
-from unittest.mock import patch, MagicMock
+from math import cos, sin, pi
 
-from infrastructure.corner_detector import CornerDetector
-from core.entities.point import Point
+from svg_to_getdp.infrastructure.corner_detector import CornerDetector
+from svg_to_getdp.core.entities.point import Point
 
 
 class TestCornerDetector:
-    """Test suite for the CornerDetector class"""
+    """Test suite for CornerDetector class."""
+
+    # ==================== Fixtures ====================
+
+    @pytest.fixture
+    def detector(self):
+        """Create a corner detector instance for testing."""
+        return CornerDetector(debug_enabled=False)
     
-    def setup_method(self):
-        """Set up a fresh detector instance for each test"""
-        self.detector = CornerDetector(num_batches=8, threshold=0.5, window_size=3, min_corner_distance=5)
+    @pytest.fixture
+    def debug_detector(self):
+        """Create a corner detector with debug enabled."""
+        return CornerDetector(debug_enabled=True)
     
-    def test_detector_initialization(self):
-        """Test that detector initializes with correct parameters"""
-        assert self.detector.num_batches == 8
-        assert self.detector.threshold == 0.5
-        assert self.detector.window_size == 3
-        assert self.detector.min_corner_distance == 5
-        
-        # Test with custom parameters
-        custom_detector = CornerDetector(num_batches=16, threshold=0.7, window_size=2, min_corner_distance=3)
-        assert custom_detector.num_batches == 16
-        assert custom_detector.threshold == 0.7
-        assert custom_detector.window_size == 2
-        assert custom_detector.min_corner_distance == 3
+    @pytest.fixture
+    def rectangle_points(self):
+        """Create points for a rectangle shape."""
+        return self.generate_rectangle_points(0, 0, 100, 50)
     
-    def test_detect_corners_insufficient_points(self):
-        """Test that detector raises error for insufficient points"""
-        points = [Point(0, 0), Point(1, 0)]  # Only 2 points
-        
-        with pytest.raises(ValueError, match="Need at least 3 points to detect corners"):
-            self.detector.detect_corners(points)
+    @pytest.fixture
+    def circle_points(self):
+        """Create points for a circle shape."""
+        return self.generate_circle_points(50, 50, 40)
     
-    def test_detect_corners_square(self):
-        """Test corner detection on a square shape"""
-        square_points = self._create_square_points(num_points=40)
-        
-        corners = self.detector.detect_corners(square_points)
-        
-        # Should detect corners for a square
-        assert len(corners) >= 2
-        
-        # Verify that detected corners are near actual corners
-        expected_corners = [Point(0, 0), Point(1, 0), Point(1, 1), Point(0, 1)]
-        self._assert_some_corners_match(corners, expected_corners, tolerance=0.2)
+    @pytest.fixture
+    def ellipse_points(self):
+        """Create points for an ellipse shape."""
+        return self.generate_ellipse_points(50, 50, 40, 30)
     
-    def test_detect_corners_triangle(self):
-        """Test corner detection on a triangle shape"""
-        triangle_points = self._create_triangle_points(num_points=30)
-        
-        corners = self.detector.detect_corners(triangle_points)
-        
-        # Should detect some corners for a triangle
-        assert len(corners) >= 1
-        
-        # Verify approximate corner positions
-        expected_corners = [Point(0, 0), Point(1, 0), Point(0.5, 1)]
-        self._assert_some_corners_match(corners, expected_corners, tolerance=0.3)
+    @pytest.fixture
+    def tear_shape_points(self):
+        """Create points for a tear/drop shape."""
+        return self.generate_tear_shape_points(50, 50)
     
-    def test_detect_corners_rectangle(self):
-        """Test corner detection on a rectangle"""
-        rectangle_points = self._create_rectangle_points(width=2.0, height=1.0, num_points=40)
-        
-        corners = self.detector.detect_corners(rectangle_points)
-        
-        # Should detect some corners for a rectangle
-        assert len(corners) >= 2
-        
-        expected_corners = [Point(0, 0), Point(2, 0), Point(2, 1), Point(0, 1)]
-        self._assert_some_corners_match(corners, expected_corners, tolerance=0.3)
+    @pytest.fixture
+    def peanut_shape_points(self):
+        """Create points for a smooth peanut shape."""
+        return self.generate_peanut_shape_points(50, 50)
     
-    def test_detect_corners_smooth_curve(self):
-        """Test that smooth curves have few corners detected"""
-        circle_points = self._create_circle_points(num_points=50)
-        
-        # Use a detector with higher threshold for smooth curves
-        smooth_detector = CornerDetector(threshold=0.8, min_corner_distance=15)
-        corners = smooth_detector.detect_corners(circle_points)
-        
-        # Should detect very few corners for a smooth circle
-        assert len(corners) <= 8  # Allow more false positives due to discrete sampling
+    @pytest.fixture
+    def sharp_corner_points(self):
+        """Create points with a sharp 90-degree corner."""
+        points = []
+        for i in range(20):
+            points.append(Point(i, 0))
+        for i in range(20):
+            points.append(Point(20, i))
+        return points
     
-    def test_detect_corners_mixed_shape(self):
-        """Test corner detection on a shape with both straight and curved sections"""
-        mixed_points = self._create_mixed_shape_points()
-        
-        corners = self.detector.detect_corners(mixed_points)
-        
-        # Should detect some corners - this shape has clear corners at the transitions
-        assert len(corners) >= 2  # Should find at least the main corners
-    
-    def test_detect_corners_single_batch(self):
-        """Test corner detection with single batch (edge case)"""
-        # Use fewer points than default batch size
-        few_points = [Point(i * 0.2, 0) for i in range(6)]  # 6 points
-        
-        corners = self.detector.detect_corners(few_points)
-        
-        # Should handle this case without error
-        assert isinstance(corners, list)
-    
-    def test_detect_corners_duplicate_points(self):
-        """Test corner detection with duplicate points"""
-        # Create a proper rectangle with enough points for corner detection
-        points = self._create_simple_rectangle_points()
-        
-        corners = self.detector.detect_corners(points)
-        
-        # Should detect at least one corner
-        assert len(corners) >= 1
-    
-    def test_detect_corners_small_shape(self):
-        """Test corner detection on a small shape with few points"""
-        # Create a simple triangle with just enough points
-        points = [
-            Point(0, 0), Point(0.5, 0), Point(1, 0),  # Bottom edge
-            Point(0.8, 0.2), Point(0.6, 0.4), Point(0.4, 0.6), Point(0.2, 0.8),  # Diagonal
-            Point(0, 1), Point(0, 0.8), Point(0, 0.6), Point(0, 0.4), Point(0, 0.2),  # Left edge
-            Point(0, 0)  # Close
+    @pytest.fixture
+    def l_shape_points(self):
+        """Create points forming a simple L-shaped corner."""
+        return [
+            Point(0, 0),
+            Point(1, 0),
+            Point(1, 1)
         ]
-        
-        # Use a detector with smaller window for small shapes
-        small_detector = CornerDetector(window_size=2, min_corner_distance=2, threshold=0.4)
-        corners = small_detector.detect_corners(points)
-        
-        # Should detect at least one corner
-        assert len(corners) >= 1
+
+    # ==================== Helper Methods ====================
+
+    def generate_circle_points(self, center_x, center_y, radius, num_points=200):
+        """Generate points along a circle."""
+        points = []
+        for i in range(num_points):
+            angle = 2 * pi * i / num_points
+            x = center_x + radius * cos(angle)
+            y = center_y + radius * sin(angle)
+            points.append(Point(x, y))
+        return points
     
-    def test_calculate_batch_direction_horizontal(self):
-        """Test direction vector calculation for horizontal line"""
-        points = [Point(0, 0), Point(1, 0), Point(2, 0)]  # Horizontal line
-        
-        direction = self.detector._calculate_batch_direction(points, 0, 3)
-        
-        # Direction should be approximately horizontal
-        assert abs(direction.x) > 0.9  # Mostly horizontal
-        assert abs(direction.y) < 0.1  # Little vertical component
+    def generate_ellipse_points(self, center_x, center_y, width, height, num_points=200):
+        """Generate points along an ellipse."""
+        points = []
+        for i in range(num_points):
+            angle = 2 * pi * i / num_points
+            x = center_x + width * cos(angle)
+            y = center_y + height * sin(angle)
+            points.append(Point(x, y))
+        return points
     
-    def test_calculate_batch_direction_vertical(self):
-        """Test direction vector calculation for vertical line"""
-        points = [Point(0, 0), Point(0, 1), Point(0, 2)]  # Vertical line
+    def generate_rectangle_points(self, x, y, width, height, num_points_per_side=50):
+        """Generate points along a rectangle."""
+        points = []
         
-        direction = self.detector._calculate_batch_direction(points, 0, 3)
+        # Top side
+        for i in range(num_points_per_side):
+            px = x + (width * i / num_points_per_side)
+            py = y
+            points.append(Point(px, py))
         
-        # Direction should be approximately vertical
-        assert abs(direction.x) < 0.1  # Little horizontal component
-        assert abs(direction.y) > 0.9  # Mostly vertical
+        # Right side
+        for i in range(num_points_per_side):
+            px = x + width
+            py = y + (height * i / num_points_per_side)
+            points.append(Point(px, py))
+        
+        # Bottom side
+        for i in range(num_points_per_side):
+            px = x + width - (width * i / num_points_per_side)
+            py = y + height
+            points.append(Point(px, py))
+        
+        # Left side
+        for i in range(num_points_per_side):
+            px = x
+            py = y + height - (height * i / num_points_per_side)
+            points.append(Point(px, py))
+        
+        return points
     
-    def test_calculate_batch_direction_diagonal(self):
-        """Test direction vector calculation for diagonal line"""
-        points = [Point(0, 0), Point(1, 1), Point(2, 2)]  # Diagonal line
-        
-        direction = self.detector._calculate_batch_direction(points, 0, 3)
-        
-        # Direction should be approximately diagonal
-        assert abs(direction.x - direction.y) < 0.2  # Roughly equal components
+    def generate_tear_shape_points(self, center_x, center_y, size=100, num_points=200):
+        """Generate points for a tear/drop shape (has 1 sharp corner at the pointy end)."""
+        points = []
+        for i in range(num_points):
+            angle = 2 * pi * i / num_points
+            r = size * (1 - cos(angle))
+            x = center_x + r * cos(angle)
+            y = center_y + r * sin(angle)
+            points.append(Point(x, y))
+        return points
     
-    def test_calculate_batch_direction_single_segment(self):
-        """Test direction calculation with only two points"""
-        points = [Point(0, 0), Point(1, 1)]
+    def generate_peanut_shape_points(self, center_x, center_y, size=100, num_points=200, waist_factor=0.5):
+        """Generate points for a peanut shape with a distinct waist in the middle."""
+        points = []
+        for i in range(num_points):
+            angle = 2 * pi * i / num_points
+            r = size * (waist_factor + (1 - waist_factor) * (cos(angle) ** 2))
+            x = center_x + r * cos(angle)
+            y = center_y + r * sin(angle)
+            points.append(Point(x, y))
+        return points
+
+    # ==================== Initialization Tests ====================
+
+    def test_initialization_default_params(self):
+        """Test that detector initializes with default parameters."""
+        detector = CornerDetector()
         
-        direction = self.detector._calculate_batch_direction(points, 0, 2)
-        
-        # Should still compute valid direction
-        assert direction.x != 0 or direction.y != 0
+        assert detector.window_size == 15
+        assert detector.direction_change_threshold == pytest.approx(0.8)
+        assert detector.angle_threshold == pytest.approx(pi / 6)
+        assert detector.minimum_corner_distance == 5
+        assert detector.smoothness_threshold == pytest.approx(0.72)
+        assert detector.corner_strength_threshold == pytest.approx(0.45)
+        assert detector.ellipse_aspect_ratio_threshold == pytest.approx(1.2)
+        assert detector.debug_enabled == True
     
-    def test_divide_into_batches(self):
-        """Test batch division algorithm"""
-        points = [Point(i, 0) for i in range(100)]  # 100 points
+    def test_initialization_custom_params(self):
+        """Test that detector initializes with custom parameters."""
+        detector = CornerDetector(
+            window_size=20,
+            direction_change_threshold=1.0,
+            angle_threshold=pi/4,
+            minimum_corner_distance=10,
+            smoothness_threshold=0.8,
+            corner_strength_threshold=0.6,
+            ellipse_aspect_ratio_threshold=1.5,
+            debug_enabled=False
+        )
         
-        batches = self.detector._divide_into_batches(points)
+        assert detector.window_size == 20
+        assert detector.direction_change_threshold == pytest.approx(1.0)
+        assert detector.angle_threshold == pytest.approx(pi/4)
+        assert detector.minimum_corner_distance == 10
+        assert detector.smoothness_threshold == pytest.approx(0.8)
+        assert detector.corner_strength_threshold == pytest.approx(0.6)
+        assert detector.ellipse_aspect_ratio_threshold == pytest.approx(1.5)
+        assert detector.debug_enabled == False
+
+    # ==================== Basic Functionality Tests ====================
+
+    def test_detection_with_empty_boundary_points(self, detector):
+        """Test corner detection with empty boundary points."""
+        corners, debug_data = detector.detect_corners([])
         
-        # Should create correct number of batches
-        assert len(batches) == self.detector.num_batches
-        
-        # Each batch should have approximately equal size
-        batch_sizes = [len(batch) for batch in batches]
-        max_size = max(batch_sizes)
-        min_size = min(batch_sizes)
-        assert max_size - min_size <= 1  # Sizes should differ by at most 1
+        assert corners == []
+        assert isinstance(debug_data, dict)
     
-    def test_divide_into_batches_uneven(self):
-        """Test batch division with uneven point distribution"""
-        points = [Point(i, 0) for i in range(17)]  # 17 points, 8 batches
+    def test_detection_with_small_number_of_points(self, detector):
+        """Test corner detection with very few points."""
+        points = [Point(0, 0), Point(1, 0), Point(1, 1), Point(0, 1)]
+        corners, debug_data = detector.detect_corners(points)
         
-        batches = self.detector._divide_into_batches(points)
-        
-        # Should handle uneven division gracefully
-        assert len(batches) == min(self.detector.num_batches, len(points))
+        assert corners == []
+        assert isinstance(debug_data, dict)
     
-    def test_divide_into_batches_few_points(self):
-        """Test batch division with fewer points than batches"""
-        points = [Point(i, 0) for i in range(5)]  # 5 points, 8 batches requested
+    def test_debug_data_structure(self, debug_detector, rectangle_points):
+        """Test that debug data has the expected structure."""
+        corners, debug_data = debug_detector.detect_corners(rectangle_points)
         
-        batches = self.detector._divide_into_batches(points)
+        assert isinstance(debug_data, dict)
+        assert 'shape_analysis' in debug_data
+        assert 'candidate_detection' in debug_data
+        assert 'strength_calculations' in debug_data
+        assert 'clustering' in debug_data
+        assert 'refinement_details' in debug_data
+        assert 'final_decisions' in debug_data
+        assert 'all_steps' in debug_data
         
-        # Should reduce number of batches to match available points
-        assert len(batches) <= len(points)
-        assert all(len(batch) >= 1 for batch in batches)
+        # Check that all_steps contains messages
+        assert len(debug_data['all_steps']) > 0
+
+    # ==================== Shape Detection Tests ====================
+
+    def test_rectangle_detection(self, detector, rectangle_points):
+        """Test corner detection on a rectangle (should find 4 corners)."""
+        corners, debug_data = detector.detect_corners(rectangle_points)
+        
+        # Should find exactly 4 corners for a rectangle
+        assert len(corners) == 4
+        
+        # Corners should be well-spaced
+        total_points = len(rectangle_points)
+        for i in range(len(corners)):
+            for j in range(i + 1, len(corners)):
+                distance = min(
+                    abs(corners[i] - corners[j]),
+                    total_points - abs(corners[i] - corners[j])
+                )
+                assert distance > 10
     
-    def test_compute_direction_vectors(self):
-        """Test direction vector computation for all batches"""
-        points = self._create_square_points(num_points=40)
-        batches = self.detector._divide_into_batches(points)
+    def test_circle_detection(self, detector, circle_points):
+        """Test corner detection on a circle (should find 0 corners)."""
+        corners, debug_data = detector.detect_corners(circle_points)
         
-        direction_vectors = self.detector._compute_direction_vectors(batches)
-        
-        # Should compute one direction vector per batch
-        assert len(direction_vectors) == len(batches)
-        
-        # All vectors should be normalized (or zero)
-        for vector in direction_vectors:
-            norm = vector.norm()
-            assert norm < 1.1  # Should be <= 1 (allowing small floating point errors)
+        # Circle should have no corners
+        assert len(corners) == 0
     
-    def test_detect_corner_indices_clear_corners(self):
-        """Test corner index detection with clear corners"""
-        # Create direction vectors that change sharply at specific points
-        direction_vectors = [
-            Point(1, 0),   # Right
-            Point(1, 0),   # Right  
-            Point(0, 1),   # Up (sharp change - corner)
-            Point(0, 1),   # Up
-            Point(-1, 0),  # Left (sharp change - corner)
-        ]
+    def test_ellipse_detection(self, detector, ellipse_points):
+        """Test corner detection on an ellipse (should find 0 corners)."""
+        corners, debug_data = detector.detect_corners(ellipse_points)
         
-        corner_indices = self.detector._detect_corner_indices(direction_vectors)
-        
-        # Should detect corners at indices where direction changes sharply
-        assert len(corner_indices) >= 1
+        # Ellipse should have no corners
+        assert len(corners) == 0
     
-    def test_detect_corner_indices_no_corners(self):
-        """Test corner detection with no significant direction changes"""
-        # All vectors point in similar direction
-        direction_vectors = [
-            Point(1, 0), Point(0.9, 0.1), Point(0.8, 0.2),
-            Point(0.7, 0.3), Point(0.6, 0.4)
-        ]
+    def test_tear_shape_detection(self, detector, tear_shape_points):
+        """Test corner detection on a tear/drop shape (should find 1 sharp corner)."""
+        corners, debug_data = detector.detect_corners(tear_shape_points)
         
-        corner_indices = self.detector._detect_corner_indices(direction_vectors)
-        
-        # Should detect no corners with high threshold
-        assert len(corner_indices) == 0
+        # Tear shape should have 1 corner
+        assert len(corners) == 1
+
     
-    def test_detect_corner_indices_threshold_sensitivity(self):
-        """Test corner detection sensitivity to threshold parameter"""
-        direction_vectors = [
-            Point(1, 0), Point(0.7, 0.7),  # 45 degree change
-        ]
+    def test_peanut_shape_detection(self, detector, peanut_shape_points):
+        """Test corner detection on a peanut shape (should find 0 corners)."""
+        corners, debug_data = detector.detect_corners(peanut_shape_points)
         
-        # With low threshold, should detect corner
-        low_threshold_detector = CornerDetector(threshold=0.5)
-        corners_low = low_threshold_detector._detect_corner_indices(direction_vectors)
-        assert len(corners_low) == 1
+        # Smooth peanut shape should have no corners
+        assert len(corners) == 0
+
+    # ==================== Edge Case Tests ====================
+
+    def test_detection_with_large_number_of_points(self, detector):
+        """Test corner detection with a very large number of points."""
+        rectangle_points = self.generate_rectangle_points(0, 0, 100, 50, num_points_per_side=200)
         
-        # With high threshold, should not detect corner
-        high_threshold_detector = CornerDetector(threshold=1.5)
-        corners_high = high_threshold_detector._detect_corner_indices(direction_vectors)
-        assert len(corners_high) == 0
+        corners, debug_data = detector.detect_corners(rectangle_points)
+        
+        # Should still find 4 corners
+        assert len(corners) == 4
+        
+        # All corners should have valid indices
+        for corner_idx in corners:
+            assert 0 <= corner_idx < len(rectangle_points)
+
+    # ==================== Internal Method Tests ====================
+
+    def test_calculate_point_angle(self, detector, l_shape_points):
+        """Test the angle calculation at a point."""
+        angle = detector._calculate_point_angle(l_shape_points, 1, 1)
+        
+        # Should be approximately 90 degrees (π/2)
+        assert angle == pytest.approx(pi/2, rel=0.1)
     
-    def test_map_corner_indices_to_points(self):
-        """Test mapping corner indices back to actual points"""
-        points = [Point(i, 0) for i in range(10)]
-        batches = self.detector._divide_into_batches(points)
-        corner_indices = [2, 5]
+    def test_calculate_corner_strength(self, detector, sharp_corner_points):
+        """Test the corner strength calculation."""
+        strength = detector._calculate_corner_strength(sharp_corner_points, 19)
         
-        corner_points = self.detector._map_corner_indices_to_points(batches, corner_indices)
-        
-        # Should return correct points
-        assert len(corner_points) == 2
+        # Should have reasonable strength
+        assert 0 <= strength <= 1
+        assert strength > 0.3
     
-    def test_direction_difference_calculation(self):
-        """Test calculation of direction vector differences"""
-        vec1 = Point(1, 0)
-        vec2 = Point(0, 1)
+    def test_calculate_candidate_strengths(self, detector, rectangle_points):
+        """Test strength calculation for multiple candidates."""
+        total_points = len(rectangle_points)
+        candidates = [0, total_points//4, total_points//2, 3*total_points//4]
         
-        difference = self.detector._direction_difference(vec1, vec2)
+        strengths = detector._calculate_candidate_strengths(rectangle_points, candidates)
         
-        # Difference between perpendicular vectors should be √2
-        expected_difference = math.sqrt(2)
-        assert abs(difference - expected_difference) < 1e-10
+        assert isinstance(strengths, dict)
+        assert len(strengths) == len(candidates)
+        
+        for idx, strength in strengths.items():
+            assert 0 <= strength <= 1
+            assert idx in candidates
     
-    def test_direction_difference_same_vector(self):
-        """Test direction difference for identical vectors"""
-        vec1 = Point(1, 0)
-        vec2 = Point(1, 0)
+    def test_refine_corner_position(self, detector, sharp_corner_points):
+        """Test corner position refinement."""
+        refined = detector._refine_corner_position(sharp_corner_points, 18)
         
-        difference = self.detector._direction_difference(vec1, vec2)
+        assert refined is not None
+        assert 0 <= refined < len(sharp_corner_points)
+        # Should refine to the actual corner region
+        assert refined in [19, 20, 0]
+
+    # ==================== Parameter Sensitivity Tests ====================
+
+    def test_different_angle_thresholds(self):
+        """Test corner detection with different angle thresholds."""
+        points = []
         
-        # Difference should be 0 for identical vectors
-        assert difference == 0.0
+        # Square with rounded corners
+        for i in range(50):
+            points.append(Point(i, 0))
+        for i in range(10):
+            angle = pi/2 * i/10
+            points.append(Point(50 + 5*cos(angle), 5 + 5*sin(angle)))
+        for i in range(50):
+            points.append(Point(55 - i, 10))
+        
+        # Test with strict threshold
+        strict_detector = CornerDetector(angle_threshold=pi/3, debug_enabled=False)
+        strict_corners, _ = strict_detector.detect_corners(points)
+        
+        # Test with lenient threshold
+        lenient_detector = CornerDetector(angle_threshold=pi/12, debug_enabled=False)
+        lenient_corners, _ = lenient_detector.detect_corners(points)
+        
+        # Lenient should find at least as many corners as strict
+        assert len(lenient_corners) >= len(strict_corners)
     
-    def test_direction_difference_opposite_vectors(self):
-        """Test direction difference for opposite vectors"""
-        vec1 = Point(1, 0)
-        vec2 = Point(-1, 0)
+    def test_different_smoothness_thresholds(self, ellipse_points):
+        """Test ellipse detection with different smoothness thresholds."""
+        # Test with low threshold
+        low_thresh_detector = CornerDetector(smoothness_threshold=0.5, debug_enabled=False)
+        low_corners, _ = low_thresh_detector.detect_corners(ellipse_points)
         
-        difference = self.detector._direction_difference(vec1, vec2)
+        # Test with high threshold
+        high_thresh_detector = CornerDetector(smoothness_threshold=0.9, debug_enabled=False)
+        high_corners, _ = high_thresh_detector.detect_corners(ellipse_points)
         
-        # Difference should be 2 for opposite vectors
-        assert abs(difference - 2.0) < 1e-10
+        # Both should detect ellipse as having no corners
+        assert len(low_corners) == 0
+        assert len(high_corners) == 0
     
-    def test_different_batch_sizes(self):
-        """Test corner detection with different batch sizes"""
-        square_points = self._create_square_points(num_points=40)
+    def test_minimum_corner_distance_enforcement(self):
+        """Test that minimum corner distance is properly enforced."""
+        points = []
         
-        for batch_size in [4, 8, 16]:
-            detector = CornerDetector(num_batches=batch_size)
-            corners = detector.detect_corners(square_points)
-            
-            # Should detect reasonable number of corners for a square
-            assert len(corners) >= 1
-    
-    def test_different_thresholds(self):
-        """Test corner detection with different threshold values"""
-        mixed_points = self._create_mixed_shape_points()
+        # Two close right angles
+        for i in range(10):
+            points.append(Point(i, 0))
+        points.append(Point(10, 0))
+        points.append(Point(10, 1))
+        points.append(Point(10, 2))
+        for i in range(10):
+            points.append(Point(10 - i, 2))
         
-        for threshold in [0.2, 0.5, 1.0]:
-            detector = CornerDetector(threshold=threshold)
-            corners = detector.detect_corners(mixed_points)
-            
-            # Should always return a list (may be empty for high thresholds)
-            assert isinstance(corners, list)
+        # Test with minimum distance of 5
+        detector = CornerDetector(minimum_corner_distance=5, debug_enabled=False)
+        corners, _ = detector.detect_corners(points)
+        
+        # Should only keep one of the two close corners
+        assert len(corners) <= 2
+        
+        if len(corners) == 2:
+            # Check they're sufficiently spaced
+            distance = min(
+                abs(corners[0] - corners[1]),
+                len(points) - abs(corners[0] - corners[1])
+            )
+            assert distance >= 5
+
+    # ==================== Integration Tests ====================
+
+    def test_consistency_across_runs(self, detector, rectangle_points):
+        """Test that corner detection is consistent across multiple runs."""
+        results = []
+        for _ in range(5):
+            corners, _ = detector.detect_corners(rectangle_points)
+            results.append(sorted(corners))
+        
+        # All results should be the same
+        for i in range(1, len(results)):
+            assert results[i] == results[0]
     
-    def test_performance_large_dataset(self):
-        """Test performance with larger datasets"""
-        # Create a larger point set
-        n_points = 1000
-        points = [Point(math.cos(2 * math.pi * i / n_points), 
-                        math.sin(2 * math.pi * i / n_points)) 
-                 for i in range(n_points)]
+    def test_closed_shape_handling(self, detector):
+        """Test that closed shapes are handled correctly."""
+        points = self.generate_rectangle_points(0, 0, 100, 50, num_points_per_side=25)
+        closed_points = points + [points[0]]
+        
+        corners, debug_data = detector.detect_corners(closed_points)
+        
+        # Should find 4 corners
+        assert len(corners) == 4
+        
+        # Check corners are reasonable
+        for corner_idx in corners:
+            assert 0 <= corner_idx < len(closed_points)
+    
+    def test_scale_invariance(self):
+        """Test that corner detection works at different scales."""
+        # Generate small rectangle
+        small_points = self.generate_rectangle_points(0, 0, 10, 5, num_points_per_side=20)
+        
+        # Generate large rectangle
+        large_points = self.generate_rectangle_points(0, 0, 100, 50, num_points_per_side=20)
+        
+        detector = CornerDetector(debug_enabled=False)
+        
+        small_corners, _ = detector.detect_corners(small_points)
+        large_corners, _ = detector.detect_corners(large_points)
+        
+        # Both should find 4 corners
+        assert len(small_corners) == 4
+        assert len(large_corners) == 4
+
+    # ==================== Performance Tests ====================
+
+    def test_performance_with_many_points(self, detector):
+        """Test that detector handles large number of points efficiently."""
+        dense_points = self.generate_circle_points(50, 50, 40, num_points=1000)
         
         import time
         start_time = time.time()
-        
-        corners = self.detector.detect_corners(points)
-        
+        corners, debug_data = detector.detect_corners(dense_points)
         end_time = time.time()
-        duration = end_time - start_time
         
         # Should complete in reasonable time
-        assert duration < 2.0  # 2 seconds should be plenty
+        assert end_time - start_time < 2.0
         
-        # Result should be valid
-        assert isinstance(corners, list)
-    
-    def test_reproducibility(self):
-        """Test that corner detection produces consistent results"""
-        points = self._create_complex_shape_points()
+        # Circle should have no corners
+        assert len(corners) == 0
+
+    # ==================== Error Handling Tests ====================
+
+    def test_invalid_input_types(self, detector):
+        """Test handling of invalid input types."""
+        invalid_points = [Point(0, 0), "not a point", Point(1, 1)]
         
-        # Detect corners multiple times
-        corners1 = self.detector.detect_corners(points)
-        corners2 = self.detector.detect_corners(points)
-        
-        # Should produce identical results
-        assert len(corners1) == len(corners2)
-    
-    def test_numerical_stability(self):
-        """Test numerical stability with very small/large coordinates"""
-        # Very small coordinates
-        small_points = [Point(i * 1e-10, i * 1e-10) for i in range(10)]
-        small_corners = self.detector.detect_corners(small_points)
-        assert isinstance(small_corners, list)
-        
-        # Very large coordinates  
-        large_points = [Point(i * 1e10, i * 1e10) for i in range(10)]
-        large_corners = self.detector.detect_corners(large_points)
-        assert isinstance(large_corners, list)
-    
-    def test_error_handling_invalid_points(self):
-        """Test error handling with invalid point data"""
-        # Points with NaN values - Point class already prevents this
-        # So we test with valid points instead
-        valid_points = [Point(0, 0), Point(1, 1), Point(2, 2)]
-        corners = self.detector.detect_corners(valid_points)
-        assert isinstance(corners, list)
-    
-    # Helper methods for creating test shapes
-    
-    def _create_simple_rectangle_points(self) -> list[Point]:
-        """Create a simple rectangle with enough points for corner detection."""
-        return [
-            Point(0, 0), Point(0.2, 0), Point(0.4, 0), Point(0.6, 0), Point(0.8, 0), Point(1, 0),
-            Point(1, 0.2), Point(1, 0.4), Point(1, 0.6), Point(1, 0.8), Point(1, 1),
-            Point(0.8, 1), Point(0.6, 1), Point(0.4, 1), Point(0.2, 1), Point(0, 1),
-            Point(0, 0.8), Point(0, 0.6), Point(0, 0.4), Point(0, 0.2), Point(0, 0)
-        ]
-    
-    def _create_square_points(self, num_points: int = 40) -> list[Point]:
-        """Create points representing a square boundary."""
-        points = []
-        side_length = num_points // 4
-        
-        # Bottom edge
-        for i in range(side_length):
-            points.append(Point(i/side_length, 0))
-        
-        # Right edge
-        for i in range(side_length):
-            points.append(Point(1, i/side_length))
-        
-        # Top edge
-        for i in range(side_length):
-            points.append(Point(1 - i/side_length, 1))
-        
-        # Left edge
-        for i in range(side_length):
-            points.append(Point(0, 1 - i/side_length))
-        
-        return points
-    
-    def _create_triangle_points(self, num_points: int = 30) -> list[Point]:
-        """Create points representing a triangle boundary."""
-        points = []
-        side_length = num_points // 3
-        
-        # First edge
-        for i in range(side_length):
-            x = i / side_length
-            y = 0
-            points.append(Point(x, y))
-        
-        # Second edge
-        for i in range(side_length):
-            x = 1 - i / side_length
-            y = i / side_length
-            points.append(Point(x, y))
-        
-        # Third edge
-        for i in range(side_length):
-            x = 0
-            y = 1 - i / side_length
-            points.append(Point(x, y))
-        
-        return points
-    
-    def _create_rectangle_points(self, width: float = 2.0, height: float = 1.0, num_points: int = 40) -> list[Point]:
-        """Create points representing a rectangle boundary."""
-        points = []
-        side_length = num_points // 4
-        
-        # Bottom edge
-        for i in range(side_length):
-            points.append(Point(i/side_length * width, 0))
-        
-        # Right edge
-        for i in range(side_length):
-            points.append(Point(width, i/side_length * height))
-        
-        # Top edge
-        for i in range(side_length):
-            points.append(Point(width - i/side_length * width, height))
-        
-        # Left edge
-        for i in range(side_length):
-            points.append(Point(0, height - i/side_length * height))
-        
-        return points
-    
-    def _create_circle_points(self, num_points: int = 50) -> list[Point]:
-        """Create points representing a circle boundary."""
-        points = []
-        for i in range(num_points):
-            angle = 2 * math.pi * i / num_points
-            x = 0.5 + 0.5 * math.cos(angle)
-            y = 0.5 + 0.5 * math.sin(angle)
-            points.append(Point(x, y))
-        return points
-    
-    def _create_mixed_shape_points(self, num_points: int = 80) -> list[Point]:
-        """Create points representing a shape with both straight and curved sections that has clear corners."""
-        points = []
-        quarter_points = num_points // 4
-        
-        # Bottom edge - straight line with clear corners at ends
-        for i in range(quarter_points):
-            points.append(Point(i/quarter_points, 0))
-        
-        # Right edge - quarter circle (smooth curve)
-        for i in range(quarter_points):
-            angle = math.pi/2 * i / quarter_points
-            x = 1 + 0.3 * math.cos(angle)
-            y = 0.3 * math.sin(angle)
-            points.append(Point(x, y))
-        
-        # Top edge - straight line with clear corners
-        for i in range(quarter_points):
-            points.append(Point(1 - i/quarter_points, 0.3))
-        
-        # Left edge - straight line back to start (clear corners)
-        for i in range(quarter_points):
-            points.append(Point(0, 0.3 - i/quarter_points * 0.3))
-        
-        return points
-    
-    def _create_complex_shape_points(self, num_points: int = 100) -> list[Point]:
-        """Create points representing a complex shape with multiple corners."""
-        points = []
-        segment_points = num_points // 6
-        
-        # Hexagon-like shape
-        for i in range(6):
-            angle = 2 * math.pi * i / 6
-            next_angle = 2 * math.pi * (i + 1) / 6
-            
-            for j in range(segment_points):
-                t = j / segment_points
-                current_angle = angle + t * (next_angle - angle)
-                x = 0.5 + 0.4 * math.cos(current_angle)
-                y = 0.5 + 0.4 * math.sin(current_angle)
-                points.append(Point(x, y))
-        
-        return points
-    
-    def _assert_some_corners_match(self, detected_corners: list[Point], expected_corners: list[Point], tolerance: float = 0.1):
-        """
-        Helper method to assert that at least some detected corners match expected corners within tolerance.
-        """
-        # Check that each expected corner has a close detected corner
-        found_matches = 0
-        for expected in expected_corners:
-            for detected in detected_corners:
-                if detected.distance_to(expected) <= tolerance:
-                    found_matches += 1
-                    break
-        
-        # Should find at least some expected corners
-        assert found_matches >= 1, f"Found only {found_matches} out of {len(expected_corners)} expected corners"
+        try:
+            corners, debug_data = detector.detect_corners(invalid_points)
+            # If it doesn't fail, verify structure
+            assert isinstance(corners, list)
+            assert isinstance(debug_data, dict)
+        except (AttributeError, TypeError, IndexError):
+            # Any of these would be reasonable errors
+            pass

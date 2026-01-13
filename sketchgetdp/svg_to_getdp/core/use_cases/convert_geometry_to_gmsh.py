@@ -7,9 +7,9 @@ import yaml
 from typing import List, Tuple, Dict, Any
 from pathlib import Path
 
-from ...core.entities.boundary_curve import BoundaryCurve
-from ...core.entities.point import Point
-from ...core.entities.color import Color
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.color import Color
 
 from sketchgetdp.geometry.gmsh_toolbox import (
     initialize_gmsh,
@@ -18,9 +18,9 @@ from sketchgetdp.geometry.gmsh_toolbox import (
     show_model,
     finalize_gmsh
 )
-from ...interfaces.abstractions.boundary_curve_grouper_interface import BoundaryCurveGrouperInterface as BoundaryCurveGrouper
-from ...interfaces.abstractions.boundary_curve_mesher_interface import BoundaryCurveMesherInterface as BoundaryCurveMesher
-from ...interfaces.abstractions.wire_preprocessor_interface import WirePreprocessorInterface as WirePreprocessor
+from svg_to_getdp.interfaces.abstractions.boundary_curve_grouper_interface import BoundaryCurveGrouperInterface as BoundaryCurveGrouper
+from svg_to_getdp.interfaces.abstractions.boundary_curve_mesher_interface import BoundaryCurveMesherInterface as BoundaryCurveMesher
+from svg_to_getdp.interfaces.abstractions.wire_preprocessor_interface import WirePreprocessorInterface as WirePreprocessor
 
 
 class ConvertGeometryToGmsh:

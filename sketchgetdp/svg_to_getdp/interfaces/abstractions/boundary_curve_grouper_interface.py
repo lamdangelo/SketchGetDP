@@ -5,8 +5,8 @@ Defines the contract for analyzing containment relationships and assigning physi
 
 from abc import ABC, abstractmethod
 from typing import List, Dict
-from ...core.entities.boundary_curve import BoundaryCurve
-from ...core.entities.physical_group import PhysicalGroup
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.physical_group import PhysicalGroup
 
 class BoundaryCurveGrouperInterface(ABC):
     """

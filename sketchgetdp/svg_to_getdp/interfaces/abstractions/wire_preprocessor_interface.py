@@ -6,8 +6,8 @@ Prepares wire geometry for meshing but doesn't perform the meshing itself.
 
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Dict, Any
-from ...core.entities.point import Point
-from ...core.entities.color import Color
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.color import Color
 
 class WirePreprocessorInterface(ABC):
     """

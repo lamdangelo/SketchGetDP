@@ -4,10 +4,10 @@ Converts BoundaryCurve objects into Gmsh geometry with proper physical groups.
 """
 
 from typing import List, Dict, Any
-from ..core.entities.boundary_curve import BoundaryCurve
-from ..core.entities.point import Point
-from ..core.entities.physical_group import PhysicalGroup
-from ..interfaces.abstractions.boundary_curve_mesher_interface import BoundaryCurveMesherInterface
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.physical_group import PhysicalGroup
+from svg_to_getdp.interfaces.abstractions.boundary_curve_mesher_interface import BoundaryCurveMesherInterface
 
 class BoundaryCurveMesher(BoundaryCurveMesherInterface):
     """
@@ -70,7 +70,7 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         for idx in self._processing_order:
             boundary_curve = boundary_curves[idx]
             props = properties[idx]
-            self._collect_physical_groups(idx, boundary_curve, props)
+            self._collect_physical_groups(idx, props)
         
         # After all curves and surfaces are created, assign physical groups
         self._assign_physical_groups()
@@ -165,9 +165,7 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
                 curve_tags.append(line_tag)
                 segment_start_idx += 1  # Only move by 1 since degree 1 has 2 points
             else:
-                # Higher degree Bézier curve
-                # For 2nd order Bézier: 3 points
-                # For higher degrees: degree + 1 points
+                # For Higher degree Bézier curve: degree + 1 points
                 segment_point_tags = point_tags[segment_start_idx:segment_start_idx + segment.degree + 1]
                 
                 # Create compound Bézier curve in Gmsh
@@ -175,17 +173,16 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
                 curve_tags.append(bezier_tag)
                 segment_start_idx += segment.degree  # Move by degree for next segment
         
-        # Store curve tags for this specific boundary curve
+        # Store curve tags
         self._curve_tags_per_boundary[idx] = curve_tags
         
-        # Step 3: Define curve loop (for this boundary curve)
+        # Step 3: Define curve loop
         curve_loop_tag = self.factory.addCurveLoop(curve_tags)
         self._curve_loops[idx] = curve_loop_tag
         
         # Step 4: Create curve loop list (main loop + holes)
         curve_loops_for_surface = [curve_loop_tag]
         
-        # Add hole loops if specified
         if "holes" in properties and properties["holes"]:
             hole_indices = properties["holes"]
             if isinstance(hole_indices, list):
@@ -197,7 +194,6 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
                         raise ValueError(
                             f"Hole boundary curve {hole_idx} referenced by "
                             f"boundary curve {idx} has not been created yet. "
-                            f"Make sure holes are defined correctly."
                         )
         
         # Step 5: Define plane surface
@@ -214,26 +210,22 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         Returns:
             Gmsh point tag
         """
-        # Use Point's __eq__ method for comparison with proper tolerance
         for existing_point, tag in self._created_points.items():
-            if existing_point == point:  # Uses math.isclose() with default tolerances
+            if existing_point == point:
                 return tag
-        
-        # Point doesn't exist, create it
+
         point_tag = self.factory.addPoint(point.x, point.y, 0.0)
         self._created_points[point] = point_tag
         return point_tag
     
     def _collect_physical_groups(self, 
                                idx: int, 
-                               boundary_curve: BoundaryCurve, 
                                properties: Dict[str, Any]) -> None:
         """
         Collect entities that belong to each physical group type.
         
         Args:
             idx: Index of the boundary curve
-            boundary_curve: BoundaryCurve object
             properties: Dictionary with "physical_groups" key
         """
         if "physical_groups" not in properties:
@@ -312,34 +304,6 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
             raise KeyError(f"No curve loop found for boundary curve index {idx}")
         return self._curve_loops[idx]
     
-    def get_surface_tag(self, idx: int) -> int:
-        """
-        Get the surface tag for a boundary curve.
-        
-        Args:
-            idx: Index of the boundary curve
-            
-        Returns:
-            Gmsh surface tag
-        """
-        if idx not in self._surface_tags:
-            raise KeyError(f"No surface found for boundary curve index {idx}")
-        return self._surface_tags[idx]
-    
-    def get_curve_tags(self, idx: int) -> List[int]:
-        """
-        Get the curve tags for a boundary curve.
-        
-        Args:
-            idx: Index of the boundary curve
-            
-        Returns:
-            List of Gmsh curve tags
-        """
-        if idx not in self._curve_tags_per_boundary:
-            raise KeyError(f"No curve tags found for boundary curve index {idx}")
-        return self._curve_tags_per_boundary[idx].copy()
-    
     def get_physical_group_summary(self) -> str:
         """
         Generate a summary of created physical groups.
@@ -366,16 +330,3 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         
         summary.append("-" * 50)
         return "\n".join(summary)
-    
-    def clear(self) -> None:
-        """
-        Clear internal state.
-        """
-        self._point_tags.clear()
-        self._curve_loops.clear()
-        self._surface_tags.clear()
-        self._created_points.clear()
-        self._curve_tags_per_boundary.clear()
-        self._processing_order.clear()
-        self._physical_groups_by_type['boundary'].clear()
-        self._physical_groups_by_type['domain'].clear()

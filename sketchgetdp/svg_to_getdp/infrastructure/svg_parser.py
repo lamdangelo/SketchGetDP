@@ -9,9 +9,9 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 from svgpathtools import svg2paths, Path, Line, CubicBezier, QuadraticBezier, Arc
 
-from ..core.entities.point import Point
-from ..core.entities.color import Color
-from ..interfaces.abstractions.svg_parser_interface import SVGParserInterface
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.color import Color
+from svg_to_getdp.interfaces.abstractions.svg_parser_interface import SVGParserInterface
 
 
 @dataclass
@@ -51,14 +51,13 @@ class SVGParser(SVGParserInterface):
         Strategy:
         1. Use svg2paths for all non-red paths (green, blue, black)
         2. Parse circle/ellipse elements directly from XML for red structures
-           (more flexible approach that works with arbitrary red structures)
         """
         try:
             # Parse the XML tree to access all elements
             tree = ET.parse(svg_file_path)
             root = tree.getroot()
             
-            # Parse paths with svgpathtools (will skip red paths in _convert_paths_to_boundaries)
+            # Parse paths with svgpathtools
             paths, attributes = svg2paths(svg_file_path)
             
         except Exception as e:
@@ -68,21 +67,37 @@ class SVGParser(SVGParserInterface):
         svg_width, svg_height = self._get_svg_dimensions(root)
         
         # Parse paths from svgpathtools
-        # Red paths will be handled separately via XML parsing for more flexibility
+        # Skip red paths here - handled separately
         path_boundaries = self._convert_paths_to_boundaries(
             paths, attributes, viewbox, svg_width, svg_height
         )
         
-        # Parse circle AND ellipse elements separately - ONLY FOR RED
-        # This gives us more flexibility to handle arbitrary red structures
         red_dots_boundaries = {}
         
         # Find all circle and ellipse elements
         for element_name in ['circle', 'ellipse']:
             for elem in root.iter(f'{self.namespace}{element_name}'):
                 try:
+                    # Get color from multiple possible attributes
                     style = elem.get('style', '')
-                    color = self._extract_color_from_style(style)
+                    stroke = elem.get('stroke', '')
+                    fill = elem.get('fill', '')
+                    
+                    color = None
+                    
+                    # Try to extract color from different sources
+                    # Priority: stroke attribute -> fill attribute -> style attribute
+                    if stroke and stroke != 'none':
+                        color = self._parse_color_string(stroke)
+                    elif fill and fill != 'none':
+                        color = self._parse_color_string(fill)
+                    elif style:
+                        color = self._extract_color_from_style(style)
+                    
+                    # Skip if no valid color found
+                    if not color:
+                        print(f"WARNING: No valid color found for {element_name} element")
+                        continue
                     
                     # Only process red circles/ellipses - skip other colors
                     if color != Color.RED:
@@ -129,333 +144,12 @@ class SVGParser(SVGParserInterface):
         merged_boundaries = self._merge_nearby_boundaries(clean_boundaries, distance_threshold=0.02)
         
         return merged_boundaries
-
-    def _process_all_svg_elements(self, root: ET.Element, 
-                                viewbox: Optional[Tuple[float, float, float, float]],
-                                svg_width: float, svg_height: float) -> Dict[Color, List[RawBoundary]]:
-        """
-        Process all SVG elements to extract boundaries by color.
-        Handles paths, circles, ellipses, rectangles, lines, polygons, and polylines.
-        """
-        boundaries_by_color = {}
-        
-        # Element types to process
-        element_types = [
-            'path', 'circle', 'ellipse', 'rect', 
-            'line', 'polygon', 'polyline'
-        ]
-        
-        for element_name in element_types:
-            for elem in root.iter(f'{self.namespace}{element_name}'):
-                try:
-                    # Skip elements with no style or display:none
-                    style = elem.get('style', '')
-                    if 'display:none' in style:
-                        continue
-                        
-                    # Extract color from the element
-                    color = self._extract_color_from_element(elem)
-                    
-                    # Process the element based on its type
-                    if element_name == 'path':
-                        boundaries = self._process_path_element(elem, viewbox, svg_width, svg_height)
-                    elif element_name == 'circle':
-                        boundaries = self._process_circle_element(elem, viewbox, svg_width, svg_height)
-                    elif element_name == 'ellipse':
-                        boundaries = self._process_ellipse_element(elem, viewbox, svg_width, svg_height)
-                    elif element_name == 'rect':
-                        boundaries = self._process_rect_element(elem, viewbox, svg_width, svg_height)
-                    elif element_name == 'line':
-                        boundaries = self._process_line_element(elem, viewbox, svg_width, svg_height)
-                    elif element_name == 'polygon':
-                        boundaries = self._process_polygon_element(elem, viewbox, svg_width, svg_height)
-                    elif element_name == 'polyline':
-                        boundaries = self._process_polyline_element(elem, viewbox, svg_width, svg_height)
-                    else:
-                        continue
-                    
-                    # Add boundaries with their color
-                    for boundary in boundaries:
-                        boundary_with_color = RawBoundary(
-                            points=boundary['points'],
-                            color=color,
-                            is_closed=boundary['is_closed']
-                        )
-                        
-                        if color not in boundaries_by_color:
-                            boundaries_by_color[color] = []
-                        boundaries_by_color[color].append(boundary_with_color)
-                    
-                except Exception as e:
-                    print(f"WARNING: Failed to process {element_name} element: {e}")
-                    continue
-        
-        return boundaries_by_color
-
-    def _extract_color_from_element(self, elem: ET.Element) -> Color:
-        """
-        Extract color from an SVG element.
-        Checks style, fill, and stroke attributes.
-        """
-        # Get style attribute
-        style = elem.get('style', '')
-        if style:
-            try:
-                return self._extract_color_from_style(style)
-            except:
-                pass
-        
-        # Check fill attribute directly
-        fill = elem.get('fill', '')
-        if fill and fill != 'none':
-            return self._parse_color_string(fill)
-        
-        # Check stroke attribute directly
-        stroke = elem.get('stroke', '')
-        if stroke and stroke != 'none':
-            return self._parse_color_string(stroke)
-        
-        # Raise error if no color found
-        raise ValueError(f"No color found in element: {elem.tag}")
-
-    def _process_circle_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
-        """Process a circle element."""
-        cx = float(elem.get('cx', '0'))
-        cy = float(elem.get('cy', '0'))
-        r = float(elem.get('r', '0'))
-        
-        # Get transform
-        transform = elem.get('transform', '')
-        
-        # Sample points around the circle
-        points = []
-        num_samples = 32  # Number of points to sample around the circle
-        
-        for i in range(num_samples):
-            angle = 2 * math.pi * i / num_samples
-            x = cx + r * math.cos(angle)
-            y = cy + r * math.sin(angle)
-            
-            # Apply transform if present
-            if transform:
-                x, y = self._apply_transform_to_point(x, y, transform)
-            
-            point = Point(x, y)
-            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
-            points.append(scaled_point)
-        
-        # Close the circle
-        if points and points[0] != points[-1]:
-            points.append(points[0])
-        
-        return [{'points': points, 'is_closed': True}]
-
-    def _process_ellipse_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
-        """Process an ellipse element."""
-        cx = float(elem.get('cx', '0'))
-        cy = float(elem.get('cy', '0'))
-        rx = float(elem.get('rx', '0'))
-        ry = float(elem.get('ry', '0'))
-        
-        # Get transform
-        transform = elem.get('transform', '')
-        
-        # Sample points around the ellipse
-        points = []
-        num_samples = 32  # Number of points to sample around the ellipse
-        
-        for i in range(num_samples):
-            angle = 2 * math.pi * i / num_samples
-            x = cx + rx * math.cos(angle)
-            y = cy + ry * math.sin(angle)
-            
-            # Apply transform if present
-            if transform:
-                x, y = self._apply_transform_to_point(x, y, transform)
-            
-            point = Point(x, y)
-            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
-            points.append(scaled_point)
-        
-        # Close the ellipse
-        if points and points[0] != points[-1]:
-            points.append(points[0])
-        
-        return [{'points': points, 'is_closed': True}]
-
-    def _process_path_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
-        """Process a path element using svgpathtools."""
-        # Extract path data
-        d = elem.get('d', '')
-        if not d:
-            return []
-        
-        # Get transform
-        transform = elem.get('transform', '')
-        
-        try:
-            # Create a simple path from the d attribute
-            from svgpathtools import parse_path
-            path = parse_path(d)
-            
-            # Apply transform if present
-            if transform:
-                # Note: svgpathtools has transform methods, but for simplicity
-                # we'll apply to sampled points
-                pass
-            
-            # Convert path to points
-            points = []
-            for segment in path:
-                segment_points = self._sample_segment_points(segment, self.samples_per_segment)
-                points.extend(segment_points)
-            
-            points = self._remove_consecutive_duplicate_points(points)
-            
-            # Scale points
-            scaled_points = [self._scale_to_unit_coordinates(p, viewbox, svg_width, svg_height) for p in points]
-            
-            # Apply transform to scaled points
-            if transform:
-                transformed_points = []
-                for point in scaled_points:
-                    x, y = self._apply_transform_to_point(point.x, point.y, transform)
-                    transformed_points.append(Point(x, y))
-                scaled_points = transformed_points
-            
-            # Check if path is closed
-            is_closed = self._is_path_closed(path)
-            
-            return [{'points': scaled_points, 'is_closed': is_closed}]
-            
-        except Exception as e:
-            print(f"WARNING: Failed to parse path: {e}")
-            return []
-
-    def _process_rect_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
-        """Process a rectangle element."""
-        x = float(elem.get('x', '0'))
-        y = float(elem.get('y', '0'))
-        width = float(elem.get('width', '0'))
-        height = float(elem.get('height', '0'))
-        
-        # Get transform
-        transform = elem.get('transform', '')
-        
-        # Create rectangle points
-        points_data = [
-            (x, y),
-            (x + width, y),
-            (x + width, y + height),
-            (x, y + height)
-        ]
-        
-        points = []
-        for px, py in points_data:
-            # Apply transform if present
-            if transform:
-                px, py = self._apply_transform_to_point(px, py, transform)
-            
-            point = Point(px, py)
-            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
-            points.append(scaled_point)
-        
-        # Close the rectangle
-        if points and points[0] != points[-1]:
-            points.append(points[0])
-        
-        return [{'points': points, 'is_closed': True}]
-
-    def _process_line_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
-        """Process a line element."""
-        x1 = float(elem.get('x1', '0'))
-        y1 = float(elem.get('y1', '0'))
-        x2 = float(elem.get('x2', '0'))
-        y2 = float(elem.get('y2', '0'))
-        
-        # Get transform
-        transform = elem.get('transform', '')
-        
-        points_data = [(x1, y1), (x2, y2)]
-        
-        points = []
-        for px, py in points_data:
-            # Apply transform if present
-            if transform:
-                px, py = self._apply_transform_to_point(px, py, transform)
-            
-            point = Point(px, py)
-            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
-            points.append(scaled_point)
-        
-        return [{'points': points, 'is_closed': False}]
-
-    def _process_polygon_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
-        """Process a polygon element."""
-        points_str = elem.get('points', '')
-        if not points_str:
-            return []
-        
-        # Parse points string (format: "x1,y1 x2,y2 x3,y3 ...")
-        points_data = []
-        for coord_pair in points_str.strip().split():
-            if ',' in coord_pair:
-                x, y = map(float, coord_pair.split(','))
-                points_data.append((x, y))
-        
-        # Get transform
-        transform = elem.get('transform', '')
-        
-        points = []
-        for px, py in points_data:
-            # Apply transform if present
-            if transform:
-                px, py = self._apply_transform_to_point(px, py, transform)
-            
-            point = Point(px, py)
-            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
-            points.append(scaled_point)
-        
-        # Close the polygon (already closed by definition)
-        if points and points[0] != points[-1]:
-            points.append(points[0])
-        
-        return [{'points': points, 'is_closed': True}]
-
-    def _process_polyline_element(self, elem: ET.Element, viewbox, svg_width, svg_height) -> List[Dict]:
-        """Process a polyline element."""
-        points_str = elem.get('points', '')
-        if not points_str:
-            return []
-        
-        # Parse points string (format: "x1,y1 x2,y2 x3,y3 ...")
-        points_data = []
-        for coord_pair in points_str.strip().split():
-            if ',' in coord_pair:
-                x, y = map(float, coord_pair.split(','))
-                points_data.append((x, y))
-        
-        # Get transform
-        transform = elem.get('transform', '')
-        
-        points = []
-        for px, py in points_data:
-            # Apply transform if present
-            if transform:
-                px, py = self._apply_transform_to_point(px, py, transform)
-            
-            point = Point(px, py)
-            scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
-            points.append(scaled_point)
-        
-        return [{'points': points, 'is_closed': False}]
     
     def _convert_paths_to_boundaries(self, paths: List[Path], attributes: List[dict],
                                 viewbox: Optional[Tuple[float, float, float, float]],
                                 svg_width: float, svg_height: float) -> Dict[Color, List[RawBoundary]]:
         """
-        Convert all SVG paths to boundary objects grouped by color.
-        svg2paths converts circles/ellipses to paths, but we handle red ones separately.
+        Convert all SVG paths to boundary objects grouped by color. Red paths are skipped here.
         """
         boundaries_by_color = {}
         
@@ -810,7 +504,7 @@ class SVGParser(SVGParserInterface):
         red_representations = {
             '#ff0000', 'red', '#f00', '#ff0000ff',
             'rgb(255,0,0)', 'rgb(255, 0, 0)',
-            '#fa0000'  # Added for your SVG
+            '#fa0000'
         }
         return color_string in red_representations
     
@@ -819,7 +513,7 @@ class SVGParser(SVGParserInterface):
         green_representations = {
             '#00ff00', 'green', '#0f0', '#00ff00ff',
             'rgb(0,255,0)', 'rgb(0, 255, 0)',
-            '#00f700'  # Added for your SVG
+            '#00f700'
         }
         return color_string in green_representations
     
@@ -828,7 +522,7 @@ class SVGParser(SVGParserInterface):
         blue_representations = {
             '#0000ff', 'blue', '#00f', '#0000ffff',
             'rgb(0,0,255)', 'rgb(0, 0, 255)',
-            '#0000fb'  # Added for your SVG
+            '#0000fb'
         }
         return color_string in blue_representations
     
@@ -1104,4 +798,4 @@ class SVGParser(SVGParserInterface):
     
     def _distance_between_points(self, p1: Point, p2: Point) -> float:
         """Calculate Euclidean distance between two points."""
-        return math.sqrt((p2.x - p1.x)**2 + (p2.y - p1.y)**2)
+        return p1.distance_to(p2)

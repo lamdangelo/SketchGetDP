@@ -1,16 +1,14 @@
 from dataclasses import dataclass
 from typing import List, Tuple
-from ...core.entities.bezier_segment import BezierSegment
-from ...core.entities.color import Color
-from ...core.entities.point import Point
+from svg_to_getdp.core.entities.bezier_segment import BezierSegment
+from svg_to_getdp.core.entities.color import Color
+from svg_to_getdp.core.entities.point import Point
 
 
 @dataclass
 class BoundaryCurve:
     """
     Represents a complete boundary curve composed of multiple Bézier segments.
-    Corresponds to the piecewise Bézier curve representation 𝒞(t) from the paper.
-    Color property is preserved from SVG parsing for later potential assignment.
     """
     
     bezier_segments: List[BezierSegment]
@@ -23,7 +21,7 @@ class BoundaryCurve:
         if len(self.bezier_segments) < 1:
             raise ValueError("Boundary curve must have at least one Bézier segment")
         
-        # Very tolerant check - only warn for significant gaps
+        # Warn for significant gaps
         for i in range(len(self.bezier_segments) - 1):
             current_segment = self.bezier_segments[i]
             next_segment = self.bezier_segments[i + 1]
@@ -59,7 +57,6 @@ class BoundaryCurve:
     def evaluate(self, t: float) -> Point:
         """
         Evaluate the boundary curve at parameter t ∈ [0,1].
-        Implements the piecewise evaluation from equation (5) in the paper.
         """
         if not 0 <= t <= 1:
             raise ValueError("Parameter t must be in [0,1]")
@@ -76,7 +73,6 @@ class BoundaryCurve:
     def derivative(self, t: float) -> Point:
         """
         Compute the derivative of the boundary curve at parameter t ∈ [0,1].
-        Implements the derivative calculation from equations (8) and (31).
         """
         if not 0 <= t <= 1:
             raise ValueError("Parameter t must be in [0,1]")

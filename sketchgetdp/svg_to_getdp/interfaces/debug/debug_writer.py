@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from typing import List
-from ...core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
 
 
 class DebugWriter:

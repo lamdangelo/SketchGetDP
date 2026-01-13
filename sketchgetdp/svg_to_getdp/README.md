@@ -66,14 +66,14 @@ svg_to_getdp/
 │ ├── entities/ # Domain models
 │ └── use_cases/ # Application services
 ├── infrastructure/ # External concerns
-│ ├── svg_parser/ # SVG parsing
-│ ├── corner_detector/ # Corner detection
-│ ├── bezier_fitter/ # Bézier fitting
-│ ├── boundary_curve_grouper/ # Wire grouping
-│ ├── boundary_curve_mesher/ # Boundary meshing
-│ └── wire_preprocessor/ # Wire preprocessing
+│ ├── svg_parser.py # SVG parsing
+│ ├── corner_detector.py # Corner detection
+│ ├── bezier_fitter.py # Bézier fitting
+│ ├── boundary_curve_grouper.py # Wire grouping
+│ ├── boundary_curve_mesher.py # Boundary meshing
+│ └── wire_preprocessor # Wire preprocessing
 ├── interfaces/ # Adapters
-│ ├── arg_parser/ # Command line interface
+│ ├── arg_parser.py # Command line interface
 │ ├── abstractions/ # Dependency interfaces
 │ └── debug/ # Debug tools
 ├── tests/ # Unit tests
@@ -106,7 +106,7 @@ mesh_size: 0.1
 
 # GetDP simulation settings
 physical_values:
-  Isource: 2.5  # Current source in Amperes [A]
+  Isource: 10000 # Current source in Amperes [A]
   nu_iron_linear: 1/(1000 * 4e-7 * pi)  # Iron reluctivity
 ```
 

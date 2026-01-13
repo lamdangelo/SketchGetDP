@@ -4,7 +4,7 @@ Presentation layer service for visualizing Bézier curves and boundary curves.
 
 import matplotlib.pyplot as plt
 from typing import List
-from ...core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
 
 
 class CurveVisualizer:

@@ -5,7 +5,7 @@ Defines the contract for converting BoundaryCurve objects into Gmsh geometry.
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
-from ...core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
 
 
 class BoundaryCurveMesherInterface(ABC):

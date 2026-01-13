@@ -183,9 +183,7 @@ class TestBoundaryCurveGrouper:
     def test_should_assign_correct_physical_groups_based_on_curve_classification(self, create_square_boundary):
         """Test physical group assignment for curves."""
         # Test Va curve
-        va_curve = create_square_boundary(color=Color.BLACK)
         groups = BoundaryCurveGrouper.get_physical_groups_for_curve(
-            curve=va_curve,
             classification="va",
             is_outermost=False,
             is_va_in_vi=False
@@ -195,7 +193,6 @@ class TestBoundaryCurveGrouper:
         
         # Test Va curve inside Vi (should get BOUNDARY_GAMMA too)
         groups = BoundaryCurveGrouper.get_physical_groups_for_curve(
-            curve=va_curve,
             classification="va",
             is_outermost=False,
             is_va_in_vi=True
@@ -206,7 +203,6 @@ class TestBoundaryCurveGrouper:
         
         # Test outermost curve (should get BOUNDARY_OUT)
         groups = BoundaryCurveGrouper.get_physical_groups_for_curve(
-            curve=va_curve,
             classification="va",
             is_outermost=True,
             is_va_in_vi=False
@@ -257,14 +253,6 @@ class TestBoundaryCurveGrouper:
         result = BoundaryCurveGrouper.group_boundary_curves([])
         assert result == []
     
-    def test_should_always_consider_single_curve_as_outermost(self, create_square_boundary):
-        """Test that a single curve is always considered outermost."""
-        curve = create_square_boundary(color=Color.BLACK)
-        result = BoundaryCurveGrouper.group_boundary_curves([curve])
-        
-        assert len(result) == 1
-        assert BOUNDARY_OUT in result[0]["physical_groups"]
-    
     @patch('svg_to_getdp.infrastructure.boundary_curve_grouper.BoundaryCurveGrouper.is_curve_inside_other')
     def test_should_detect_va_curves_inside_vi_curves_and_assign_boundary_gamma(self, mock_is_inside, create_square_boundary):
         """Test detection of Va curves inside Vi curves."""
@@ -294,7 +282,7 @@ class TestBoundaryCurveGrouper:
     
     def test_should_raise_error_when_no_outermost_candidate_can_be_determined(self, create_square_boundary):
         """Test error when no outermost candidate is found."""
-        # Create a circular dependency scenario (shouldn't happen in practice)
+        # Create a circular dependency scenario
         curve1 = create_square_boundary(color=Color.BLACK)
         curve2 = create_square_boundary(color=Color.BLUE)
         

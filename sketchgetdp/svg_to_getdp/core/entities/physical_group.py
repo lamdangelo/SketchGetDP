@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
-from ...core.entities.color import Color
+from svg_to_getdp.core.entities.color import Color
 
 
 @dataclass(frozen=True)
@@ -62,7 +62,7 @@ class PhysicalGroup:
         return self.group_type == "domain"
 
 
-# Module-level constants instead of class variables
+# Module-level constants
 DOMAIN_VI_IRON = PhysicalGroup(
     name="domain_Vi_iron",
     description="Iron domain in Vi region",

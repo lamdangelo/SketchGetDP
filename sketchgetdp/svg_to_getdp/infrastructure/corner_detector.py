@@ -1,12 +1,12 @@
 import numpy as np
 from typing import List, Optional, Tuple, Dict
-from ..core.entities.point import Point
-from ..interfaces.abstractions.corner_detector_interface import CornerDetectorInterface
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.interfaces.abstractions.corner_detector_interface import CornerDetectorInterface
 
 
 class CornerDetector(CornerDetectorInterface):
     """
-    Enhanced corner detector with improved handling for complex shapes like crosses.
+    Corner detector with handling for complex shapes like crosses.
     Returns structured debug data along with corner indices.
     
     The detector uses multiple complementary methods to identify corners:
@@ -141,7 +141,7 @@ class CornerDetector(CornerDetectorInterface):
             self._record_debug_step(debug_data, "Early ellipse detection: returning no corners")
             return True
         
-        # Enhanced smoothness check for larger shapes
+        # Smoothness check for larger shapes
         if point_count > 30:
             smoothness_score, is_ellipse = self._calculate_shape_smoothness(boundary_points)
             
@@ -149,7 +149,7 @@ class CornerDetector(CornerDetectorInterface):
             debug_data['shape_analysis']['is_ellipse'] = is_ellipse
             
             if is_ellipse:
-                debug_data['shape_analysis']['ellipse_reason'] = "Enhanced smoothness detection"
+                debug_data['shape_analysis']['ellipse_reason'] = "Smoothness detection"
                 self._record_debug_step(debug_data, 
                     f"Ellipse detection (smoothness={smoothness_score:.3f}): returning no corners")
                 return True
@@ -164,11 +164,6 @@ class CornerDetector(CornerDetectorInterface):
         if point_count < self.window_size * 2:
             debug_data['shape_analysis']['too_small'] = True
             self._record_debug_step(debug_data, f"Shape too small: {point_count} points")
-            
-            if point_count < 30 and self._is_likely_small_ellipse(boundary_points):
-                debug_data['shape_analysis']['small_ellipse'] = True
-                self._record_debug_step(debug_data, "Small shape detected as ellipse: returning no corners")
-                return True
             
             return True
         
@@ -295,9 +290,6 @@ class CornerDetector(CornerDetectorInterface):
         """Group nearby candidate corners to avoid duplicates."""
         if not candidates or len(candidates) == 1:
             return [candidates] if candidates else []
-        
-        # Calculate candidate strengths for clustering decisions
-        candidate_strengths = self._calculate_candidate_strengths(boundary_points, candidates)
         
         # Cluster candidates that are close to each other
         clusters = self._form_candidate_clusters(boundary_points, candidates)

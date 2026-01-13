@@ -2,10 +2,10 @@ import numpy as np
 from typing import List, Tuple, Optional
 import math
 
-from ..core.entities.bezier_segment import BezierSegment
-from ..core.entities.boundary_curve import BoundaryCurve
-from ..core.entities.point import Point
-from ..interfaces.abstractions.bezier_fitter_interface import BezierFitterInterface
+from svg_to_getdp.core.entities.bezier_segment import BezierSegment
+from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.interfaces.abstractions.bezier_fitter_interface import BezierFitterInterface
 
 class BezierFitter(BezierFitterInterface):
     """
@@ -62,7 +62,7 @@ class BezierFitter(BezierFitterInterface):
             base_segments = max(200, point_count // 10)
             
         minimum_segments = 100
-        maximum_segments = min(200, point_count // 10)
+        maximum_segments = min(200, max(1, point_count // 10))
         
         return min(maximum_segments, max(minimum_segments, base_segments))
     
@@ -543,45 +543,6 @@ class BezierFitter(BezierFitterInterface):
         cosine = max(-1.0, min(1.0, dot_product / (previous_length * next_length)))
         return math.acos(cosine)
     
-    def _calculate_rsquared(self, points: List[Point]) -> float:
-        """Calculate R² coefficient for linear regression fit."""
-        if len(points) < 3:
-            return 1.0
-        
-        x_coordinates = [point.x for point in points]
-        y_coordinates = [point.y for point in points]
-        
-        return self._compute_linear_regression_rsquared(x_coordinates, y_coordinates)
-    
-    def _compute_linear_regression_rsquared(self, x_values: List[float], 
-                                          y_values: List[float]) -> float:
-        """Compute R² value for linear regression with robust error handling."""
-        point_count = len(x_values)
-        
-        x_sum = sum(x_values)
-        y_sum = sum(y_values)
-        xy_sum = sum(x_values[i] * y_values[i] for i in range(point_count))
-        x_squared_sum = sum(x ** 2 for x in x_values)
-        y_squared_sum = sum(y ** 2 for y in y_values)
-        
-        numerator = point_count * xy_sum - x_sum * y_sum
-        x_variance_term = point_count * x_squared_sum - x_sum ** 2
-        y_variance_term = point_count * y_squared_sum - y_sum ** 2
-        
-        # Handle colinear or nearly colinear points
-        if x_variance_term <= 0 or y_variance_term <= 0:
-            return 1.0
-        
-        denominator = math.sqrt(x_variance_term * y_variance_term)
-        
-        if denominator == 0:
-            return 1.0
-        
-        correlation = numerator / denominator
-        r_squared = correlation ** 2
-        
-        return max(0.0, min(1.0, r_squared))
-    
     def _fit_constrained_corner_segment(self, points: List[Point]) -> BezierSegment:
         """Fit segments in corner regions with heavy constraints to prevent overshooting."""
         if len(points) <= 2:
@@ -594,11 +555,11 @@ class BezierFitter(BezierFitterInterface):
             # Use midpoint for nearly linear segments
             midpoint = Point((start_point.x + end_point.x) / 2, (start_point.y + end_point.y) / 2)
         else:
-            # Find point with maximum deviation but constrain it near the line
+            # Find point with maximum deviation and its projection onto the line
             max_deviation_point = self._find_point_with_max_deviation(points, start_point, end_point)
             line_projection = self._project_point_to_line(start_point, end_point, max_deviation_point)
             
-            # Keep deviation point close to the line to prevent distortion
+            # Blend between actual deviation point and its projection (70% actual, 30% projected) to prevent distortion
             constraint_strength = 0.7
             midpoint = Point(
                 max_deviation_point.x * constraint_strength + line_projection.x * (1 - constraint_strength),
