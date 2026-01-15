@@ -139,7 +139,6 @@ python -m svg_to_getdp --simulation-only existing_mesh.msh --config config.yaml
 ### Additional Options
 - `--mesh-name my_mesh`: Specify output mesh name
 - `--no-gui`: Run in batch mode without GUI
-- `--visualize`: Display interactive visualization of internal datastructures
 - `--output-plot curves.png`: Save visualization to file
 - `--debug`: Enable debug output
 

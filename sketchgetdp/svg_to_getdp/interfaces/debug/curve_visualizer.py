@@ -11,52 +11,6 @@ class CurveVisualizer:
     """Presentation service for visualizing boundary curves, Bézier segments, and raw polylines."""
     
     @staticmethod
-    def display_boundary_curves(boundary_curves: List[BoundaryCurve], 
-                            wires: List[tuple] = None,
-                            colored_boundaries: dict = None,
-                            show_control_points: bool = True, 
-                            show_corners: bool = True,
-                            show_raw_boundaries: bool = True) -> None:
-        """
-        Display boundary curves in an interactive plot.
-        
-        Args:
-            boundary_curves: List of BoundaryCurve objects to plot
-            wires: List of (Point, Color) tuples for wires
-            colored_boundaries: Dictionary of {color: List[RawBoundary]} objects to plot
-            show_control_points: Whether to show Bézier control points
-            show_corners: Whether to show detected corners
-            show_raw_boundaries: Whether to show raw polyline boundaries
-        """
-        plt.figure(figsize=(12, 10))
-        
-        # Track which colors we've already added to the legend
-        color_in_legend = {}
-        corner_color_in_legend = {}
-        
-        # Plot each boundary curve
-        for i, curve in enumerate(boundary_curves):
-            CurveVisualizer._plot_single_curve(curve, i, show_control_points, show_corners,
-                                            color_in_legend, corner_color_in_legend)
-        
-        # Plot colored boundaries (polylines) if requested
-        if colored_boundaries and show_raw_boundaries:
-            CurveVisualizer._plot_colored_boundaries(colored_boundaries)
-        
-        # Plot point wires
-        if wires:
-            CurveVisualizer._plot_wires(wires)
-        
-        plt.grid(True, alpha=0.3)
-        plt.axis('equal')
-        plt.title('Bézier Curves and Polylines from SVG Conversion')
-        plt.xlabel('X coordinate')
-        plt.ylabel('Y coordinate')
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
-    
-    @staticmethod
     def _plot_single_curve(curve: BoundaryCurve, curve_index: int, 
                         show_control_points: bool, show_corners: bool,
                         color_in_legend: dict, corner_color_in_legend: dict):

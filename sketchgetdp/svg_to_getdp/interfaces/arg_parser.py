@@ -10,7 +10,6 @@ class ArgParser:
             epilog=(
                 'Examples:\n'
                 '  python -m svg_to_getdp drawing.svg\n'
-                '  python -m svg_to_getdp sketch.svg --visualize\n'
                 '  python -m svg_to_getdp design.svg --output-plot curves.png\n'
                 '  python -m svg_to_getdp design.svg --mesh-name my_mesh --no-gui\n'
                 '  python -m svg_to_getdp design.svg --run-simulation\n'
@@ -77,13 +76,6 @@ class ArgParser:
             help='Save text results to specified file (intermediate results)'
         )
         
-        # Visualization options
-        parser.add_argument(
-            '--visualize', '-v', 
-            action='store_true',
-            help='Display interactive visualization of Bézier curves'
-        )
-        
         parser.add_argument(
             '--output-plot',
             help='Save visualization plot to specified file (instead of displaying)'
@@ -134,8 +126,3 @@ class ArgParser:
             # If run-simulation is used with no SVG file (shouldn't happen due to above check)
             if args.run_simulation and not args.svg_file:
                 parser.error("SVG file is required for --run-simulation")
-        
-        # Check for visualization conflicts
-        if args.visualize and args.output_plot:
-            parser.error("Cannot use both --visualize and --output-plot. "
-                       "Use --visualize for interactive display or --output-plot to save to file.")

@@ -128,7 +128,7 @@ def main():
                 traceback.print_exc()
         
         # Handle visualization BEFORE meshing if requested (optional)
-        if args.visualize or args.output_plot:
+        if args.output_plot:
             try:
                 from .interfaces.debug.curve_visualizer import CurveVisualizer
                 
@@ -143,17 +143,6 @@ def main():
                         show_corners=True
                     )
                     print(f"Visualization saved to: {args.output_plot}")
-                elif args.visualize:
-                    # Display interactive plot
-                    print("\nGenerating visualization...")
-                    CurveVisualizer.display_boundary_curves(
-                        boundary_curves=boundary_curves,
-                        wires=wires,
-                        colored_boundaries=colored_boundaries,
-                        show_control_points=colored_boundaries,
-                        show_corners=True,
-                        show_raw_boundaries=True
-                    )
                     
             except ImportError:
                 print("Visualization unavailable: matplotlib not installed")
