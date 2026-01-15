@@ -82,7 +82,7 @@ class ConvertGeometryToGmsh:
             show_gui: Whether to open Gmsh GUI after meshing (default: True)
             
         Returns:
-            Dictionary containing results from all processing steps
+            Dictionary containing results from all processing steps including debug data
             
         Raises:
             ValueError: If input parameters are invalid
@@ -118,7 +118,8 @@ class ConvertGeometryToGmsh:
             "output_filename": output_filename,
             "mesh_size": mesh_size,
             "dimension": dimension,
-            "config_file": config_file_path
+            "config_file": config_file_path,
+            "debug_data": {}
         }
         
         try:
@@ -146,10 +147,17 @@ class ConvertGeometryToGmsh:
             grouping_result = self.boundary_curve_grouper.group_boundary_curves(boundary_curves)
             results["grouping_result"] = grouping_result
             
+            # Store debug data
+            results["debug_data"]["boundary_curve_grouping"] = {
+                "boundary_curves": boundary_curves,
+                "grouping_result": grouping_result,
+                "grouper_instance": self.boundary_curve_grouper
+            }
+            
             # Step 6: Mesh boundary curves
             print("Meshing boundary curves...")
-            self.boundary_curve_mesher.mesh_boundary_curves(factory, boundary_curves, grouping_result)
-            results["boundary_mesher"] = self.boundary_curve_mesher
+            meshing_result = self.boundary_curve_mesher.mesh_boundary_curves(factory, boundary_curves, grouping_result)
+            results["meshing_result"] = meshing_result
             
             # Step 7: Synchronize before meshing
             factory.synchronize()

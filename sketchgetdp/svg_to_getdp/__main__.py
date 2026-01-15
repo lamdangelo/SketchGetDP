@@ -79,7 +79,7 @@ def main():
         for i, (point, color) in enumerate(wires):
             print(f"  Wire {i+1}: at ({point.x:.3f}, {point.y:.3f}), color: {color.name.lower()}")
         
-        # Handle debug output BEFORE meshing
+        # Handle debug output of svg to geometry conversion
         if args.debug:
             try:
                 from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
@@ -196,6 +196,42 @@ def main():
         
         print(f"\n✓ Gmsh meshing completed successfully!")
         print(f"  Mesh saved to: {mesh_name}.msh")
+        
+        # Handle debug output of geometry to Gmsh conversion
+        if args.debug:
+            try:
+                from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
+                from svg_to_getdp.interfaces.debug.boundary_curve_grouper_debug_writer import BoundaryCurveGrouperDebugWriter
+
+                # Initialize debug coordinator with shared timestamp
+                debug_coordinator = DebugCoordinator()
+                debug_coordinator.set_svg_file(args.svg_file)
+                shared_timestamp = debug_coordinator.get_shared_timestamp()
+                
+                # Write boundary curve grouping debug
+                if "debug_data" in gmsh_results and "boundary_curve_grouping" in gmsh_results["debug_data"]:
+                    print(f"\n=== Writing Boundary Curve Grouping Debug ===")
+                    
+                    grouping_debug_data = gmsh_results["debug_data"]["boundary_curve_grouping"]
+                    
+                    # Initialize and configure debug writer
+                    grouping_debug_writer = BoundaryCurveGrouperDebugWriter()
+                    grouping_debug_writer.set_shared_timestamp(shared_timestamp)
+                    
+                    # Write debug information
+                    grouping_debug_file = grouping_debug_writer.write_grouping_debug_info(
+                        svg_file_path=args.svg_file,
+                        boundary_curves=grouping_debug_data["boundary_curves"],
+                        grouping_result=grouping_debug_data["grouping_result"],
+                        grouper_instance=grouping_debug_data["grouper_instance"]
+                    )
+                    
+            except ImportError as e:
+                print(f"Gmsh debug output unavailable: {e}")
+            except Exception as e:
+                print(f"Gmsh debug output error: {e}")
+                import traceback
+                traceback.print_exc()
         
         # MODE 3: Run GetDP simulation if requested
         if args.run_simulation:

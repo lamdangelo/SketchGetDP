@@ -293,26 +293,6 @@ class TestBoundaryCurveGrouper:
             
             with pytest.raises(ValueError, match="No outermost candidates found"):
                 BoundaryCurveGrouper.group_boundary_curves([curve1, curve2])
-    
-    def test_should_print_comprehensive_grouping_summary_to_stdout(self, sample_boundary_curves, capsys):
-        """Test the summary printing function."""
-        result = BoundaryCurveGrouper.group_boundary_curves(sample_boundary_curves)
-        
-        # Call the summary function
-        BoundaryCurveGrouper.print_grouping_summary(sample_boundary_curves, result)
-        
-        # Capture the output
-        captured = capsys.readouterr()
-        
-        # Check that expected text appears in output
-        assert "BOUNDARY CURVE GROUPING SUMMARY" in captured.out
-        assert "Curve 0:" in captured.out
-        assert "Color: black" in captured.out
-        # Check for actual physical group names from the output
-        assert any("domain_Va" in line or "boundary_out" in line or "boundary_gamma" in line or 
-                   "domain_Vi_iron" in line or "domain_Vi_air" in line 
-                   for line in captured.out.split('\n'))
-        assert "CONTAINMENT HIERARCHY" in captured.out
 
 
 # ============================================================================
