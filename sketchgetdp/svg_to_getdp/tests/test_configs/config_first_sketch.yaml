@@ -6,16 +6,10 @@
 # Positive current flows out of the page.
 wire_clusters:
   cluster_1:
-    wire_count: 3
+    wire_count: 6
     current_sign: 1
   cluster_2:
-    wire_count: 3
-    current_sign: -1
-  cluster_3:
-    wire_count: 3
-    current_sign: 1
-  cluster_4:
-    wire_count: 3
+    wire_count: 6
     current_sign: -1
 
 ## mesh settings
@@ -25,5 +19,5 @@ mesh_size: 0.1
 ## GetDP simulation settings
 # Physical values for the simulation
 physical_values:
-  Isource: 40000  # Current source in Amperes [A]
+  Isource: 9000  # Current source in Amperes [A]
   nu_iron_linear: 1/(1000 * 4e-7 * pi)  # Iron reluctivity
