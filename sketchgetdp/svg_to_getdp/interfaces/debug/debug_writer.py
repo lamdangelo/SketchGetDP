@@ -7,6 +7,19 @@ from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
 class DebugWriter:
     """Utility class for writing debug information about various stages of processing."""
     
+    def __init__(self):
+        """Initialize DebugWriter with a shared timestamp for all debug outputs."""
+        self._shared_timestamp = None
+    
+    def _get_shared_timestamp(self) -> str:
+        """
+        Get a shared timestamp for all debug outputs in this run.
+        Creates a new timestamp on first call, reuses it for subsequent calls.
+        """
+        if self._shared_timestamp is None:
+            self._shared_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return self._shared_timestamp
+    
     def _write_svg_parser_debug_info(self, svg_file_path: str, colored_boundaries: dict):
         """
         Write SVG parser results to a debug text file.
@@ -15,10 +28,10 @@ class DebugWriter:
         debug_dir = "debug"
         os.makedirs(debug_dir, exist_ok=True)
         
-        # Create debug filename based on input SVG filename and timestamp
+        # Create debug filename based on input SVG filename and shared timestamp
         svg_filename = os.path.basename(svg_file_path)
         svg_name = os.path.splitext(svg_filename)[0]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = self._get_shared_timestamp()
         debug_filename = f"{debug_dir}/svg_parser_debug_{svg_name}_{timestamp}.txt"
         
         with open(debug_filename, 'w') as f:
@@ -26,6 +39,7 @@ class DebugWriter:
             f.write(f"============================\n")
             f.write(f"Input SVG: {svg_file_path}\n")
             f.write(f"Processed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Debug run timestamp: {timestamp}\n")
             f.write(f"\n")
             
             f.write(f"Color Groups Found: {len(colored_boundaries)}\n")
@@ -85,11 +99,11 @@ class DebugWriter:
         # Create filename
         svg_filename = os.path.basename(svg_file_path)
         svg_name = os.path.splitext(svg_filename)[0]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = self._get_shared_timestamp()
         debug_filename = f"{debug_dir}/corner_detection_debug_{svg_name}_{timestamp}.txt"
         
         with open(debug_filename, 'w') as f:
-            self._write_corner_detection_header(f, svg_file_path, corner_debug_data)
+            self._write_corner_detection_header(f, svg_file_path, corner_debug_data, timestamp)
             
             # Check if we have data
             if not corner_debug_data:
@@ -102,13 +116,15 @@ class DebugWriter:
         
         print(f"Corner detection debug information written to: {debug_filename}")
     
-    def _write_corner_detection_header(self, f, svg_file_path: str, corner_debug_data: dict):
+    def _write_corner_detection_header(self, f, svg_file_path: str, corner_debug_data: dict, timestamp: str = None):
         """Write header for corner detection debug file."""
         f.write("CORNER DETECTION DEBUG INFORMATION\n")
         f.write("=" * 60 + "\n\n")
         
         f.write(f"Input SVG: {svg_file_path}\n")
         f.write(f"Processed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        if timestamp:
+            f.write(f"Debug run timestamp: {timestamp}\n")
         f.write(f"Total boundaries analyzed: {len(corner_debug_data) if corner_debug_data else 0}\n\n")
     
     def _write_boundary_corner_analysis(self, f, key: str, data: dict, boundary_curves: List[BoundaryCurve]):
@@ -329,7 +345,7 @@ class DebugWriter:
         
         svg_filename = os.path.basename(svg_file_path)
         svg_name = os.path.splitext(svg_filename)[0]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = self._get_shared_timestamp()
         detailed_filename = f"{debug_dir}/corner_decisions_detailed_{svg_name}_{timestamp}.txt"
         
         with open(detailed_filename, 'w') as f:
@@ -338,6 +354,7 @@ class DebugWriter:
             
             f.write(f"Input SVG: {svg_file_path}\n")
             f.write(f"Processed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Debug run timestamp: {timestamp}\n")
             f.write(f"Total boundaries analyzed: {len(corner_debug_data)}\n\n")
             
             for key, data in corner_debug_data.items():
@@ -450,4 +467,76 @@ class DebugWriter:
                 f.write(f"Wire {i+1}:\n")
                 f.write(f"  Color: {color.name}\n")
                 f.write(f"  Position: ({point.x:.6f}, {point.y:.6f})\n\n")
+    
+    def _write_geometry_debug_info(self, svg_file_path: str, boundary_curves, wires):
+        """
+        Write geometry conversion results to a debug text file.
+        Follows the same structure as _write_svg_parser_debug_info.
+        """
+        # Create debug directory if it doesn't exist
+        debug_dir = "debug"
+        os.makedirs(debug_dir, exist_ok=True)
         
+        # Create debug filename based on input SVG filename and shared timestamp
+        svg_filename = os.path.basename(svg_file_path)
+        svg_name = os.path.splitext(svg_filename)[0]
+        timestamp = self._get_shared_timestamp()
+        debug_filename = f"{debug_dir}/geometry_debug_{svg_name}_{timestamp}.txt"
+        
+        with open(debug_filename, 'w') as f:
+            f.write(f"Geometry Conversion Debug Information\n")
+            f.write(f"=====================================\n")
+            f.write(f"Input SVG: {svg_file_path}\n")
+            f.write(f"Processed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Debug run timestamp: {timestamp}\n")
+            f.write(f"\n")
+            
+            f.write(f"Summary:\n")
+            f.write(f"  Total boundary curves: {len(boundary_curves)}\n")
+            f.write(f"  Total wires: {len(wires)}\n")
+            f.write(f"\n")
+            
+            # Boundary Curves Section
+            f.write(f"BOUNDARY CURVES\n")
+            f.write(f"===============\n\n")
+            
+            for i, curve in enumerate(boundary_curves):
+                f.write(f"Curve {i+1}:\n")
+                f.write(f"  Color: {curve.color.name}\n")
+                f.write(f"  Segments: {len(curve.bezier_segments)}\n")
+                f.write(f"  Corners: {len(curve.corners)}\n")
+                f.write(f"  Closed: {curve.is_closed}\n")
+                
+                # Segment details with control points
+                f.write(f"  Segments:\n")
+                for seg_idx, segment in enumerate(curve.bezier_segments):
+                    f.write(f"    Segment {seg_idx} (Degree {segment.degree}):\n")
+                    for cp_idx, control_point in enumerate(segment.control_points):
+                        f.write(f"      Control Point {cp_idx}: ({control_point.x:.6f}, {control_point.y:.6f})\n")
+                
+                # Corner coordinates
+                if curve.corners:
+                    f.write(f"  Corners:\n")
+                    for corner_idx, corner in enumerate(curve.corners):
+                        f.write(f"    Corner {corner_idx}: ({corner.x:.6f}, {corner.y:.6f})\n")
+                
+                # Sample points along the curve
+                f.write(f"  Sampled Curve Points (t=0 to 1):\n")
+                for t in [0.0, 0.25, 0.5, 0.75, 1.0]:
+                    point = curve.evaluate(t)
+                    f.write(f"    t={t:.2f}: ({point.x:.6f}, {point.y:.6f})\n")
+                
+                f.write(f"\n")
+            
+            # Wires Section
+            f.write(f"WIRES\n")
+            f.write(f"=====\n\n")
+            
+            for i, (point, color) in enumerate(wires):
+                f.write(f"Wire {i+1}:\n")
+                f.write(f"  Color: {color.name}\n")
+                f.write(f"  Position: ({point.x:.6f}, {point.y:.6f})\n\n")
+        
+        print(f"Geometry debug information written to: {debug_filename}")
+        return debug_filename
+    

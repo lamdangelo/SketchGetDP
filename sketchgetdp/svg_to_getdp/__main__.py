@@ -120,6 +120,22 @@ def main():
                 else:
                     print("  Warning: No corner debug data available")
                 
+                # AUTOMATICALLY GENERATE GEOMETRY TEXT OUTPUT when debug is enabled
+                print(f"\n=== Generating Geometry Text Summary ===")
+                try:
+                    # Save geometry results to debug directory with timestamped filename
+                    summary_path = debug_writer._write_geometry_debug_info(
+                        svg_file_path=args.svg_file,
+                        boundary_curves=boundary_curves,
+                        wires=wires
+                        )
+                    print(f"✓ Geometry text summary saved to: {summary_path}")
+                    
+                except Exception as e:
+                    print(f"  Geometry text summary error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
                 # AUTOMATICALLY GENERATE GEOMETRY PLOT when debug is enabled
                 print(f"\n=== Generating Geometry Plot ===")
                 try:
@@ -151,12 +167,6 @@ def main():
                 print(f"Debug output error: {e}")
                 import traceback
                 traceback.print_exc()
-        
-        # Save intermediate results to file if specified (optional)
-        if args.output:
-            from .interfaces.debug.debug_writer import DebugWriter
-            DebugWriter.save_results(boundary_curves, wires, args.output)
-            print(f"Intermediate results saved to: {args.output}")
         
         # Determine config file path
         config_file_path = Path(args.config)

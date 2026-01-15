@@ -67,13 +67,7 @@ class ArgParser:
         parser.add_argument(
             '--debug', '-d', 
             action='store_true',
-            help='Enable debug mode to output intermediate processing information including geometry plots'
-        )
-        
-        # Output options
-        parser.add_argument(
-            '--output', '-o', 
-            help='Save text results to specified file (intermediate results)'
+            help='Enable debug mode to output intermediate processing information including geometry plots and text summaries'
         )
         
         # Parse arguments
@@ -103,10 +97,6 @@ class ArgParser:
             if args.mesh_name:
                 parser.error("Cannot use --mesh-name with --simulation-only. "
                            "Mesh name is derived from the provided mesh file.")
-            
-            if args.output:
-                parser.error("Cannot use --output with --simulation-only. "
-                           "Intermediate output requires SVG processing.")
         
         # If normal mode (not simulation-only)
         else:
