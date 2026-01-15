@@ -82,76 +82,62 @@ def main():
         # Handle debug output BEFORE meshing
         if args.debug:
             try:
-                from .interfaces.debug.debug_writer import DebugWriter
-                debug_writer = DebugWriter()
+                from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
+                from svg_to_getdp.interfaces.debug.svg_parser_debug_writer import SVGParserDebugWriter
+                from svg_to_getdp.interfaces.debug.corner_detector_debug_writer import CornerDetectorDebugWriter
+                from svg_to_getdp.interfaces.debug.geometry_debug_writer import GeometryDebugWriter
+                from svg_to_getdp.interfaces.debug.curve_visualizer import CurveVisualizer
+                
+                # Initialize debug coordinator first
+                debug_coordinator = DebugCoordinator()
+                debug_coordinator.set_svg_file(args.svg_file)
+                shared_timestamp = debug_coordinator.get_shared_timestamp()
+                
+                # Initialize debug writers with the same timestamp
+                svg_parser_debug_writer = SVGParserDebugWriter()
+                svg_parser_debug_writer._shared_timestamp = shared_timestamp
+                
+                corner_detector_debug_writer = CornerDetectorDebugWriter()
+                corner_detector_debug_writer._shared_timestamp = shared_timestamp
+                
+                geometry_debug_writer = GeometryDebugWriter()
+                geometry_debug_writer._shared_timestamp = shared_timestamp
                 
                 # Write SVG parser debug info
                 print(f"\n=== Writing SVG Parser Debug ===")
-                debug_writer._write_svg_parser_debug_info(
+                svg_parser_debug_writer.write_svg_parser_debug_info(
                     svg_file_path=args.svg_file,
                     colored_boundaries=colored_boundaries
                 )
                 
                 # Write corner detection debug info
                 print(f"\n=== Writing Corner Detection Debug ===")
-                print(f"Corner debug data keys: {list(corner_debug_data.keys()) if corner_debug_data else 'None'}")
-                
                 if corner_debug_data:
-                    for key, data in corner_debug_data.items():
-                        print(f"  {key}: {data.get('points_count', 'N/A')} points, "
-                              f"{len(data.get('corner_indices', []))} corners")
-                    
-                    debug_writer._write_corner_detection_debug_info(
+                    corner_detector_debug_writer.write_corner_detection_debug_info(
                         svg_file_path=args.svg_file,
                         corner_debug_data=corner_debug_data,
                         boundary_curves=boundary_curves
                     )
-                    
-                    # Write detailed decision process if verbose mode
-                    if hasattr(args, 'verbose') and args.verbose:
-                        print(f"\n=== Writing Detailed Decision Process ===")
-                        debug_writer._write_detailed_decision_process(
-                            svg_file_path=args.svg_file,
-                            corner_debug_data=corner_debug_data
-                        )
-                    
-                    print(f"\n✓ Corner detection debug information generated")
-                    print(f"  Check 'debug/' directory for timestamped files")
-                else:
-                    print("  Warning: No corner debug data available")
                 
-                # AUTOMATICALLY GENERATE GEOMETRY TEXT OUTPUT when debug is enabled
-                print(f"\n=== Generating Geometry Text Summary ===")
-                try:
-                    # Save geometry results to debug directory with timestamped filename
-                    summary_path = debug_writer._write_geometry_debug_info(
-                        svg_file_path=args.svg_file,
-                        boundary_curves=boundary_curves,
-                        wires=wires
-                        )
-                    print(f"✓ Geometry text summary saved to: {summary_path}")
-                    
-                except Exception as e:
-                    print(f"  Geometry text summary error: {e}")
-                    import traceback
-                    traceback.print_exc()
+                # Write geometry debug info
+                print(f"\n=== Generating Geometry Debug ===")
+                summary_path = geometry_debug_writer.write_geometry_debug_info(
+                    svg_file_path=args.svg_file,
+                    boundary_curves=boundary_curves,
+                    wires=wires
+                )
                 
-                # AUTOMATICALLY GENERATE GEOMETRY PLOT when debug is enabled
-                print(f"\n=== Generating Geometry Plot ===")
+                # Generate geometry plot
                 try:
-                    from .interfaces.debug.curve_visualizer import CurveVisualizer
-                    
-                    # Save plot to debug directory with timestamped filename
-                    plot_path = CurveVisualizer.save_plot_to_debug_directory(
+                    plot_path = CurveVisualizer.save_plot_with_coordinator(
                         boundary_curves=boundary_curves,
-                        svg_file_path=args.svg_file,
+                        coordinator=debug_coordinator,
                         wires=wires,
                         colored_boundaries=colored_boundaries,
                         show_control_points=True,
                         show_corners=True,
                         show_raw_boundaries=True
                     )
-                    print(f"✓ Geometry plot saved to: {plot_path}")
                     
                 except ImportError as e:
                     print(f"  Geometry plot unavailable: {e}")

@@ -5,8 +5,9 @@ Presentation layer service for visualizing Bézier curves and boundary curves.
 import matplotlib.pyplot as plt
 import os
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
 
 
 class CurveVisualizer:
@@ -185,12 +186,12 @@ class CurveVisualizer:
         plt.tight_layout()
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         plt.close()
-        print(f"Plot saved to {filename}")
+        print(f"Geometry debug plot saved to: {filename}")
     
     @staticmethod
     def save_plot_to_debug_directory(boundary_curves: List[BoundaryCurve], svg_file_path: str, 
                                    wires: List[tuple] = None, colored_boundaries: dict = None,
-                                   **kwargs) -> str:
+                                   timestamp: str = None, **kwargs) -> str:
         """
         Save geometry plot to debug directory with timestamped filename.
         
@@ -199,6 +200,7 @@ class CurveVisualizer:
             svg_file_path: Path to the original SVG file (for naming)
             wires: List of (Point, Color) tuples for wires
             colored_boundaries: Dictionary of {color: List[RawBoundary]} objects to plot
+            timestamp: Optional timestamp string (if None, generates new)
             **kwargs: Additional arguments for the plot
             
         Returns:
@@ -211,8 +213,12 @@ class CurveVisualizer:
         # Create debug filename based on input SVG filename and timestamp
         svg_filename = os.path.basename(svg_file_path)
         svg_name = os.path.splitext(svg_filename)[0]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        debug_filename = f"{debug_dir}/geometry_debug_{svg_name}_{timestamp}.png"
+        
+        # Use provided timestamp or generate new one
+        if timestamp is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+        debug_filename = f"{debug_dir}/geometry_plot_{svg_name}_{timestamp}.png"
         
         # Save the plot to the debug directory
         CurveVisualizer.save_plot_to_file(
@@ -224,3 +230,36 @@ class CurveVisualizer:
         )
         
         return debug_filename
+    
+    @classmethod
+    def save_plot_with_coordinator(cls, boundary_curves: List[BoundaryCurve], 
+                                 coordinator: DebugCoordinator,
+                                 wires: List[tuple] = None, 
+                                 colored_boundaries: dict = None,
+                                 **kwargs) -> str:
+        """
+        Save plot using a DebugCoordinator for consistent naming.
+        
+        Args:
+            boundary_curves: List of BoundaryCurve objects to plot
+            coordinator: DebugCoordinator instance
+            wires: List of (Point, Color) tuples for wires
+            colored_boundaries: Dictionary of {color: List[RawBoundary]} objects to plot
+            **kwargs: Additional arguments for the plot
+            
+        Returns:
+            Path to the saved plot file
+        """
+        plot_filename = coordinator.get_debug_plot_filename("geometry_plot", ".png")
+        
+        # Save the plot to the debug directory
+        cls.save_plot_to_file(
+            boundary_curves=boundary_curves,
+            wires=wires,
+            colored_boundaries=colored_boundaries,
+            filename=plot_filename,
+            **kwargs
+        )
+        
+        return plot_filename
+    
