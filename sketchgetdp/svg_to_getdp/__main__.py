@@ -49,14 +49,14 @@ def main():
             return 0
         
         # MODE 2 & 3: Normal processing (SVG → Gmsh)
-        from .core.use_cases.convert_svg_to_geometry import ConvertSVGToGeometry
-        from .core.use_cases.convert_geometry_to_gmsh import ConvertGeometryToGmsh
-        from .infrastructure.svg_parser import SVGParser
-        from .infrastructure.corner_detector import CornerDetector
-        from .infrastructure.bezier_fitter import BezierFitter
-        from .infrastructure.boundary_curve_grouper import BoundaryCurveGrouper
-        from .infrastructure.boundary_curve_mesher import BoundaryCurveMesher
-        from .infrastructure.wire_preprocessor import WirePreprocessor
+        from svg_to_getdp.core.use_cases.convert_svg_to_geometry import ConvertSVGToGeometry
+        from svg_to_getdp.core.use_cases.convert_geometry_to_gmsh import ConvertGeometryToGmsh
+        from svg_to_getdp.infrastructure.svg_parser import SVGParser
+        from svg_to_getdp.infrastructure.corner_detector import CornerDetector
+        from svg_to_getdp.infrastructure.bezier_fitter import BezierFitter
+        from svg_to_getdp.infrastructure.boundary_curve_grouper import BoundaryCurveGrouper
+        from svg_to_getdp.infrastructure.boundary_curve_mesher import BoundaryCurveMesher
+        from svg_to_getdp.infrastructure.wire_preprocessor import WirePreprocessor
         
         # Initialize infrastructure services for SVG conversion
         svg_parser = SVGParser()
@@ -203,6 +203,7 @@ def main():
                 from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
                 from svg_to_getdp.interfaces.debug.boundary_curve_grouper_debug_writer import BoundaryCurveGrouperDebugWriter
                 from svg_to_getdp.interfaces.debug.boundary_curve_mesher_debug_writer import BoundaryCurveMesherDebugWriter
+                from svg_to_getdp.interfaces.debug.wire_preprocessor_debug_writer import WirePreprocessorDebugWriter
                 
                 # Initialize debug writers with the same timestamp
                 grouping_debug_writer = BoundaryCurveGrouperDebugWriter()
@@ -210,6 +211,9 @@ def main():
                 
                 meshing_debug_writer = BoundaryCurveMesherDebugWriter()
                 meshing_debug_writer.set_shared_timestamp(shared_timestamp)
+                
+                wire_debug_writer = WirePreprocessorDebugWriter()
+                wire_debug_writer.set_shared_timestamp(shared_timestamp)
                 
                 # Write boundary curve grouping debug
                 if "debug_data" in gmsh_results and "boundary_curve_grouping" in gmsh_results["debug_data"]:
@@ -230,6 +234,16 @@ def main():
                     boundary_curves=boundary_curves,
                     mesher_instance=boundary_curve_mesher,
                     gmsh_results=gmsh_results
+                )
+                
+                # Write wire preprocessor debug
+                print(f"\n=== Writing Wire Preprocessor Debug ===")
+                wire_debug_file = wire_debug_writer.write_wire_preprocessor_debug_info(
+                    svg_file_path=args.svg_file,
+                    wires=wires,
+                    config_file_path=str(config_file_path),
+                    wire_preprocessor_instance=wire_preprocessor,
+                    gmsh_results=gmsh_results 
                 )
                     
             except ImportError as e:
