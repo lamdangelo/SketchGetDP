@@ -202,29 +202,35 @@ def main():
             try:
                 from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
                 from svg_to_getdp.interfaces.debug.boundary_curve_grouper_debug_writer import BoundaryCurveGrouperDebugWriter
-
-                # Initialize debug coordinator with shared timestamp
-                debug_coordinator = DebugCoordinator()
-                debug_coordinator.set_svg_file(args.svg_file)
-                shared_timestamp = debug_coordinator.get_shared_timestamp()
+                from svg_to_getdp.interfaces.debug.boundary_curve_mesher_debug_writer import BoundaryCurveMesherDebugWriter
+                
+                # Initialize debug writers with the same timestamp
+                grouping_debug_writer = BoundaryCurveGrouperDebugWriter()
+                grouping_debug_writer.set_shared_timestamp(shared_timestamp)
+                
+                meshing_debug_writer = BoundaryCurveMesherDebugWriter()
+                meshing_debug_writer.set_shared_timestamp(shared_timestamp)
                 
                 # Write boundary curve grouping debug
                 if "debug_data" in gmsh_results and "boundary_curve_grouping" in gmsh_results["debug_data"]:
                     print(f"\n=== Writing Boundary Curve Grouping Debug ===")
                     
                     grouping_debug_data = gmsh_results["debug_data"]["boundary_curve_grouping"]
-                    
-                    # Initialize and configure debug writer
-                    grouping_debug_writer = BoundaryCurveGrouperDebugWriter()
-                    grouping_debug_writer.set_shared_timestamp(shared_timestamp)
-                    
-                    # Write debug information
                     grouping_debug_file = grouping_debug_writer.write_grouping_debug_info(
                         svg_file_path=args.svg_file,
                         boundary_curves=grouping_debug_data["boundary_curves"],
                         grouping_result=grouping_debug_data["grouping_result"],
                         grouper_instance=grouping_debug_data["grouper_instance"]
                     )
+                    
+                # Write boundary curve meshing debug
+                print(f"\n=== Writing Boundary Curve Meshing Debug ===")
+                meshing_debug_file = meshing_debug_writer.write_meshing_debug_info(
+                    svg_file_path=args.svg_file,
+                    boundary_curves=boundary_curves,
+                    mesher_instance=boundary_curve_mesher,
+                    gmsh_results=gmsh_results
+                )
                     
             except ImportError as e:
                 print(f"Gmsh debug output unavailable: {e}")
