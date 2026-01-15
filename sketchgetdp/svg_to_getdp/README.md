@@ -139,7 +139,6 @@ python -m svg_to_getdp --simulation-only existing_mesh.msh --config config.yaml
 ### Additional Options
 - `--mesh-name my_mesh`: Specify output mesh name
 - `--no-gui`: Run in batch mode without GUI
-- `--output-plot curves.png`: Save visualization to file
 - `--debug`: Enable debug output
 
 ### Examples
@@ -150,8 +149,8 @@ python -m svg_to_getdp sketch.svg --mesh-name my_design --no-gui
 # Full pipeline with custom config
 python -m svg_to_getdp circuit.svg --config custom_config.yaml --run-simulation
 
-# Save visualization to file
-python -m svg_to_getdp layout.svg --output-plot analysis.png
+# Get debug output
+python -m svg_to_getdp layout.svg --debug
 ```
 
 ## 📊 Output

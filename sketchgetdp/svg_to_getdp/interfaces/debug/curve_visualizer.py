@@ -3,7 +3,9 @@ Presentation layer service for visualizing Bézier curves and boundary curves.
 """
 
 import matplotlib.pyplot as plt
-from typing import List
+import os
+from datetime import datetime
+from typing import List, Optional
 from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
 
 
@@ -144,7 +146,7 @@ class CurveVisualizer:
                         colored_boundaries: dict = None,
                         filename: str = 'bezier_curves_plot.png', **kwargs):
         """
-        Save the plot to a file instead of displaying it.
+        Save the plot to a file.
         
         Args:
             boundary_curves: List of BoundaryCurve objects to plot
@@ -184,3 +186,41 @@ class CurveVisualizer:
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         plt.close()
         print(f"Plot saved to {filename}")
+    
+    @staticmethod
+    def save_plot_to_debug_directory(boundary_curves: List[BoundaryCurve], svg_file_path: str, 
+                                   wires: List[tuple] = None, colored_boundaries: dict = None,
+                                   **kwargs) -> str:
+        """
+        Save geometry plot to debug directory with timestamped filename.
+        
+        Args:
+            boundary_curves: List of BoundaryCurve objects to plot
+            svg_file_path: Path to the original SVG file (for naming)
+            wires: List of (Point, Color) tuples for wires
+            colored_boundaries: Dictionary of {color: List[RawBoundary]} objects to plot
+            **kwargs: Additional arguments for the plot
+            
+        Returns:
+            Path to the saved plot file
+        """
+        # Create debug directory if it doesn't exist
+        debug_dir = "debug"
+        os.makedirs(debug_dir, exist_ok=True)
+        
+        # Create debug filename based on input SVG filename and timestamp
+        svg_filename = os.path.basename(svg_file_path)
+        svg_name = os.path.splitext(svg_filename)[0]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        debug_filename = f"{debug_dir}/geometry_debug_{svg_name}_{timestamp}.png"
+        
+        # Save the plot to the debug directory
+        CurveVisualizer.save_plot_to_file(
+            boundary_curves=boundary_curves,
+            wires=wires,
+            colored_boundaries=colored_boundaries,
+            filename=debug_filename,
+            **kwargs
+        )
+        
+        return debug_filename

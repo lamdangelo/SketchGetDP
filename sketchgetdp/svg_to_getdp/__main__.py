@@ -79,7 +79,7 @@ def main():
         for i, (point, color) in enumerate(wires):
             print(f"  Wire {i+1}: at ({point.x:.3f}, {point.y:.3f}), color: {color.name.lower()}")
         
-        # Handle debug output BEFORE meshing if requested (optional)
+        # Handle debug output BEFORE meshing
         if args.debug:
             try:
                 from .interfaces.debug.debug_writer import DebugWriter
@@ -120,35 +120,37 @@ def main():
                 else:
                     print("  Warning: No corner debug data available")
                 
+                # AUTOMATICALLY GENERATE GEOMETRY PLOT when debug is enabled
+                print(f"\n=== Generating Geometry Plot ===")
+                try:
+                    from .interfaces.debug.curve_visualizer import CurveVisualizer
+                    
+                    # Save plot to debug directory with timestamped filename
+                    plot_path = CurveVisualizer.save_plot_to_debug_directory(
+                        boundary_curves=boundary_curves,
+                        svg_file_path=args.svg_file,
+                        wires=wires,
+                        colored_boundaries=colored_boundaries,
+                        show_control_points=True,
+                        show_corners=True,
+                        show_raw_boundaries=True
+                    )
+                    print(f"✓ Geometry plot saved to: {plot_path}")
+                    
+                except ImportError as e:
+                    print(f"  Geometry plot unavailable: {e}")
+                    print("  Install with: pip install matplotlib")
+                except Exception as e:
+                    print(f"  Geometry plot error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
             except ImportError as e:
                 print(f"Debug output unavailable: {e}")
             except Exception as e:
                 print(f"Debug output error: {e}")
                 import traceback
                 traceback.print_exc()
-        
-        # Handle visualization BEFORE meshing if requested (optional)
-        if args.output_plot:
-            try:
-                from .interfaces.debug.curve_visualizer import CurveVisualizer
-                
-                if args.output_plot:
-                    # Save plot to file
-                    CurveVisualizer.save_plot_to_file(
-                        boundary_curves=boundary_curves,
-                        wires=wires,
-                        colored_boundaries=colored_boundaries,
-                        filename=args.output_plot,
-                        show_control_points=True,
-                        show_corners=True
-                    )
-                    print(f"Visualization saved to: {args.output_plot}")
-                    
-            except ImportError:
-                print("Visualization unavailable: matplotlib not installed")
-                print("Install with: pip install matplotlib")
-            except Exception as e:
-                print(f"Visualization error: {e}")
         
         # Save intermediate results to file if specified (optional)
         if args.output:
@@ -231,3 +233,4 @@ def main():
 
 if __name__ == "__main__":
     exit(main())
+    

@@ -10,7 +10,7 @@ class ArgParser:
             epilog=(
                 'Examples:\n'
                 '  python -m svg_to_getdp drawing.svg\n'
-                '  python -m svg_to_getdp design.svg --output-plot curves.png\n'
+                '  python -m svg_to_getdp design.svg --debug\n'
                 '  python -m svg_to_getdp design.svg --mesh-name my_mesh --no-gui\n'
                 '  python -m svg_to_getdp design.svg --run-simulation\n'
                 '  python -m svg_to_getdp --simulation-only existing_mesh.msh\n'
@@ -67,18 +67,13 @@ class ArgParser:
         parser.add_argument(
             '--debug', '-d', 
             action='store_true',
-            help='Enable debug mode to output intermediate processing information'
+            help='Enable debug mode to output intermediate processing information including geometry plots'
         )
         
         # Output options
         parser.add_argument(
             '--output', '-o', 
             help='Save text results to specified file (intermediate results)'
-        )
-        
-        parser.add_argument(
-            '--output-plot',
-            help='Save visualization plot to specified file (instead of displaying)'
         )
         
         # Parse arguments
@@ -108,10 +103,6 @@ class ArgParser:
             if args.mesh_name:
                 parser.error("Cannot use --mesh-name with --simulation-only. "
                            "Mesh name is derived from the provided mesh file.")
-            
-            if args.visualize or args.output_plot:
-                parser.error("Cannot use visualization options with --simulation-only. "
-                           "Visualization requires SVG processing.")
             
             if args.output:
                 parser.error("Cannot use --output with --simulation-only. "
