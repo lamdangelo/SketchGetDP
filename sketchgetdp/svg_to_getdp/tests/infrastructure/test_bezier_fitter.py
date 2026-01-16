@@ -7,6 +7,7 @@ import math
 import numpy as np
 from unittest.mock import patch
 
+from sketchgetdp.svg_to_getdp.core.entities import color
 from svg_to_getdp.infrastructure.bezier_fitter import BezierFitter
 from svg_to_getdp.core.entities.bezier_segment import BezierSegment
 from svg_to_getdp.core.entities.point import Point
@@ -37,16 +38,16 @@ class TestBezierFitter:
     
     # ==================== Basic Functionality Tests ====================
     
-    def test_fit_boundary_curve_insufficient_points(self, fitter):
+    def test_fit_outline_insufficient_points(self, fitter):
         """Test that fitter raises error for insufficient points"""
         points = [Point(0, 0), Point(1, 0)]  # Only 2 points
         corner_indices = []
         color = Color.BLACK
         
-        with pytest.raises(ValueError, match="Need at least 3 non-duplicate points for boundary curve"):
-            fitter.fit_boundary_curve(points, corner_indices, color)
-    
-    def test_fit_boundary_curve_simple_triangle(self, fitter):
+        with pytest.raises(ValueError, match="Need at least 3 non-duplicate points for outline"):
+            fitter.fit_outline(points, corner_indices, color)
+
+    def test_fit_outline_simple_triangle(self, fitter):
         """Test fitting Bézier curves to a simple triangle"""
         # Create a triangle
         points = [
@@ -55,24 +56,23 @@ class TestBezierFitter:
         corner_indices = [0, 1, 2]  # All vertices are corners
         color = Color.BLUE
 
-        boundary_curve = fitter.fit_boundary_curve(points, corner_indices, color)
-
-        # Validate the result - use hasattr to check if it's a BoundaryCurve-like object
-        assert hasattr(boundary_curve, 'bezier_segments')
-        assert hasattr(boundary_curve, 'corners')
-        assert hasattr(boundary_curve, 'color')
-        assert hasattr(boundary_curve, 'is_closed')
+        outline = fitter.fit_outline(points, corner_indices, color)
+        # Validate the result - use hasattr to check if it's a Outline-like object
+        assert hasattr(outline, 'bezier_segments')
+        assert hasattr(outline, 'corners')
+        assert hasattr(outline, 'color')
+        assert hasattr(outline, 'is_closed')
         
         # Check attributes directly
-        assert boundary_curve.color == color
-        assert boundary_curve.is_closed == True
-        assert len(boundary_curve.corners) == 3
+        assert outline.color == color
+        assert outline.is_closed == True
+        assert len(outline.corners) == 3
 
         # Should have at least 1 Bézier segment
-        assert len(boundary_curve.bezier_segments) >= 1
+        assert len(outline.bezier_segments) >= 1
 
         # Each segment should be valid
-        for segment in boundary_curve.bezier_segments:
+        for segment in outline.bezier_segments:
             assert hasattr(segment, 'control_points')
             assert hasattr(segment, 'degree')
             # Each Bézier segment should have degree + 1 control points
@@ -83,23 +83,23 @@ class TestBezierFitter:
                 assert math.isfinite(control_point.y)
 
         # Check segment connections
-        if len(boundary_curve.bezier_segments) > 1:
-            for i in range(len(boundary_curve.bezier_segments)):
-                current_segment = boundary_curve.bezier_segments[i]
-                next_segment = boundary_curve.bezier_segments[(i + 1) % len(boundary_curve.bezier_segments)]
+        if len(outline.bezier_segments) > 1:
+            for i in range(len(outline.bezier_segments)):
+                current_segment = outline.bezier_segments[i]
+                next_segment = outline.bezier_segments[(i + 1) % len(outline.bezier_segments)]
                 
-                # Check C0 continuity (position continuity at segment boundaries)
+                # Check C0 continuity (position continuity at segment interfaces)
                 # The end point of current segment should match start point of next segment
                 distance = current_segment.end_point.distance_to(next_segment.start_point)
-                assert distance < 1e-10, f"Segment {i} end point doesn't connect to segment {(i + 1) % len(boundary_curve.bezier_segments)} start point. Distance: {distance}"
+                assert distance < 1e-10, f"Segment {i} end point doesn't connect to segment {(i + 1) % len(outline.bezier_segments)} start point. Distance: {distance}"
         
-        # Additional check: verify the curve is properly closed
-        first_segment = boundary_curve.bezier_segments[0]
-        last_segment = boundary_curve.bezier_segments[-1]
+        # Additional check: verify the outline is properly closed
+        first_segment = outline.bezier_segments[0]
+        last_segment = outline.bezier_segments[-1]
         closure_distance = last_segment.end_point.distance_to(first_segment.start_point)
-        assert closure_distance < 1e-10, f"Curve is not properly closed. Gap: {closure_distance}"
+        assert closure_distance < 1e-10, f"Outline is not properly closed. Gap: {closure_distance}"
     
-    def test_fit_boundary_curve_no_corners(self, fitter):
+    def test_fit_outline_no_corners(self, fitter):
         """Test fitting Bézier curves to a smooth curve without corners"""
         # Create a circle-like shape (approximated)
         points = []
@@ -112,32 +112,32 @@ class TestBezierFitter:
         
         corner_indices = []  # No corners for smooth curve
         color = Color.GREEN
-        
-        boundary_curve = fitter.fit_boundary_curve(points, corner_indices, color)
-        
+
+        outline = fitter.fit_outline(points, corner_indices, color)
+
         # Check attributes
-        assert hasattr(boundary_curve, 'bezier_segments')
-        assert len(boundary_curve.bezier_segments) > 0
+        assert hasattr(outline, 'bezier_segments')
+        assert len(outline.bezier_segments) > 0
         
         # Verify there are no corners after fitting (since none were provided)
-        assert hasattr(boundary_curve, 'corners')
-        assert len(boundary_curve.corners) == 0
+        assert hasattr(outline, 'corners')
+        assert len(outline.corners) == 0
         
         # Ensure all segments are properly connected
-        if len(boundary_curve.bezier_segments) > 1:
-            for i in range(len(boundary_curve.bezier_segments) - 1):
-                current = boundary_curve.bezier_segments[i]
-                next_seg = boundary_curve.bezier_segments[i + 1]
+        if len(outline.bezier_segments) > 1:
+            for i in range(len(outline.bezier_segments) - 1):
+                current = outline.bezier_segments[i]
+                next_seg = outline.bezier_segments[i + 1]
                 # Check C0 continuity (end point matches next start point)
                 assert current.end_point.distance_to(next_seg.start_point) < 1e-10
         
-        # Check closure for closed curve
-        if boundary_curve.is_closed and len(boundary_curve.bezier_segments) > 1:
-            first = boundary_curve.bezier_segments[0]
-            last = boundary_curve.bezier_segments[-1]
+        # Check closure for closed Outline
+        if outline.is_closed and len(outline.bezier_segments) > 1:
+            first = outline.bezier_segments[0]
+            last = outline.bezier_segments[-1]
             assert last.end_point.distance_to(first.start_point) < 1e-10
     
-    def test_fit_boundary_curve_mixed_corners(self, fitter):
+    def test_fit_outline_mixed_corners(self, fitter):
         """Test fitting with some corners and some smooth sections"""
         points = [
             Point(0, 0),  # Corner
@@ -151,24 +151,24 @@ class TestBezierFitter:
         corner_indices = [0, 4, 5, 8]  # Indices of corners
         color = Color.BLACK
         
-        boundary_curve = fitter.fit_boundary_curve(points, corner_indices, color)
+        outline = fitter.fit_outline(points, corner_indices, color)
         
-        # Should create valid boundary curve
-        assert hasattr(boundary_curve, 'bezier_segments')
-        assert len(boundary_curve.bezier_segments) >= 1
+        # Should create valid outline
+        assert hasattr(outline, 'bezier_segments')
+        assert len(outline.bezier_segments) >= 1
         
         # Check attributes
-        assert hasattr(boundary_curve, 'corners')
-        assert hasattr(boundary_curve, 'color')
-        assert hasattr(boundary_curve, 'is_closed')
+        assert hasattr(outline, 'corners')
+        assert hasattr(outline, 'color')
+        assert hasattr(outline, 'is_closed')
         
         # Check attribute values
-        assert boundary_curve.color == color
-        assert boundary_curve.is_closed == True
-        assert len(boundary_curve.corners) == 4  # Should have 4 corners
+        assert outline.color == color
+        assert outline.is_closed == True
+        assert len(outline.corners) == 4  # Should have 4 corners
         
         # Each segment should be valid
-        for segment in boundary_curve.bezier_segments:
+        for segment in outline.bezier_segments:
             assert hasattr(segment, 'control_points')
             assert hasattr(segment, 'degree')
             # Each Bézier segment should have degree + 1 control points
@@ -179,21 +179,21 @@ class TestBezierFitter:
                 assert math.isfinite(control_point.y)
         
         # Check segment connections (C0 continuity)
-        if len(boundary_curve.bezier_segments) > 1:
-            for i in range(len(boundary_curve.bezier_segments)):
-                current_segment = boundary_curve.bezier_segments[i]
-                next_segment = boundary_curve.bezier_segments[(i + 1) % len(boundary_curve.bezier_segments)]
+        if len(outline.bezier_segments) > 1:
+            for i in range(len(outline.bezier_segments)):
+                current_segment = outline.bezier_segments[i]
+                next_segment = outline.bezier_segments[(i + 1) % len(outline.bezier_segments)]
                 
-                # Check C0 continuity (position continuity at segment boundaries)
+                # Check C0 continuity (position continuity at segment interfaces)
                 distance = current_segment.end_point.distance_to(next_segment.start_point)
-                assert distance < 1e-10, f"Segment {i} end point doesn't connect to segment {(i + 1) % len(boundary_curve.bezier_segments)} start point. Distance: {distance}"
+                assert distance < 1e-10, f"Segment {i} end point doesn't connect to segment {(i + 1) % len(outline.bezier_segments)} start point. Distance: {distance}"
         
-        # Verify the curve is properly closed
-        if len(boundary_curve.bezier_segments) > 1:
-            first_segment = boundary_curve.bezier_segments[0]
-            last_segment = boundary_curve.bezier_segments[-1]
+        # Verify the outline is properly closed
+        if len(outline.bezier_segments) > 1:
+            first_segment = outline.bezier_segments[0]
+            last_segment = outline.bezier_segments[-1]
             closure_distance = last_segment.end_point.distance_to(first_segment.start_point)
-            assert closure_distance < 1e-10, f"Curve is not properly closed. Gap: {closure_distance}"
+            assert closure_distance < 1e-10, f"Outline is not properly closed. Gap: {closure_distance}"
     
     # ==================== Internal Method Tests ====================
     
@@ -211,19 +211,19 @@ class TestBezierFitter:
         cleaned = fitter._remove_consecutive_duplicate_points(points)
         assert len(cleaned) == 4  # Should have 4 unique consecutive points
     
-    def test_calculate_segment_boundaries(self, fitter):
-        """Test segment boundary determination with corners"""
+    def test_calculate_segment_interfaces(self, fitter):
+        """Test segment interface determination with corners"""
         points = [Point(i * 0.1, 0) for i in range(11)]  # 11 points along x-axis
         corner_indices = [0, 5, 10]  # Corners at start, middle, end
         
-        boundaries = fitter._calculate_segment_boundaries(
+        interfaces = fitter._calculate_segment_interfaces(
             points, corner_indices, target_segment_count=3, is_closed=False
         )
         
         # Should include all corner indices plus start and end
-        assert 0 in boundaries
-        assert 5 in boundaries
-        assert 10 in boundaries
+        assert 0 in interfaces
+        assert 5 in interfaces
+        assert 10 in interfaces
     
     def test_bernstein_basis_computation(self, fitter):
         """Test Bernstein basis computation"""
@@ -269,12 +269,12 @@ class TestBezierFitter:
         )
         
         segments = [segment1, segment2]
-        boundaries = [0, 5, 10]  # Mock boundaries
+        interfaces = [0, 5, 10]  # Mock interfaces
         corner_indices = []  # No corners for smooth junction
         
         # Test C0 continuity enforcement
         fitter._enforce_segment_continuity(
-            segments, boundaries, corner_indices, is_closed=False
+            segments, interfaces, corner_indices, is_closed=False
         )
         
         # End point of first should match start point of second (C0 continuity)
@@ -397,11 +397,11 @@ class TestBezierFitter:
         corner_indices = [0]
         
         # Should use fallback but still work
-        boundary_curve = fitter.fit_boundary_curve(points, corner_indices=corner_indices, color=Color.BLUE)
+        outline = fitter.fit_outline(points, corner_indices=corner_indices, color=Color.BLUE)
         
         # Check attributes
-        assert hasattr(boundary_curve, 'bezier_segments')
-        assert len(boundary_curve.bezier_segments) >= 1
+        assert hasattr(outline, 'bezier_segments')
+        assert len(outline.bezier_segments) >= 1
     
     # ==================== Performance Tests ====================
     
@@ -418,7 +418,7 @@ class TestBezierFitter:
         import time
         start_time = time.time()
         
-        boundary_curve = fitter.fit_boundary_curve(points, corner_indices, color)
+        outline = fitter.fit_outline(points, corner_indices, color)
         
         end_time = time.time()
         duration = end_time - start_time
@@ -427,5 +427,6 @@ class TestBezierFitter:
         assert duration < 5.0  # 5 seconds should be plenty
         
         # Result should be valid
-        assert hasattr(boundary_curve, 'bezier_segments')
-        assert len(boundary_curve.bezier_segments) > 0
+        assert hasattr(outline, 'bezier_segments')
+        assert len(outline.bezier_segments) > 0
+        

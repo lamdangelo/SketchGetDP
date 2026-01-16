@@ -54,8 +54,8 @@ def main():
         from svg_to_getdp.infrastructure.svg_parser import SVGParser
         from svg_to_getdp.infrastructure.corner_detector import CornerDetector
         from svg_to_getdp.infrastructure.bezier_fitter import BezierFitter
-        from svg_to_getdp.infrastructure.boundary_curve_grouper import BoundaryCurveGrouper
-        from svg_to_getdp.infrastructure.boundary_curve_mesher import BoundaryCurveMesher
+        from sketchgetdp.svg_to_getdp.infrastructure.outline_grouper import OutlineGrouper
+        from sketchgetdp.svg_to_getdp.infrastructure.outline_preprocessor import OutlinePreprocessor
         from svg_to_getdp.infrastructure.wire_preprocessor import WirePreprocessor
         
         # Initialize infrastructure services for SVG conversion
@@ -67,14 +67,14 @@ def main():
         converter = ConvertSVGToGeometry(svg_parser, corner_detector, bezier_fitter)
         
         # Execute the SVG conversion use case with debug data collection
-        boundary_curves, wires, colored_boundaries, corner_debug_data = converter.execute(args.svg_file)
+        outlines, wires, colored_outlines, corner_debug_data = converter.execute(args.svg_file)
         
         # Output conversion results
-        print(f"Successfully converted {len(boundary_curves)} boundary curves and {len(wires)} wires:")
+        print(f"Successfully converted {len(outlines)} outlines and {len(wires)} wires:")
         
-        for i, curve in enumerate(boundary_curves):
-            print(f"  Curve {i+1}: {len(curve.bezier_segments)} segments, "
-                  f"{len(curve.corners)} corners, color: {curve.color.name.lower()}")
+        for i, outline in enumerate(outlines):
+            print(f"  Outline {i+1}: {len(outline.bezier_segments)} segments, "
+                  f"{len(outline.corners)} corners, color: {outline.color.name.lower()}")
         
         for i, (point, color) in enumerate(wires):
             print(f"  Wire {i+1}: at ({point.x:.3f}, {point.y:.3f}), color: {color.name.lower()}")
@@ -107,7 +107,7 @@ def main():
                 print(f"\n=== Writing SVG Parser Debug ===")
                 svg_parser_debug_writer.write_svg_parser_debug_info(
                     svg_file_path=args.svg_file,
-                    colored_boundaries=colored_boundaries
+                    colored_outlines=colored_outlines
                 )
                 
                 # Write corner detection debug info
@@ -116,27 +116,27 @@ def main():
                     corner_detector_debug_writer.write_corner_detection_debug_info(
                         svg_file_path=args.svg_file,
                         corner_debug_data=corner_debug_data,
-                        boundary_curves=boundary_curves
+                        outlines=outlines
                     )
                 
                 # Write geometry debug info
                 print(f"\n=== Generating Geometry Debug ===")
                 summary_path = geometry_debug_writer.write_geometry_debug_info(
                     svg_file_path=args.svg_file,
-                    boundary_curves=boundary_curves,
+                    outlines=outlines,
                     wires=wires
                 )
                 
                 # Generate geometry plot
                 try:
                     plot_path = CurveVisualizer.save_plot_with_coordinator(
-                        boundary_curves=boundary_curves,
+                        outlines=outlines,
                         coordinator=debug_coordinator,
                         wires=wires,
-                        colored_boundaries=colored_boundaries,
+                        colored_outlines=colored_outlines,
                         show_control_points=True,
                         show_corners=True,
-                        show_raw_boundaries=True
+                        show_raw_outlines=True
                     )
                     
                 except ImportError as e:
@@ -163,14 +163,14 @@ def main():
         print("\n=== Starting Gmsh Meshing ===")
         
         # Initialize infrastructure services for Gmsh conversion
-        boundary_curve_grouper = BoundaryCurveGrouper()
-        boundary_curve_mesher = BoundaryCurveMesher()
+        outline_grouper = OutlineGrouper()
+        outline_preprocessor = OutlinePreprocessor()
         wire_preprocessor = WirePreprocessor()
         
         # Initialize Gmsh conversion use case
         gmsh_converter = ConvertGeometryToGmsh(
-            boundary_curve_grouper=boundary_curve_grouper,
-            boundary_curve_mesher=boundary_curve_mesher,
+            outline_grouper=outline_grouper,
+            outline_preprocessor=outline_preprocessor,
             wire_preprocessor=wire_preprocessor
         )
         
@@ -185,7 +185,7 @@ def main():
         
         # Execute Gmsh conversion
         gmsh_results = gmsh_converter.execute(
-            boundary_curves=boundary_curves,
+            outlines=outlines,
             wires=wires,
             config_file_path=str(config_file_path),
             model_name="svg_geometry",
@@ -201,38 +201,38 @@ def main():
         if args.debug:
             try:
                 from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
-                from svg_to_getdp.interfaces.debug.boundary_curve_grouper_debug_writer import BoundaryCurveGrouperDebugWriter
-                from svg_to_getdp.interfaces.debug.boundary_curve_mesher_debug_writer import BoundaryCurveMesherDebugWriter
+                from sketchgetdp.svg_to_getdp.interfaces.debug.outline_grouper_debug_writer import OutlineGrouperDebugWriter
+                from sketchgetdp.svg_to_getdp.interfaces.debug.outline_preprocessor_debug_writer import OutlinePreprocessorDebugWriter
                 from svg_to_getdp.interfaces.debug.wire_preprocessor_debug_writer import WirePreprocessorDebugWriter
                 
                 # Initialize debug writers with the same timestamp
-                grouping_debug_writer = BoundaryCurveGrouperDebugWriter()
+                grouping_debug_writer = OutlineGrouperDebugWriter()
                 grouping_debug_writer.set_shared_timestamp(shared_timestamp)
-                
-                meshing_debug_writer = BoundaryCurveMesherDebugWriter()
-                meshing_debug_writer.set_shared_timestamp(shared_timestamp)
+
+                preprocessing_debug_writer = OutlinePreprocessorDebugWriter()
+                preprocessing_debug_writer.set_shared_timestamp(shared_timestamp)
                 
                 wire_debug_writer = WirePreprocessorDebugWriter()
                 wire_debug_writer.set_shared_timestamp(shared_timestamp)
-                
-                # Write boundary curve grouping debug
-                if "debug_data" in gmsh_results and "boundary_curve_grouping" in gmsh_results["debug_data"]:
-                    print(f"\n=== Writing Boundary Curve Grouping Debug ===")
-                    
-                    grouping_debug_data = gmsh_results["debug_data"]["boundary_curve_grouping"]
+
+                # Write outline grouping debug
+                if "debug_data" in gmsh_results and "outline_grouping" in gmsh_results["debug_data"]:
+                    print(f"\n=== Writing Outline Grouping Debug ===")
+
+                    grouping_debug_data = gmsh_results["debug_data"]["outline_grouping"]
                     grouping_debug_file = grouping_debug_writer.write_grouping_debug_info(
                         svg_file_path=args.svg_file,
-                        boundary_curves=grouping_debug_data["boundary_curves"],
+                        outlines=grouping_debug_data["outlines"],
                         grouping_result=grouping_debug_data["grouping_result"],
                         grouper_instance=grouping_debug_data["grouper_instance"]
                     )
                     
-                # Write boundary curve meshing debug
-                print(f"\n=== Writing Boundary Curve Meshing Debug ===")
-                meshing_debug_file = meshing_debug_writer.write_meshing_debug_info(
+                # Write outline preprocessing debug
+                print(f"\n=== Writing Outline Preprocessing Debug ===")
+                preprocessing_debug_file = preprocessing_debug_writer.write_preprocessing_debug_info(
                     svg_file_path=args.svg_file,
-                    boundary_curves=boundary_curves,
-                    mesher_instance=boundary_curve_mesher,
+                    outlines=outlines,
+                    preprocessor_instance=outline_preprocessor,
                     gmsh_results=gmsh_results
                 )
                 

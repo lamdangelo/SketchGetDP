@@ -6,9 +6,9 @@ from svg_to_getdp.core.entities.point import Point
 
 
 @dataclass
-class BoundaryCurve:
+class Outline:
     """
-    Represents a complete boundary curve composed of multiple Bézier segments.
+    Represents a complete outline composed of multiple Bézier segments.
     """
     
     bezier_segments: List[BezierSegment]
@@ -17,9 +17,9 @@ class BoundaryCurve:
     is_closed: bool = True
     
     def __post_init__(self):
-        """Validate that the curve is properly constructed with tolerance."""
+        """Validate that the outline is properly constructed with tolerance."""
         if len(self.bezier_segments) < 1:
-            raise ValueError("Boundary curve must have at least one Bézier segment")
+            raise ValueError("Outline must have at least one Bézier segment")
         
         # Warn for significant gaps
         for i in range(len(self.bezier_segments) - 1):
@@ -56,7 +56,7 @@ class BoundaryCurve:
     
     def evaluate(self, t: float) -> Point:
         """
-        Evaluate the boundary curve at parameter t ∈ [0,1].
+        Evaluate the outline at parameter t ∈ [0,1].
         """
         if not 0 <= t <= 1:
             raise ValueError("Parameter t must be in [0,1]")
@@ -72,7 +72,7 @@ class BoundaryCurve:
     
     def derivative(self, t: float) -> Point:
         """
-        Compute the derivative of the boundary curve at parameter t ∈ [0,1].
+        Compute the derivative of the outline at parameter t ∈ [0,1].
         """
         if not 0 <= t <= 1:
             raise ValueError("Parameter t must be in [0,1]")
@@ -135,15 +135,15 @@ class BoundaryCurve:
         
         return self.bezier_segments[segment_index], local_t
     
-    def get_curve_points(self, num_points: int = 100) -> List[Point]:
+    def get_outline_points(self, num_points: int = 100) -> List[Point]:
         """
-        Sample the entire boundary curve at multiple parameter values.
+        Sample the entire outline at multiple parameter values.
         
         Args:
-            num_points: Number of points to sample along the entire curve
+            num_points: Number of points to sample along the entire outline
             
         Returns:
-            List of points along the complete boundary curve
+            List of points along the complete outline
         """
         if num_points < 2:
             raise ValueError("Number of points must be at least 2")
@@ -154,24 +154,24 @@ class BoundaryCurve:
             points.append(self.evaluate(t))
         return points
     
-    def get_boundary_length_approximation(self, num_samples: int = 1000) -> float:
+    def get_outline_length_approximation(self, num_samples: int = 1000) -> float:
         """
-        Approximate the length of the boundary curve by sampling.
+        Approximate the length of the outline by sampling.
         
         Args:
             num_samples: Number of sample points for length approximation
             
         Returns:
-            Approximate length of the boundary curve
+            Approximate length of the outline
         """
-        points = self.get_curve_points(num_samples)
+        points = self.get_outline_points(num_samples)
         length = 0.0
         for i in range(len(points) - 1):
             length += points[i].distance_to(points[i + 1])
         return length
     
     def __len__(self) -> int:
-        """Return the number of Bézier segments in this boundary curve."""
+        """Return the number of Bézier segments in this outline."""
         return len(self.bezier_segments)
     
     def __iter__(self):
@@ -179,6 +179,6 @@ class BoundaryCurve:
         return iter(self.bezier_segments)
     
     def __repr__(self) -> str:
-        return (f"BoundaryCurve(segments={len(self.bezier_segments)}, "
+        return (f"Outline(segments={len(self.bezier_segments)}, "
                 f"corners={len(self.corners)}, color={self.color.name}, "
                 f"closed={self.is_closed})")

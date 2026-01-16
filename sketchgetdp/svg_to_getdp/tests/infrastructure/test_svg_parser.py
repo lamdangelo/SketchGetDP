@@ -5,7 +5,7 @@ import pytest
 import tempfile
 import os
 
-from infrastructure.svg_parser import SVGParser, RawBoundary
+from infrastructure.svg_parser import SVGParser, RawOutline
 from core.entities.point import Point
 from core.entities.color import Color
 
@@ -46,7 +46,7 @@ class TestSVGParser:
     def test_parse_nonexistent_file(self, parser):
         """Test that parser raises error for nonexistent file"""
         with pytest.raises(ValueError, match="Invalid SVG file"):
-            parser.extract_boundaries_by_color("nonexistent.svg")
+            parser.extract_outlines_by_color("nonexistent.svg")
     
     def test_parse_invalid_xml(self, parser, temp_svg_file, cleanup_temp_file):
         """Test that parser raises error for invalid XML"""
@@ -54,7 +54,7 @@ class TestSVGParser:
         
         try:
             with pytest.raises(ValueError, match="Invalid SVG file"):
-                parser.extract_boundaries_by_color(temp_path)
+                parser.extract_outlines_by_color(temp_path)
         finally:
             cleanup_temp_file(temp_path)
     
@@ -69,7 +69,7 @@ class TestSVGParser:
         temp_path = temp_svg_file(svg_content)
         
         try:
-            result = parser.extract_boundaries_by_color(temp_path)
+            result = parser.extract_outlines_by_color(temp_path)
             assert result == {}  # No elements, empty result
         finally:
             cleanup_temp_file(temp_path)
@@ -84,27 +84,27 @@ class TestSVGParser:
         temp_path = temp_svg_file(svg_content)
         
         try:
-            result = parser.extract_boundaries_by_color(temp_path)
+            result = parser.extract_outlines_by_color(temp_path)
             
             # Check it has one color key
             keys = list(result.keys())
             assert len(keys) == 1
 
             red_color_key = keys[0]
-            red_boundaries = result[red_color_key]
-            
+            red_outlines = result[red_color_key]
+
             # Check the color key is red
             assert red_color_key.name == "red"
             assert red_color_key.rgb == (255, 0, 0)
-            
-            # Check there is one boundary consisting of one point
-            assert len(red_boundaries) == 1
-            boundary = red_boundaries[0]
-            assert isinstance(boundary, RawBoundary)
-            assert len(boundary.points) == 1
+
+            # Check there is one outline consisting of one point
+            assert len(red_outlines) == 1
+            outline = red_outlines[0]
+            assert isinstance(outline, RawOutline)
+            assert len(outline.points) == 1
             
             # Check the point is in valid range (scaled to unit coordinates)
-            point = boundary.points[0]
+            point = outline.points[0]
             assert 0 <= point.x <= 1, f"x={point.x} not in [0,1]"
             assert 0 <= point.y <= 1, f"y={point.y} not in [0,1]"
             
@@ -112,7 +112,7 @@ class TestSVGParser:
             cleanup_temp_file(temp_path)
     
     def test_parse_svg_with_multiple_colors(self, parser, temp_svg_file, cleanup_temp_file):
-        """Test parsing SVG with one shape per color - red as single-point boundary from ellipse"""
+        """Test parsing SVG with one shape per color - red as single-point outline from ellipse"""
         svg_content = '''<?xml version="1.0"?>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
         <!-- Red structure: ellipse that should be simplified to a single point (center) -->
@@ -131,7 +131,7 @@ class TestSVGParser:
         temp_path = temp_svg_file(svg_content)
         
         try:
-            result = parser.extract_boundaries_by_color(temp_path)
+            result = parser.extract_outlines_by_color(temp_path)
             
             # Check we have exactly 4 color keys (red, green, blue, black)
             color_keys = list(result.keys())
@@ -148,17 +148,17 @@ class TestSVGParser:
             assert red_color_key.name == "red"
             assert red_color_key.rgb == (255, 0, 0)
             
-            red_boundaries = result[red_color_key]
-            assert len(red_boundaries) == 1, f"Expected 1 red boundary, got {len(red_boundaries)}"
+            red_outlines = result[red_color_key]
+            assert len(red_outlines) == 1, f"Expected 1 red outline, got {len(red_outlines)}"
             
-            red_boundary = red_boundaries[0]
-            assert isinstance(red_boundary, RawBoundary)
-            assert red_boundary.color.name == "red"
+            red_outline = red_outlines[0]
+            assert isinstance(red_outline, RawOutline)
+            assert red_outline.color.name == "red"
             
             # Red structure should have exactly 1 point (center of ellipse)
-            assert len(red_boundary.points) == 1, f"Red ellipse should have 1 point, got {len(red_boundary.points)}"
+            assert len(red_outline.points) == 1, f"Red ellipse should have 1 point, got {len(red_outline.points)}"
             
-            red_point = red_boundary.points[0]
+            red_point = red_outline.points[0]
             assert 0 <= red_point.x <= 1, f"Red point x={red_point.x} not in [0,1]"
             assert 0 <= red_point.y <= 1, f"Red point y={red_point.y} not in [0,1]"
             
@@ -173,18 +173,18 @@ class TestSVGParser:
             assert green_color_key.name == "green"
             assert green_color_key.rgb == (0, 255, 0)
             
-            green_boundaries = result[green_color_key]
-            assert len(green_boundaries) == 1, f"Expected 1 green boundary, got {len(green_boundaries)}"
+            green_outlines = result[green_color_key]
+            assert len(green_outlines) == 1, f"Expected 1 green outline, got {len(green_outlines)}"
             
-            green_boundary = green_boundaries[0]
-            assert isinstance(green_boundary, RawBoundary)
-            assert green_boundary.color.name == "green"
+            green_outline = green_outlines[0]
+            assert isinstance(green_outline, RawOutline)
+            assert green_outline.color.name == "green"
             
             # Green structure should have multiple points (at least 4 for a square)
-            assert len(green_boundary.points) >= 4, f"Green square should have >=4 points, got {len(green_boundary.points)}"
-            assert green_boundary.is_closed, "Green square should be closed"
+            assert len(green_outline.points) >= 4, f"Green square should have >=4 points, got {len(green_outline.points)}"
+            assert green_outline.is_closed, "Green square should be closed"
             
-            for green_point in green_boundary.points:
+            for green_point in green_outline.points:
                 assert 0 <= green_point.x <= 1, f"Green point x={green_point.x} not in [0,1]"
                 assert 0 <= green_point.y <= 1, f"Green point y={green_point.y} not in [0,1]"
             
@@ -199,18 +199,18 @@ class TestSVGParser:
             assert blue_color_key.name == "blue"
             assert blue_color_key.rgb == (0, 0, 255)
             
-            blue_boundaries = result[blue_color_key]
-            assert len(blue_boundaries) == 1, f"Expected 1 blue boundary, got {len(blue_boundaries)}"
+            blue_outlines = result[blue_color_key]
+            assert len(blue_outlines) == 1, f"Expected 1 blue outline, got {len(blue_outlines)}"
             
-            blue_boundary = blue_boundaries[0]
-            assert isinstance(blue_boundary, RawBoundary)
-            assert blue_boundary.color.name == "blue"
+            blue_outline = blue_outlines[0]
+            assert isinstance(blue_outline, RawOutline)
+            assert blue_outline.color.name == "blue"
             
             # Blue structure should have multiple points (at least 2 for a line)
-            assert len(blue_boundary.points) >= 2, f"Blue line should have >=2 points, got {len(blue_boundary.points)}"
-            assert not blue_boundary.is_closed, "Blue line should be open"
-            
-            for blue_point in blue_boundary.points:
+            assert len(blue_outline.points) >= 2, f"Blue line should have >=2 points, got {len(blue_outline.points)}"
+            assert not blue_outline.is_closed, "Blue line should be open"
+
+            for blue_point in blue_outline.points:
                 assert 0 <= blue_point.x <= 1, f"Blue point x={blue_point.x} not in [0,1]"
                 assert 0 <= blue_point.y <= 1, f"Blue point y={blue_point.y} not in [0,1]"
             
@@ -225,30 +225,30 @@ class TestSVGParser:
             assert black_color_key.name == "black"
             assert black_color_key.rgb == (0, 0, 0)
             
-            black_boundaries = result[black_color_key]
-            assert len(black_boundaries) == 1, f"Expected 1 black boundary, got {len(black_boundaries)}"
+            black_outlines = result[black_color_key]
+            assert len(black_outlines) == 1, f"Expected 1 black outline, got {len(black_outlines)}"
             
-            black_boundary = black_boundaries[0]
-            assert isinstance(black_boundary, RawBoundary)
-            assert black_boundary.color.name == "black"
+            black_outline = black_outlines[0]
+            assert isinstance(black_outline, RawOutline)
+            assert black_outline.color.name == "black"
             
             # Black structure should have multiple points (at least 3 for a triangle)
-            assert len(black_boundary.points) >= 3, f"Black triangle should have >=3 points, got {len(black_boundary.points)}"
-            assert black_boundary.is_closed, "Black triangle should be closed"
+            assert len(black_outline.points) >= 3, f"Black triangle should have >=3 points, got {len(black_outline.points)}"
+            assert black_outline.is_closed, "Black triangle should be closed"
             
-            for black_point in black_boundary.points:
+            for black_point in black_outline.points:
                 assert 0 <= black_point.x <= 1, f"Black point x={black_point.x} not in [0,1]"
                 assert 0 <= black_point.y <= 1, f"Black point y={black_point.y} not in [0,1]"
             
-            # Verify no duplicate points in multi-point boundaries
-            for color, boundaries in result.items():
+            # Verify no duplicate points in multi-point outlines
+            for color, outlines in result.items():
                 if color.name != "red":  # Skip red (single point)
-                    for boundary in boundaries:
-                        if len(boundary.points) > 1:
+                    for outline in outlines:
+                        if len(outline.points) > 1:
                             # Check for consecutive duplicates
-                            for i in range(len(boundary.points) - 1):
-                                assert boundary.points[i] != boundary.points[i + 1], \
-                                    f"Consecutive duplicate points found in {color.name} boundary at index {i}"
+                            for i in range(len(outline.points) - 1):
+                                assert outline.points[i] != outline.points[i + 1], \
+                                    f"Consecutive duplicate points found in {color.name} outline at index {i}"
             
         finally:
             cleanup_temp_file(temp_path)
@@ -265,13 +265,13 @@ class TestSVGParser:
         temp_path = temp_svg_file(svg_content)
         
         try:
-            result = parser.extract_boundaries_by_color(temp_path)
-            
-            # Check any boundaries we get
-            for color, boundaries in result.items():
-                for boundary in boundaries:
+            result = parser.extract_outlines_by_color(temp_path)
+
+            # Check any outlines we get
+            for color, outlines in result.items():
+                for outline in outlines:
                     # Check that points are scaled to [0,1] range
-                    for point in boundary.points:
+                    for point in outline.points:
                         assert 0 <= point.x <= 1
                         assert 0 <= point.y <= 1
             
@@ -288,13 +288,13 @@ class TestSVGParser:
         temp_path = temp_svg_file(svg_content)
         
         try:
-            result = parser.extract_boundaries_by_color(temp_path)
+            result = parser.extract_outlines_by_color(temp_path)
             
-            # Check any boundaries we get
-            for color, boundaries in result.items():
-                for boundary in boundaries:
+            # Check any outlines we get
+            for color, outlines in result.items():
+                for outline in outlines:
                     # Should still work with default scaling
-                    for point in boundary.points:
+                    for point in outline.points:
                         assert 0 <= point.x <= 1
                         assert 0 <= point.y <= 1
                     
@@ -311,13 +311,13 @@ class TestSVGParser:
         temp_path = temp_svg_file(svg_content)
         
         try:
-            result = parser.extract_boundaries_by_color(temp_path)
+            result = parser.extract_outlines_by_color(temp_path)
             
-            # Check any boundaries we get
-            for color, boundaries in result.items():
-                for boundary in boundaries:
+            # Check any outlines we get
+            for color, outlines in result.items():
+                for outline in outlines:
                     # Should use default scaling
-                    for point in boundary.points:
+                    for point in outline.points:
                         assert 0 <= point.x <= 1
                         assert 0 <= point.y <= 1
                     
@@ -338,7 +338,7 @@ class TestSVGParser:
         temp_path = temp_svg_file(svg_content)
 
         try:
-            result = parser.extract_boundaries_by_color(temp_path)
+            result = parser.extract_outlines_by_color(temp_path)
             
             # Check that colors are extracted
             for color in result.keys():
@@ -359,7 +359,7 @@ class TestSVGParser:
         temp_path = temp_svg_file(svg_content)
         
         try:
-            result = parser.extract_boundaries_by_color(temp_path)
+            result = parser.extract_outlines_by_color(temp_path)
             
             # Check for expected colors
             for color in result.keys():
@@ -398,44 +398,44 @@ class TestSVGParser:
         try:
             # This should raise an error due to malformed elements
             with pytest.raises(ValueError, match="Invalid SVG file"):
-                parser.extract_boundaries_by_color(temp_path)
+                parser.extract_outlines_by_color(temp_path)
             
         finally:
             cleanup_temp_file(temp_path)
     
-    # ==================== RawBoundary Tests ====================
+    # ==================== RawOutline Tests ====================
     
-    def test_raw_boundary_validation(self):
-        """Test that RawBoundary validates point count"""
+    def test_raw_outline_validation(self):
+        """Test that RawOutline validates point count"""
         # Test works with 3+ points for any color
         points_3 = [Point(0, 0), Point(1, 0), Point(1, 1)]
         
         # All colors should work with 3+ points
         for color in [Color.RED, Color.GREEN, Color.BLUE]:
-            boundary = RawBoundary(points=points_3, color=color)
-            assert boundary.points == points_3
+            outline = RawOutline(points=points_3, color=color)
+            assert outline.points == points_3
         
         # Test with more than 3 points
         points_4 = [Point(0, 0), Point(1, 0), Point(1, 1), Point(0, 1)]
-        boundary_4 = RawBoundary(points=points_4, color=Color.RED)
-        assert boundary_4.points == points_4
+        outline_4 = RawOutline(points=points_4, color=Color.RED)
+        assert outline_4.points == points_4
         
         # Should fail with less than 3 points for ANY color
         points_2 = [Point(0, 0), Point(1, 1)]
         for color in [Color.RED, Color.GREEN, Color.BLUE]:
-            with pytest.raises(ValueError, match="Raw boundary must have at least 3 points"):
-                RawBoundary(points=points_2, color=color)
+            with pytest.raises(ValueError, match="Raw outline must have at least 3 points"):
+                RawOutline(points=points_2, color=color)
         
         # Should fail with 0 points
         with pytest.raises(ValueError):
-            RawBoundary(points=[], color=Color.RED)
+            RawOutline(points=[], color=Color.RED)
         
         # Should fail with 1 point
-        with pytest.raises(ValueError, match="Raw boundary must have at least 3 points"):
-            RawBoundary(points=[Point(0, 0)], color=Color.RED)
+        with pytest.raises(ValueError, match="Raw outline must have at least 3 points"):
+            RawOutline(points=[Point(0, 0)], color=Color.RED)
             
-    def test_raw_boundary_structure(self, parser, temp_svg_file, cleanup_temp_file):
-        """Simple test that validates RawBoundary objects for all four colors"""
+    def test_raw_outline_structure(self, parser, temp_svg_file, cleanup_temp_file):
+        """Simple test that validates RawOutline objects for all four colors"""
         svg_content = '''<?xml version="1.0"?>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
             <!-- One red circle -->
@@ -454,7 +454,7 @@ class TestSVGParser:
         temp_path = temp_svg_file(svg_content)
 
         try:
-            result = parser.extract_boundaries_by_color(temp_path)
+            result = parser.extract_outlines_by_color(temp_path)
 
             # Verify we have a dictionary
             assert isinstance(result, dict)
@@ -465,69 +465,69 @@ class TestSVGParser:
             # Check we have some colors
             assert len(keys) > 0
             
-            # Find boundaries for each color by checking each key
-            red_boundaries = None
-            green_boundaries = None
-            blue_boundaries = None
-            black_boundaries = None
+            # Find outlines for each color by checking each key
+            red_outlines = None
+            green_outlines = None
+            blue_outlines = None
+            black_outlines = None
             
             for key in keys:
                 if hasattr(key, 'name'):
                     if key.name == 'red':
-                        red_boundaries = result[key]
+                        red_outlines = result[key]
                     elif key.name == 'green':
-                        green_boundaries = result[key]
+                        green_outlines = result[key]
                     elif key.name == 'blue':
-                        blue_boundaries = result[key]
+                        blue_outlines = result[key]
                     elif key.name == 'black':
-                        black_boundaries = result[key]
+                        black_outlines = result[key]
             
             # Debug output
-            print(f"\nFound boundaries:")
-            if red_boundaries:
-                print(f"  Red: {len(red_boundaries)} boundary(ies)")
-            if green_boundaries:
-                print(f"  Green: {len(green_boundaries)} boundary(ies)")
-            if blue_boundaries:
-                print(f"  Blue: {len(blue_boundaries)} boundary(ies)")
-            if black_boundaries:
-                print(f"  Black: {len(black_boundaries)} boundary(ies)")
+            print(f"\nFound outlines:")
+            if red_outlines:
+                print(f"  Red: {len(red_outlines)} outline(s)")
+            if green_outlines:
+                print(f"  Green: {len(green_outlines)} outline(s)")
+            if blue_outlines:
+                print(f"  Blue: {len(blue_outlines)} outline(s)")
+            if black_outlines:
+                print(f"  Black: {len(black_outlines)} outline(s)")
             
-            # Validate red boundary (from circle)
-            assert red_boundaries is not None, "No red boundary found"
-            assert isinstance(red_boundaries, list)
-            assert len(red_boundaries) >= 1
+            # Validate red outline (from circle)
+            assert red_outlines is not None, "No red outline found"
+            assert isinstance(red_outlines, list)
+            assert len(red_outlines) >= 1
             
-            red_boundary = red_boundaries[0]
-            assert isinstance(red_boundary, RawBoundary)
-            assert isinstance(red_boundary.points, list)
+            red_outline = red_outlines[0]
+            assert isinstance(red_outline, RawOutline)
+            assert isinstance(red_outline.points, list)
             
-            # Validate green boundary (from triangle path)
-            assert green_boundaries is not None, "No green boundary found"
-            assert isinstance(green_boundaries, list)
-            assert len(green_boundaries) >= 1
+            # Validate green outline (from triangle path)
+            assert green_outlines is not None, "No green outline found"
+            assert isinstance(green_outlines, list)
+            assert len(green_outlines) >= 1
             
-            green_boundary = green_boundaries[0]
-            assert isinstance(green_boundary, RawBoundary)
-            assert isinstance(green_boundary.points, list)
-            
-            # Validate blue boundary (from rectangle path)
-            assert blue_boundaries is not None, "No blue boundary found"
-            assert isinstance(blue_boundaries, list)
-            assert len(blue_boundaries) >= 1
-            
-            blue_boundary = blue_boundaries[0]
-            assert isinstance(blue_boundary, RawBoundary)
-            assert isinstance(blue_boundary.points, list)
-            
-            # Validate black boundary (from polygon)
-            assert black_boundaries is not None, "No black boundary found"
-            assert isinstance(black_boundaries, list)
-            assert len(black_boundaries) >= 1
-            
-            black_boundary = black_boundaries[0]
-            assert isinstance(black_boundary, RawBoundary)
-            assert isinstance(black_boundary.points, list)
+            green_outline = green_outlines[0]
+            assert isinstance(green_outline, RawOutline)
+            assert isinstance(green_outline.points, list)
 
+            # Validate blue outline (from rectangle path)
+            assert blue_outlines is not None, "No blue outline found"
+            assert isinstance(blue_outlines, list)
+            assert len(blue_outlines) >= 1
+
+            blue_outline = blue_outlines[0]
+            assert isinstance(blue_outline, RawOutline)
+            assert isinstance(blue_outline.points, list)
+
+            # Validate black outline (from polygon)
+            assert black_outlines is not None, "No black outline found"
+            assert isinstance(black_outlines, list)
+            assert len(black_outlines) >= 1
+
+            black_outline = black_outlines[0]
+            assert isinstance(black_outline, RawOutline)
+            assert isinstance(black_outline.points, list)
         finally:
             cleanup_temp_file(temp_path)
+            

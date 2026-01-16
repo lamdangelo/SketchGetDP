@@ -1,74 +1,71 @@
 """
-Boundary curve meshing module for Gmsh integration.
-Converts BoundaryCurve objects into Gmsh geometry with proper physical groups.
+Outline preprocessing module for Gmsh integration.
+Converts Outline objects into Gmsh geometry with proper physical groups.
 """
 
 from typing import List, Dict, Any
-from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.core.entities.physical_group import PhysicalGroup
-from svg_to_getdp.interfaces.abstractions.boundary_curve_mesher_interface import BoundaryCurveMesherInterface
+from sketchgetdp.svg_to_getdp.interfaces.abstractions.outline_preprocessor_interface import OutlinePreprocessorInterface
 
-class BoundaryCurveMesher(BoundaryCurveMesherInterface):
+class OutlinePreprocessor(OutlinePreprocessorInterface):
     """
-    Meshes BoundaryCurve objects in Gmsh with proper physical group assignment.
+    Preprocesses Outline objects in Gmsh with proper physical group assignment.
     Handles both straight lines and 2nd order Bézier curves.
     """
     
     def __init__(self):
         """
-        Initialize the mesher with a Gmsh factory.
-        
-        Args:
-            factory: Gmsh geometry factory (gmsh.model.geo)
+        Initialize the preprocessor.
         """
         self._point_tags = {}  # Maps Point objects to Gmsh point tags
-        self._curve_loops = {}  # Maps boundary curve indices to Gmsh curve loop tags
-        self._surface_tags = {}  # Maps boundary curve indices to Gmsh surface tags
+        self._curve_loops = {}  # Maps outline indices to Gmsh curve loop tags
+        self._surface_tags = {}  # Maps outline indices to Gmsh surface tags
         self._created_points = {}  # Tracks created points to avoid duplicates
-        self._curve_tags_per_boundary = {}  # Store curve tags per boundary curve index
-        self._processing_order = []  # Store the order in which boundary curves were processed
+        self._curve_tags_per_outline = {}  # Store curve tags per outline index
+        self._processing_order = []  # Store the order in which outlines were processed
         
         # Track physical groups by type
         self._physical_groups_by_type = {
             'boundary': {},  # physical_group.value -> list of curve tags
             'domain': {}     # physical_group.value -> list of surface tags
         }
-        
-    def mesh_boundary_curves(self,
+
+    def preprocess_outlines(self,
                            factory: Any,  # Add factory parameter
-                           boundary_curves: List[BoundaryCurve], 
+                           outlines: List[Outline], 
                            properties: List[Dict[str, Any]]) -> None:
         """
-        Mesh all boundary curves with their properties.
-        Processes boundary curves from innermost to outermost to ensure
+        Preprocess all outlines with their properties.
+        Processes outlines from innermost to outermost to ensure
         holes are created before the surfaces that contain them.
         
         Args:
-            boundary_curves: List of BoundaryCurve objects to mesh
+            outlines: List of Outline objects to preprocess
             properties: List of dictionaries with "holes" and "physical_groups" keys
-                       Each dictionary corresponds to the boundary curve at the same index
+                       Each dictionary corresponds to the outline at the same index
         """
         self.factory = factory
         
-        if len(boundary_curves) != len(properties):
+        if len(outlines) != len(properties):
             raise ValueError(
-                f"Number of boundary curves ({len(boundary_curves)}) "
+                f"Number of outlines ({len(outlines)}) "
                 f"must match number of property dictionaries ({len(properties)})"
             )
         
         # Determine processing order from innermost to outermost
-        self._processing_order = self._get_processing_order(boundary_curves, properties)
-        
-        # Process boundary curves in topological order (inner to outer)
+        self._processing_order = self._get_processing_order(outlines, properties)
+
+        # Process outlines in topological order (inner to outer)
         for idx in self._processing_order:
-            boundary_curve = boundary_curves[idx]
+            outline = outlines[idx]
             props = properties[idx]
-            self._mesh_single_boundary_curve(idx, boundary_curve, props)
+            self._preprocess_single_outline(idx, outline, props)
         
         # Now collect all entities by physical group type
         for idx in self._processing_order:
-            boundary_curve = boundary_curves[idx]
+            outline = outlines[idx]
             props = properties[idx]
             self._collect_physical_groups(idx, props)
         
@@ -76,19 +73,19 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         self._assign_physical_groups()
     
     def _get_processing_order(self, 
-                            boundary_curves: List[BoundaryCurve], 
+                            outlines: List[Outline], 
                             properties: List[Dict[str, Any]]) -> List[int]:
         """
-        Determine the processing order from innermost to outermost boundary curves.
+        Determine the processing order from innermost to outermost outlines.
         
         Args:
-            boundary_curves: List of BoundaryCurve objects
+            outlines: List of Outline objects
             properties: List of property dictionaries
             
         Returns:
             List of indices in processing order (innermost to outermost)
         """
-        n = len(boundary_curves)
+        n = len(outlines)
         
         # Build dependency graph: edge from hole to container
         # If A is a hole in B, then A must be processed before B
@@ -117,7 +114,7 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
             current = queue.pop(0)
             processing_order.append(current)
             
-            # For each boundary that depends on this one (containers)
+            # For each outline that depends on this one (containers)
             for neighbor in adjacency[current]:
                 in_degree[neighbor] -= 1
                 if in_degree[neighbor] == 0:
@@ -130,12 +127,12 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         
         return processing_order
     
-    def _mesh_single_boundary_curve(self, 
+    def _preprocess_single_outline(self, 
                                    idx: int, 
-                                   boundary_curve: BoundaryCurve, 
+                                   outline: Outline, 
                                    properties: Dict[str, Any]) -> None:
         """
-        Mesh a single boundary curve.
+        Preprocess a single outline.
         
         Steps:
         1. Draw points
@@ -146,7 +143,7 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         """
         # Step 1: Create points for all unique control points
         point_tags = []
-        for point in boundary_curve.unique_control_points:
+        for point in outline.unique_control_points:
             tag = self._create_or_get_point(point)
             point_tags.append(tag)
         
@@ -154,7 +151,7 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         curve_tags = []
         segment_start_idx = 0
         
-        for segment in boundary_curve.bezier_segments:
+        for segment in outline.bezier_segments:
             # Check if segment is a straight line (degree 1 or collinear control points)
             if segment.degree == 1:
                 # Straight line segment - use simple line
@@ -174,7 +171,7 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
                 segment_start_idx += segment.degree  # Move by degree for next segment
         
         # Store curve tags
-        self._curve_tags_per_boundary[idx] = curve_tags
+        self._curve_tags_per_outline[idx] = curve_tags
         
         # Step 3: Define curve loop
         curve_loop_tag = self.factory.addCurveLoop(curve_tags)
@@ -192,8 +189,8 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
                         curve_loops_for_surface.append(self._curve_loops[hole_idx])
                     else:
                         raise ValueError(
-                            f"Hole boundary curve {hole_idx} referenced by "
-                            f"boundary curve {idx} has not been created yet. "
+                            f"Hole outline {hole_idx} referenced by "
+                            f"outline {idx} has not been created yet. "
                         )
         
         # Step 5: Define plane surface
@@ -225,7 +222,7 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
         Collect entities that belong to each physical group type.
         
         Args:
-            idx: Index of the boundary curve
+            idx: Index of the outline
             properties: Dictionary with "physical_groups" key
         """
         if "physical_groups" not in properties:
@@ -242,11 +239,11 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
             
             if pg.is_boundary():
                 # Collect curve tags for this boundary group
-                if idx in self._curve_tags_per_boundary:
+                if idx in self._curve_tags_per_outline:
                     if pg.value not in self._physical_groups_by_type['boundary']:
                         self._physical_groups_by_type['boundary'][pg.value] = []
                     self._physical_groups_by_type['boundary'][pg.value].extend(
-                        self._curve_tags_per_boundary[idx]
+                        self._curve_tags_per_outline[idx]
                     )
                     
             elif pg.is_domain():
@@ -283,7 +280,7 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
     
     def get_processing_order(self) -> List[int]:
         """
-        Get the order in which boundary curves were processed.
+        Get the order in which outlines were processed.
         
         Returns:
             List of indices in processing order (innermost to outermost)
@@ -292,15 +289,15 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
     
     def get_curve_loop_tag(self, idx: int) -> int:
         """
-        Get the curve loop tag for a boundary curve.
+        Get the curve loop tag for an outline.
         
         Args:
-            idx: Index of the boundary curve
+            idx: Index of the outline
             
         Returns:
             Gmsh curve loop tag
         """
         if idx not in self._curve_loops:
-            raise KeyError(f"No curve loop found for boundary curve index {idx}")
+            raise KeyError(f"No curve loop found for outline index {idx}")
         return self._curve_loops[idx]
     

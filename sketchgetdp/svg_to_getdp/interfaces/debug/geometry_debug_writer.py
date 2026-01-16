@@ -8,7 +8,7 @@ class GeometryDebugWriter(DebugCoordinator):
     def __init__(self):
         super().__init__()
     
-    def write_geometry_debug_info(self, svg_file_path: str, boundary_curves, wires):
+    def write_geometry_debug_info(self, svg_file_path: str, outlines, wires):
         """
         Write geometry conversion results to a debug text file.
         Follows the same structure as write_svg_parser_debug_info.
@@ -25,38 +25,38 @@ class GeometryDebugWriter(DebugCoordinator):
             f.write(f"\n")
             
             f.write(f"Summary:\n")
-            f.write(f"  Total boundary curves: {len(boundary_curves)}\n")
+            f.write(f"  Total outlines: {len(outlines)}\n")
             f.write(f"  Total wires: {len(wires)}\n")
             f.write(f"\n")
             
-            # Boundary Curves Section
-            f.write(f"BOUNDARY CURVES\n")
+            # Outlines Section
+            f.write(f"OUTLINES\n")
             f.write(f"===============\n\n")
-            
-            for i, curve in enumerate(boundary_curves):
-                f.write(f"Curve {i+1}:\n")
-                f.write(f"  Color: {curve.color.name}\n")
-                f.write(f"  Segments: {len(curve.bezier_segments)}\n")
-                f.write(f"  Corners: {len(curve.corners)}\n")
-                f.write(f"  Closed: {curve.is_closed}\n")
-                
+
+            for i, outline in enumerate(outlines):
+                f.write(f"Outline {i+1}:\n")
+                f.write(f"  Color: {outline.color.name}\n")
+                f.write(f"  Segments: {len(outline.bezier_segments)}\n")
+                f.write(f"  Corners: {len(outline.corners)}\n")
+                f.write(f"  Closed: {outline.is_closed}\n")
+
                 # Segment details with control points
                 f.write(f"  Segments:\n")
-                for seg_idx, segment in enumerate(curve.bezier_segments):
+                for seg_idx, segment in enumerate(outline.bezier_segments):
                     f.write(f"    Segment {seg_idx} (Degree {segment.degree}):\n")
                     for cp_idx, control_point in enumerate(segment.control_points):
                         f.write(f"      Control Point {cp_idx}: ({control_point.x:.6f}, {control_point.y:.6f})\n")
                 
                 # Corner coordinates
-                if curve.corners:
+                if outline.corners:
                     f.write(f"  Corners:\n")
-                    for corner_idx, corner in enumerate(curve.corners):
+                    for corner_idx, corner in enumerate(outline.corners):
                         f.write(f"    Corner {corner_idx}: ({corner.x:.6f}, {corner.y:.6f})\n")
                 
-                # Sample points along the curve
-                f.write(f"  Sampled Curve Points (t=0 to 1):\n")
+                # Sample points along the outline
+                f.write(f"  Sampled Outline Points (t=0 to 1):\n")
                 for t in [0.0, 0.25, 0.5, 0.75, 1.0]:
-                    point = curve.evaluate(t)
+                    point = outline.evaluate(t)
                     f.write(f"    t={t:.2f}: ({point.x:.6f}, {point.y:.6f})\n")
                 
                 f.write(f"\n")
@@ -74,40 +74,40 @@ class GeometryDebugWriter(DebugCoordinator):
         return debug_filename
     
     @staticmethod
-    def save_results(boundary_curves, wires, output_path: str):
+    def save_results(outlines, wires, output_path: str):
         """Save conversion results to file with coordinates."""
         with open(output_path, 'w') as f:
             f.write("SVG to Geometry Conversion Results\n")
             f.write("=" * 50 + "\n\n")
             
-            # Boundary Curves Section
-            f.write("BOUNDARY CURVES\n")
+            # Outlines Section
+            f.write("OUTLINES\n")
             f.write("=" * 50 + "\n\n")
             
-            for i, curve in enumerate(boundary_curves):
-                f.write(f"Curve {i+1}:\n")
-                f.write(f"  Color: {curve.color.name}\n")
-                f.write(f"  Segments: {len(curve.bezier_segments)}\n")
-                f.write(f"  Corners: {len(curve.corners)}\n")
-                f.write(f"  Closed: {curve.is_closed}\n")
-                
+            for i, outline in enumerate(outlines):
+                f.write(f"Outline {i+1}:\n")
+                f.write(f"  Color: {outline.color.name}\n")
+                f.write(f"  Segments: {len(outline.bezier_segments)}\n")
+                f.write(f"  Corners: {len(outline.corners)}\n")
+                f.write(f"  Closed: {outline.is_closed}\n")
+
                 # Segment details with control points
                 f.write("  Segments:\n")
-                for seg_idx, segment in enumerate(curve.bezier_segments):
+                for seg_idx, segment in enumerate(outline.bezier_segments):
                     f.write(f"    Segment {seg_idx} (Degree {segment.degree}):\n")
                     for cp_idx, control_point in enumerate(segment.control_points):
                         f.write(f"      Control Point {cp_idx}: ({control_point.x:.6f}, {control_point.y:.6f})\n")
                 
                 # Corner coordinates
-                if curve.corners:
+                if outline.corners:
                     f.write("  Corners:\n")
-                    for corner_idx, corner in enumerate(curve.corners):
+                    for corner_idx, corner in enumerate(outline.corners):
                         f.write(f"    Corner {corner_idx}: ({corner.x:.6f}, {corner.y:.6f})\n")
                 
-                # Sample points along the curve
-                f.write("  Sampled Curve Points (t=0 to 1):\n")
+                # Sample points along the outline
+                f.write("  Sampled Outline Points (t=0 to 1):\n")
                 for t in [0.0, 0.25, 0.5, 0.75, 1.0]:
-                    point = curve.evaluate(t)
+                    point = outline.evaluate(t)
                     f.write(f"    t={t:.2f}: ({point.x:.6f}, {point.y:.6f})\n")
                 
                 f.write("\n")

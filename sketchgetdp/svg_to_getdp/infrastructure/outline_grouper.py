@@ -1,39 +1,39 @@
 from typing import List, Dict, Tuple
-from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.physical_group import PhysicalGroup, DOMAIN_VA, DOMAIN_VI_IRON, DOMAIN_VI_AIR, BOUNDARY_GAMMA, BOUNDARY_OUT
 from svg_to_getdp.core.entities.point import Point
-from svg_to_getdp.interfaces.abstractions.boundary_curve_grouper_interface import BoundaryCurveGrouperInterface
+from svg_to_getdp.interfaces.abstractions.outline_grouper_interface import OutlineGrouperInterface
 
-class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
+class OutlineGrouper(OutlineGrouperInterface):
     """
-    Groups boundary curves into hierarchical structure with containment relationships
+    Groups outlines into hierarchical structure with containment relationships
     and assigns physical groups based on containment logic.
     """
 
     @staticmethod
-    def group_boundary_curves(boundary_curves: List[BoundaryCurve]) -> List[Dict]:
+    def group_outlines(outlines: List[Outline]) -> List[Dict]:
         """
-        Main function to group boundary curves and assign physical groups.
+        Main function to group outlines and assign physical groups.
         
         Args:
-            boundary_curves: List of boundary curves to process
+            outlines: List of outlines to process
             
         Returns:
-            List of dictionaries, one per boundary curve, with keys:
-            - "holes": List of indices of curves contained by this curve
-            - "physical_groups": List of PhysicalGroup objects for this curve
+            List of dictionaries, one per outline, with keys:
+            - "holes": List of indices of outlines contained by this outline
+            - "physical_groups": List of PhysicalGroup objects for this outline
         """
-        if not boundary_curves:
+        if not outlines:
             return []
         
         # Get containment hierarchy
-        containment_map = BoundaryCurveGrouper.get_containment_hierarchy(boundary_curves)
+        containment_map = OutlineGrouper.get_containment_hierarchy(outlines)
         
-        # Find the outermost curve (contains all others but is not contained by any)
+        # Find the outermost outline (contains all others but is not contained by any)
         outermost_candidates = []
-        for i in range(len(boundary_curves)):
-            # Count how many other curves contain this one
-            contained_by_count = sum(1 for j in range(len(boundary_curves)) 
+        for i in range(len(outlines)):
+            # Count how many other outlines contain this one
+            contained_by_count = sum(1 for j in range(len(outlines)) 
                                 if i != j and i in containment_map[j])
             
             if contained_by_count == 0:
@@ -44,7 +44,7 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
             # Calculate areas for all candidates
             candidate_areas = []
             for idx in outermost_candidates:
-                min_x, max_x, min_y, max_y = BoundaryCurveGrouper.get_curve_bounding_box(boundary_curves[idx])
+                min_x, max_x, min_y, max_y = OutlineGrouper.get_outline_bounding_box(outlines[idx])
                 area = (max_x - min_x) * (max_y - min_y)
                 candidate_areas.append((idx, area))
             
@@ -53,32 +53,32 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
         else:
             raise ValueError("No outermost candidates found")
         
-        # Classify all curves
-        classifications = [BoundaryCurveGrouper.classify_curve_color(curve) 
-                        for curve in boundary_curves]
+        # Classify all outlines
+        classifications = [OutlineGrouper.classify_outline_color(outline) 
+                        for outline in outlines]
         
-        # Check which Va curves are inside Vi curves
-        va_in_vi_flags = [False] * len(boundary_curves)
-        for i, (curve, classification) in enumerate(zip(boundary_curves, classifications)):
+        # Check which Va outlines are inside Vi outlines
+        va_in_vi_flags = [False] * len(outlines)
+        for i, (outline, classification) in enumerate(zip(outlines, classifications)):
             if classification == "va":
-                # Check if this Va curve is inside any Vi curve
-                for j, (other_curve, other_classification) in enumerate(zip(boundary_curves, classifications)):
+                # Check if this Va outline is inside any Vi outline
+                for j, (other_outline, other_classification) in enumerate(zip(outlines, classifications)):
                     if i != j and (other_classification == "vi_iron" or other_classification == "vi_air"):
-                        if BoundaryCurveGrouper.is_curve_inside_other(curve, other_curve):
+                        if OutlineGrouper.is_outline_inside_other(outline, other_outline):
                             va_in_vi_flags[i] = True
                             break
         
         # Build result dictionaries
         result = []
-        for i, curve in enumerate(boundary_curves):
+        for i, outline in enumerate(outlines):
             is_outermost = (i == outermost_idx)
             is_va_in_vi = va_in_vi_flags[i]
             
-            # Get holes (contained curves)
+            # Get holes (contained outlines)
             holes = containment_map.get(i, [])
             
             # Get physical groups
-            physical_groups = BoundaryCurveGrouper.get_physical_groups_for_curve(
+            physical_groups = OutlineGrouper.get_physical_groups_for_outline(
                 classification=classifications[i],
                 is_outermost=is_outermost,
                 is_va_in_vi=is_va_in_vi
@@ -92,31 +92,31 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
         return result
     
     @staticmethod
-    def is_point_inside_boundary(point: Point, boundary: BoundaryCurve, num_samples: int = 1000) -> bool:
+    def is_point_inside_outline(point: Point, outline: Outline, num_samples: int = 1000) -> bool:
         """
-        Check if a point is inside a closed boundary curve using ray casting algorithm.
+        Check if a point is inside a closed outline using ray casting algorithm.
         
         Args:
             point: The point to test
-            boundary: The closed boundary curve
-            num_samples: Number of samples for boundary approximation
+            outline: The closed outline
+            num_samples: Number of samples for outline approximation
             
         Returns:
-            True if point is inside the boundary, False otherwise
+            True if point is inside the outline, False otherwise
         """
-        if not boundary.is_closed:
+        if not outline.is_closed:
             return False
             
-        # Sample points along the boundary
-        boundary_points = boundary.get_curve_points(num_samples)
+        # Sample points along the outline
+        outline_points = outline.get_outline_points(num_samples)
         
         # Count intersections with horizontal ray to the right
         intersections = 0
-        n = len(boundary_points)
+        n = len(outline_points)
         
         for i in range(n):
-            p1 = boundary_points[i]
-            p2 = boundary_points[(i + 1) % n]
+            p1 = outline_points[i]
+            p2 = outline_points[(i + 1) % n]
             
             # Check if point is on the edge (within tolerance)
             # This helps with floating-point precision issues
@@ -147,22 +147,22 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
         return intersections % 2 == 1
     
     @staticmethod
-    def get_curve_bounding_box(curve: BoundaryCurve) -> Tuple[float, float, float, float]:
+    def get_outline_bounding_box(outline: Outline) -> Tuple[float, float, float, float]:
         """
-        Get the bounding box of a boundary curve.
+        Get the bounding box of an outline.
         
         Args:
-            curve: BoundaryCurve with control points
+            outline: Outline with control points
             
         Returns:
             Tuple of (min_x, max_x, min_y, max_y)
             
         Raises:
-            ValueError: If the curve has no control points
+            ValueError: If the outline has no control points
         """
-        control_points = curve.control_points
+        control_points = outline.control_points
         if not control_points:
-            raise ValueError(f"BoundaryCurve must have at least one control point. Got {len(control_points)} points.")
+            raise ValueError(f"Outline must have at least one control point. Got {len(control_points)} points.")
             
         min_x = min(p.x for p in control_points)
         max_x = max(p.x for p in control_points)
@@ -172,60 +172,60 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
         return (min_x, max_x, min_y, max_y)
     
     @staticmethod
-    def is_curve_inside_other(curve: BoundaryCurve, outer_curve: BoundaryCurve) -> bool:
+    def is_outline_inside_other(outline: Outline, outer_outline: Outline) -> bool:
         """
-        Check if one boundary curve is completely inside another.
+        Check if one outline is completely inside another.
         
         Args:
-            curve: The inner curve candidate
-            outer_curve: The potential outer curve
+            outline: The inner outline candidate
+            outer_outline: The potential outer outline
             
         Returns:
-            True if curve is completely inside outer_curve
+            True if outline is completely inside outer_outline
         """
-        if not curve.is_closed or not outer_curve.is_closed:
+        if not outline.is_closed or not outer_outline.is_closed:
             return False
             
-        # Quick bounding box test - inner curve must be completely within outer curve's bbox
-        inner_min_x, inner_max_x, inner_min_y, inner_max_y = BoundaryCurveGrouper.get_curve_bounding_box(curve)
-        outer_min_x, outer_max_x, outer_min_y, outer_max_y = BoundaryCurveGrouper.get_curve_bounding_box(outer_curve)
+        # Quick bounding box test - inner outline must be completely within outer outline's bbox
+        inner_min_x, inner_max_x, inner_min_y, inner_max_y = OutlineGrouper.get_outline_bounding_box(outline)
+        outer_min_x, outer_max_x, outer_min_y, outer_max_y = OutlineGrouper.get_outline_bounding_box(outer_outline)
         
         if not (inner_min_x >= outer_min_x and inner_max_x <= outer_max_x and
                 inner_min_y >= outer_min_y and inner_max_y <= outer_max_y):
             return False
             
-        # Sample points from the inner curve and check if they're all inside outer curve
-        sample_points = curve.get_curve_points(num_points=10)
+        # Sample points from the inner outline and check if they're all inside outer outline
+        sample_points = outline.get_outline_points(num_points=10)
         for point in sample_points:
-            if not BoundaryCurveGrouper.is_point_inside_boundary(point, outer_curve):
+            if not OutlineGrouper.is_point_inside_outline(point, outer_outline):
                 return False
                 
         return True
     
     @staticmethod
-    def get_containment_hierarchy(boundary_curves: List[BoundaryCurve]) -> Dict[int, List[int]]:
+    def get_containment_hierarchy(outlines: List[Outline]) -> Dict[int, List[int]]:
         """
-        Determine containment hierarchy among boundary curves.
+        Determine containment hierarchy among outlines.
         
         Args:
-            boundary_curves: List of all boundary curves
+            outlines: List of all outlines
             
         Returns:
-            Dictionary mapping curve index to list of indices of its immediate children
+            Dictionary mapping outline index to list of indices of its immediate children
         """
-        n = len(boundary_curves)
+        n = len(outlines)
         containment_map = {i: [] for i in range(n)}
         
-        # Calculate curve areas (approximated by bounding box)
-        curve_areas = []
-        for i, curve in enumerate(boundary_curves):
-            min_x, max_x, min_y, max_y = BoundaryCurveGrouper.get_curve_bounding_box(curve)
+        # Calculate outline areas (approximated by bounding box)
+        outline_areas = []
+        for i, outline in enumerate(outlines):
+            min_x, max_x, min_y, max_y = OutlineGrouper.get_outline_bounding_box(outline)
             area = (max_x - min_x) * (max_y - min_y)
-            curve_areas.append((i, area))
+            outline_areas.append((i, area))
         
         # Sort by area descending
-        curve_areas.sort(key=lambda x: x[1], reverse=True)
-        sorted_indices = [idx for idx, _ in curve_areas]
+        outline_areas.sort(key=lambda x: x[1], reverse=True)
+        sorted_indices = [idx for idx, _ in outline_areas]
         
         # Check containment relationships - only assign immediate parents
         for i in range(n):
@@ -234,18 +234,18 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
                 inner_idx = sorted_indices[j]
                 
                 # Check if inner is contained by outer
-                if BoundaryCurveGrouper.is_curve_inside_other(
-                    boundary_curves[inner_idx], 
-                    boundary_curves[outer_idx]
+                if OutlineGrouper.is_outline_inside_other(
+                    outlines[inner_idx], 
+                    outlines[outer_idx]
                 ):
-                    # Check if inner curve already has a parent in the sorted list
-                    # (i.e., check if there's another curve between outer and inner in the sorted list)
+                    # Check if inner outline already has a parent in the sorted list
+                    # (i.e., check if there's another outline between outer and inner in the sorted list)
                     has_closer_parent = False
                     for k in range(i + 1, j):
                         potential_parent_idx = sorted_indices[k]
-                        if BoundaryCurveGrouper.is_curve_inside_other(
-                            boundary_curves[inner_idx],
-                            boundary_curves[potential_parent_idx]
+                        if OutlineGrouper.is_outline_inside_other(
+                            outlines[inner_idx],
+                            outlines[potential_parent_idx]
                         ):
                             has_closer_parent = True
                             break
@@ -256,40 +256,40 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
         return containment_map
     
     @staticmethod
-    def classify_curve_color(curve: BoundaryCurve) -> str:
+    def classify_outline_color(outline: Outline) -> str:
         """
-        Classify a boundary curve based on its color.
-        
+        Classify an outline based on its color.
+
         Args:
-            curve: Boundary curve with color property
+            outline: Outline with color property
             
         Returns:
             String classification: "va", "vi_iron", or "vi_air"
         """
-        if curve.color.name == "black":
+        if outline.color.name == "black":
             return "va"
-        elif curve.color.name == "blue":
+        elif outline.color.name == "blue":
             return "vi_iron"
-        elif curve.color.name == "green":
+        elif outline.color.name == "green":
             return "vi_air"
         else:
-            raise ValueError(f"Unknown curve color: {curve.color.name}")
-    
+            raise ValueError(f"Unknown outline color: {outline.color.name}")
+
     @staticmethod
-    def get_physical_groups_for_curve(classification: str,
+    def get_physical_groups_for_outline(classification: str,
                                      is_outermost: bool = False,
                                      is_va_in_vi: bool = False) -> List[PhysicalGroup]:
         """
-        Get physical groups for a boundary curve based on classification and context.
+        Get physical groups for an outline based on classification and context.
         
         Args:
-            curve: Boundary curve
-            classification: Curve classification from classify_curve_color
-            is_outermost: Whether this is the outermost boundary
-            is_va_in_vi: Whether this Va curve is inside a Vi curve
+            outline: Outline
+            classification: Outline classification from classify_outline_color
+            is_outermost: Whether this is the outermost outline
+            is_va_in_vi: Whether this Va outline is inside a Vi outline
             
         Returns:
-            List of physical groups assigned to this curve
+            List of physical groups assigned to this outline
         """
         physical_groups = []
         
@@ -306,7 +306,7 @@ class BoundaryCurveGrouper(BoundaryCurveGrouperInterface):
         elif classification == "vi_air":
             physical_groups.append(DOMAIN_VI_AIR)
         
-        # Add boundary_out if this is the outermost curve
+        # Add boundary_out if this is the outermost outline
         if is_outermost:
             physical_groups.append(BOUNDARY_OUT)
         

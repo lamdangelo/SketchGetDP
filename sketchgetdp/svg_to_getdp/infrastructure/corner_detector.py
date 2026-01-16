@@ -50,9 +50,9 @@ class CornerDetector(CornerDetectorInterface):
         self.ellipse_aspect_ratio_threshold = ellipse_aspect_ratio_threshold
         self.debug_enabled = debug_enabled
     
-    def detect_corners(self, boundary_points: List[Point]) -> Tuple[List[int], Dict]:
+    def detect_corners(self, outline_points: List[Point]) -> Tuple[List[int], Dict]:
         """
-        Identifies indices of corner points in the boundary point sequence.
+        Identifies indices of corner points in the outline point sequence.
         
         The detection process involves:
         1. Early shape analysis (ellipse/smooth shape detection)
@@ -63,46 +63,46 @@ class CornerDetector(CornerDetectorInterface):
         6. Final filtering and spacing enforcement
         
         Args:
-            boundary_points: List of ordered points representing a closed boundary
+            outline_points: List of ordered points representing a closed outline
             
         Returns:
             Tuple containing:
-                - List of corner indices in the boundary_points list
+                - List of corner indices in the outline_points list
                 - Dictionary containing debug information if debug_enabled is True
         """
         debug_data = self._initialize_debug_data()
-        self._record_debug_step(debug_data, f"Starting corner detection for {len(boundary_points)} boundary points")
+        self._record_debug_step(debug_data, f"Starting corner detection for {len(outline_points)} outline points")
         
         # Early return for shapes that are likely ellipses or too smooth
-        if self._should_skip_corner_detection(boundary_points, debug_data):
+        if self._should_skip_corner_detection(outline_points, debug_data):
             return [], debug_data
         
         # Convert points to coordinate arrays for efficient computation
-        x_coordinates = np.array([point.x for point in boundary_points])
-        y_coordinates = np.array([point.y for point in boundary_points])
+        x_coordinates = np.array([point.x for point in outline_points])
+        y_coordinates = np.array([point.y for point in outline_points])
         
         self._record_bounding_box_info(x_coordinates, y_coordinates, debug_data)
         
         # Step 1: Detect candidate corners using multiple complementary methods
-        candidate_corners = self._detect_candidate_corners(boundary_points, x_coordinates, y_coordinates, debug_data)
+        candidate_corners = self._detect_candidate_corners(outline_points, x_coordinates, y_coordinates, debug_data)
         
         if not candidate_corners:
             self._record_debug_step(debug_data, "No strong corners found: returning empty list")
             return [], debug_data
         
         # Step 2: Cluster nearby candidates to avoid duplicates
-        clustered_corners = self._cluster_nearby_candidates(boundary_points, candidate_corners, debug_data)
+        clustered_corners = self._cluster_nearby_candidates(outline_points, candidate_corners, debug_data)
         
         # Step 3: Refine corner positions within each cluster
-        refined_corners = self._refine_corner_positions(boundary_points, clustered_corners, debug_data)
+        refined_corners = self._refine_corner_positions(outline_points, clustered_corners, debug_data)
         
         # Step 4: Filter corners by strength
-        strong_corners = self._filter_corners_by_strength(boundary_points, refined_corners)
+        strong_corners = self._filter_corners_by_strength(outline_points, refined_corners)
         
         # Step 5: Ensure minimum spacing between corners
-        final_corners = self._enforce_minimum_corner_spacing(boundary_points, strong_corners, debug_data)
+        final_corners = self._enforce_minimum_corner_spacing(outline_points, strong_corners, debug_data)
         
-        self._record_final_results(boundary_points, final_corners, debug_data)
+        self._record_final_results(outline_points, final_corners, debug_data)
         self._record_debug_step(debug_data, f"Final result: {len(final_corners)} corners detected")
         
         return sorted(final_corners), debug_data
@@ -126,16 +126,16 @@ class CornerDetector(CornerDetectorInterface):
         if self.debug_enabled:
             debug_data['all_steps'].append(message)
     
-    def _should_skip_corner_detection(self, boundary_points: List[Point], debug_data: Dict) -> bool:
+    def _should_skip_corner_detection(self, outline_points: List[Point], debug_data: Dict) -> bool:
         """
         Check if the shape is likely an ellipse or too smooth for corner detection.
         
         Returns True if corner detection should be skipped for this shape.
         """
-        point_count = len(boundary_points)
+        point_count = len(outline_points)
         
         # Early ellipse detection for small shapes
-        if point_count < 100 and self._is_likely_small_ellipse(boundary_points):
+        if point_count < 100 and self._is_likely_small_ellipse(outline_points):
             debug_data['shape_analysis']['early_ellipse_detection'] = True
             debug_data['shape_analysis']['ellipse_reason'] = "Small shape with ellipse-like properties"
             self._record_debug_step(debug_data, "Early ellipse detection: returning no corners")
@@ -143,7 +143,7 @@ class CornerDetector(CornerDetectorInterface):
         
         # Smoothness check for larger shapes
         if point_count > 30:
-            smoothness_score, is_ellipse = self._calculate_shape_smoothness(boundary_points)
+            smoothness_score, is_ellipse = self._calculate_shape_smoothness(outline_points)
             
             debug_data['shape_analysis']['smoothness_score'] = smoothness_score
             debug_data['shape_analysis']['is_ellipse'] = is_ellipse
@@ -182,7 +182,7 @@ class CornerDetector(CornerDetectorInterface):
     
     def _detect_candidate_corners(
         self, 
-        boundary_points: List[Point], 
+        outline_points: List[Point], 
         x_coordinates: np.ndarray, 
         y_coordinates: np.ndarray,
         debug_data: Dict
@@ -196,7 +196,7 @@ class CornerDetector(CornerDetectorInterface):
         3. Curvature peak analysis
         """
         # Apply each detection method independently
-        angle_based_corners = self._detect_corners_by_local_angle(boundary_points)
+        angle_based_corners = self._detect_corners_by_local_angle(outline_points)
         direction_based_corners = self._detect_corners_by_direction_change(x_coordinates, y_coordinates)
         curvature_based_corners = self._detect_corners_by_curvature_peaks(x_coordinates, y_coordinates)
         
@@ -214,7 +214,7 @@ class CornerDetector(CornerDetectorInterface):
         
         # Calculate strength for all candidates
         all_candidates = debug_data['candidate_detection']['all_candidates']
-        candidate_strengths = self._calculate_candidate_strengths(boundary_points, all_candidates)
+        candidate_strengths = self._calculate_candidate_strengths(outline_points, all_candidates)
         debug_data['strength_calculations'] = candidate_strengths
         
         # Combine results with method-specific weights
@@ -283,7 +283,7 @@ class CornerDetector(CornerDetectorInterface):
     
     def _cluster_nearby_candidates(
         self, 
-        boundary_points: List[Point], 
+        outline_points: List[Point], 
         candidates: List[int], 
         debug_data: Dict
     ) -> List[List[int]]:
@@ -292,16 +292,16 @@ class CornerDetector(CornerDetectorInterface):
             return [candidates] if candidates else []
         
         # Cluster candidates that are close to each other
-        clusters = self._form_candidate_clusters(boundary_points, candidates)
+        clusters = self._form_candidate_clusters(outline_points, candidates)
         
         debug_data['clustering']['clusters'] = clusters
         self._record_debug_step(debug_data, f"Clustering created {len(clusters)} candidate clusters")
         
         return clusters
     
-    def _form_candidate_clusters(self, boundary_points: List[Point], candidates: List[int]) -> List[List[int]]:
+    def _form_candidate_clusters(self, outline_points: List[Point], candidates: List[int]) -> List[List[int]]:
         """Group candidates that are within minimum distance of each other."""
-        point_count = len(boundary_points)
+        point_count = len(outline_points)
         sorted_candidates = sorted(candidates)
         clusters = []
         current_cluster = [sorted_candidates[0]]
@@ -310,7 +310,7 @@ class CornerDetector(CornerDetectorInterface):
             previous_idx = sorted_candidates[i-1]
             current_idx = sorted_candidates[i]
             
-            # Calculate circular distance along the boundary
+            # Calculate circular distance along the outline
             distance = min(abs(current_idx - previous_idx), point_count - abs(current_idx - previous_idx))
             
             if distance < self.minimum_corner_distance * 3:
@@ -326,7 +326,7 @@ class CornerDetector(CornerDetectorInterface):
     
     def _refine_corner_positions(
         self, 
-        boundary_points: List[Point], 
+        outline_points: List[Point], 
         clustered_corners: List[List[int]], 
         debug_data: Dict
     ) -> List[int]:
@@ -338,15 +338,15 @@ class CornerDetector(CornerDetectorInterface):
                 continue
                 
             # Select the strongest candidate from the cluster
-            candidate_strengths = self._calculate_candidate_strengths(boundary_points, cluster)
+            candidate_strengths = self._calculate_candidate_strengths(outline_points, cluster)
             best_candidate = max(cluster, key=lambda idx: candidate_strengths.get(idx, 0))
             
             # Refine the corner position
-            refined_candidate = self._refine_corner_position(boundary_points, best_candidate)
+            refined_candidate = self._refine_corner_position(outline_points, best_candidate)
             
             # Record refinement details for debugging
             refinement_detail = self._record_refinement_details(
-                cluster, best_candidate, refined_candidate, boundary_points, debug_data
+                cluster, best_candidate, refined_candidate, outline_points, debug_data
             )
             
             if refined_candidate is not None and refinement_detail.get('accepted', False):
@@ -359,7 +359,7 @@ class CornerDetector(CornerDetectorInterface):
         cluster: List[int],
         best_candidate: int,
         refined_candidate: Optional[int],
-        boundary_points: List[Point],
+        outline_points: List[Point],
         debug_data: Dict
     ) -> Dict:
         """Record details of the refinement process for debugging."""
@@ -370,7 +370,7 @@ class CornerDetector(CornerDetectorInterface):
         }
         
         if refined_candidate is not None:
-            refined_strength = self._calculate_corner_strength(boundary_points, refined_candidate)
+            refined_strength = self._calculate_corner_strength(outline_points, refined_candidate)
             refinement_detail['refined_strength'] = refined_strength
             
             if refined_strength >= self.corner_strength_threshold * 0.8:
@@ -388,16 +388,16 @@ class CornerDetector(CornerDetectorInterface):
         debug_data['refinement_details'].append(refinement_detail)
         return refinement_detail
     
-    def _filter_corners_by_strength(self, boundary_points: List[Point], corners: List[int]) -> List[int]:
+    def _filter_corners_by_strength(self, outline_points: List[Point], corners: List[int]) -> List[int]:
         """Filter out corners that don't meet the strength threshold."""
         return [
             idx for idx in corners
-            if self._calculate_corner_strength(boundary_points, idx) >= self.corner_strength_threshold
+            if self._calculate_corner_strength(outline_points, idx) >= self.corner_strength_threshold
         ]
     
     def _enforce_minimum_corner_spacing(
         self, 
-        boundary_points: List[Point], 
+        outline_points: List[Point], 
         corners: List[int], 
         debug_data: Dict
     ) -> List[int]:
@@ -405,8 +405,8 @@ class CornerDetector(CornerDetectorInterface):
         if len(corners) <= 1:
             return corners
         
-        point_count = len(boundary_points)
-        candidate_strengths = self._calculate_candidate_strengths(boundary_points, corners)
+        point_count = len(outline_points)
+        candidate_strengths = self._calculate_candidate_strengths(outline_points, corners)
         
         sorted_corners = sorted(corners)
         well_spaced_corners = []
@@ -445,24 +445,24 @@ class CornerDetector(CornerDetectorInterface):
     
     def _record_final_results(
         self, 
-        boundary_points: List[Point], 
+        outline_points: List[Point], 
         final_corners: List[int], 
         debug_data: Dict
     ) -> None:
         """Record final corner detection results for debugging."""
-        candidate_strengths = self._calculate_candidate_strengths(boundary_points, final_corners)
+        candidate_strengths = self._calculate_candidate_strengths(outline_points, final_corners)
         
         debug_data['final_decisions']['final_corners'] = final_corners
         debug_data['final_decisions']['corner_coordinates'] = {
-            idx: boundary_points[idx] for idx in final_corners
+            idx: outline_points[idx] for idx in final_corners
         }
         debug_data['final_decisions']['corner_strengths'] = {
             idx: candidate_strengths.get(idx, 0) for idx in final_corners
         }
     
     # ==================== Geometric Calculations ====================
-    
-    def _calculate_shape_smoothness(self, boundary_points: List[Point]) -> Tuple[float, bool]:
+
+    def _calculate_shape_smoothness(self, outline_points: List[Point]) -> Tuple[float, bool]:
         """
         Calculate a smoothness score for the shape and detect if it's ellipse-like.
         
@@ -471,19 +471,18 @@ class CornerDetector(CornerDetectorInterface):
                 - Smoothness score (higher = smoother)
                 - Boolean indicating if shape is likely an ellipse
         """
-        point_count = len(boundary_points)
-        
-        x_coordinates = np.array([point.x for point in boundary_points])
-        y_coordinates = np.array([point.y for point in boundary_points])
+        point_count = len(outline_points)
+        x_coordinates = np.array([point.x for point in outline_points])
+        y_coordinates = np.array([point.y for point in outline_points])
         
         # Calculate curvatures at sample points
         curvatures = self._calculate_sampled_curvatures(x_coordinates, y_coordinates, point_count)
         
         # Check if shape is ellipse-like
-        is_ellipse = self._is_shape_ellipse_like(boundary_points, curvatures)
+        is_ellipse = self._is_shape_ellipse_like(outline_points, curvatures)
         
         # Calculate angles at sample points
-        angles = self._calculate_sampled_angles(boundary_points, point_count)
+        angles = self._calculate_sampled_angles(outline_points, point_count)
         
         # Compute smoothness score from angle and curvature statistics
         smoothness_score = self._compute_smoothness_score(angles, curvatures)
@@ -496,7 +495,7 @@ class CornerDetector(CornerDetectorInterface):
         y_coordinates: np.ndarray, 
         point_count: int
     ) -> List[float]:
-        """Calculate curvatures at regularly sampled points along the boundary."""
+        """Calculate curvatures at regularly sampled points along the outline."""
         sample_step = max(1, point_count // 50)
         curvatures = []
         
@@ -506,13 +505,13 @@ class CornerDetector(CornerDetectorInterface):
         
         return curvatures
     
-    def _calculate_sampled_angles(self, boundary_points: List[Point], point_count: int) -> List[float]:
-        """Calculate angles at regularly sampled points along the boundary."""
+    def _calculate_sampled_angles(self, outline_points: List[Point], point_count: int) -> List[float]:
+        """Calculate angles at regularly sampled points along the outline."""
         sample_step = max(1, point_count // 50)
         angles = []
         
         for i in range(0, point_count, sample_step):
-            angle = self._calculate_point_angle(boundary_points, i, 7)
+            angle = self._calculate_point_angle(outline_points, i, 7)
             angles.append(angle)
         
         return angles
@@ -542,9 +541,9 @@ class CornerDetector(CornerDetectorInterface):
         # Weighted combination of angle and curvature smoothness
         return angle_score * 0.6 + curvature_score * 0.4
     
-    def _is_shape_ellipse_like(self, boundary_points: List[Point], curvatures: List[float]) -> bool:
+    def _is_shape_ellipse_like(self, outline_points: List[Point], curvatures: List[float]) -> bool:
         """Determine if the shape is likely an ellipse based on curvature consistency."""
-        point_count = len(boundary_points)
+        point_count = len(outline_points)
         
         # Large shapes are less likely to be simple ellipses
         if point_count > 200:
@@ -561,9 +560,9 @@ class CornerDetector(CornerDetectorInterface):
                     return True
         
         # Check distance to center consistency
-        x_coordinates = np.array([point.x for point in boundary_points])
-        y_coordinates = np.array([point.y for point in boundary_points])
-        
+        x_coordinates = np.array([point.x for point in outline_points])
+        y_coordinates = np.array([point.y for point in outline_points])
+
         center_x = np.mean(x_coordinates)
         center_y = np.mean(y_coordinates)
         
@@ -576,16 +575,16 @@ class CornerDetector(CornerDetectorInterface):
                 return True
         
         return False
-    
-    def _is_likely_small_ellipse(self, boundary_points: List[Point]) -> bool:
+
+    def _is_likely_small_ellipse(self, outline_points: List[Point]) -> bool:
         """Check if a small shape is likely an ellipse."""
-        point_count = len(boundary_points)
-        
+        point_count = len(outline_points)
+
         if point_count < 10:
             return False
         
-        x_coordinates = np.array([point.x for point in boundary_points])
-        y_coordinates = np.array([point.y for point in boundary_points])
+        x_coordinates = np.array([point.x for point in outline_points])
+        y_coordinates = np.array([point.y for point in outline_points])
         
         width = np.max(x_coordinates) - np.min(x_coordinates)
         height = np.max(y_coordinates) - np.min(y_coordinates)
@@ -617,28 +616,28 @@ class CornerDetector(CornerDetectorInterface):
                     return True
         
         return False
-    
-    def _calculate_point_angle(self, boundary_points: List[Point], point_index: int, window_size: int) -> float:
+
+    def _calculate_point_angle(self, outline_points: List[Point], point_index: int, window_size: int) -> float:
         """
-        Calculate the interior angle at a specific boundary point.
+        Calculate the interior angle at a specific outline point.
         
         Uses vectors to previous and next points to compute the angle.
         """
-        point_count = len(boundary_points)
+        point_count = len(outline_points)
         
         previous_index = (point_index - window_size) % point_count
         next_index = (point_index + window_size) % point_count
         
         # Vector from previous point to current point
         vector_to_current = np.array([
-            boundary_points[point_index].x - boundary_points[previous_index].x,
-            boundary_points[point_index].y - boundary_points[previous_index].y
+            outline_points[point_index].x - outline_points[previous_index].x,
+            outline_points[point_index].y - outline_points[previous_index].y
         ])
         
         # Vector from current point to next point
         vector_from_current = np.array([
-            boundary_points[next_index].x - boundary_points[point_index].x,
-            boundary_points[next_index].y - boundary_points[point_index].y
+            outline_points[next_index].x - outline_points[point_index].x,
+            outline_points[next_index].y - outline_points[point_index].y
         ])
         
         vector_to_current_norm = np.linalg.norm(vector_to_current)
@@ -659,7 +658,7 @@ class CornerDetector(CornerDetectorInterface):
         window_size: int
     ) -> float:
         """
-        Calculate the curvature at a specific point along the boundary.
+        Calculate the curvature at a specific point along the outline.
         
         Curvature is defined as the rate of change of direction per unit arc length.
         """
@@ -695,9 +694,9 @@ class CornerDetector(CornerDetectorInterface):
         
         return angle / arc_length if arc_length > 0 else 0.0
     
-    def _detect_corners_by_local_angle(self, boundary_points: List[Point]) -> List[int]:
+    def _detect_corners_by_local_angle(self, outline_points: List[Point]) -> List[int]:
         """Detect corners by analyzing local interior angles at each point."""
-        point_count = len(boundary_points)
+        point_count = len(outline_points)
         if point_count < 10:
             return []
         
@@ -707,7 +706,7 @@ class CornerDetector(CornerDetectorInterface):
         corners = []
         
         for i in range(point_count):
-            angle = self._calculate_point_angle(boundary_points, i, angle_window)
+            angle = self._calculate_point_angle(outline_points, i, angle_window)
             if angle > angle_threshold:
                 corners.append(i)
         
@@ -718,7 +717,7 @@ class CornerDetector(CornerDetectorInterface):
         x_coordinates: np.ndarray, 
         y_coordinates: np.ndarray
     ) -> List[int]:
-        """Detect corners by analyzing changes in direction along the boundary."""
+        """Detect corners by analyzing changes in direction along the outline."""
         point_count = len(x_coordinates)
         if point_count < self.window_size * 2:
             return []
@@ -767,7 +766,7 @@ class CornerDetector(CornerDetectorInterface):
             start_index = point_index
             end_index = (point_index + window_size) % point_count
         
-        # Extract coordinates from the window (handling circular boundary)
+        # Extract coordinates from the window (handling circular outline)
         if start_index < end_index:
             x_window = x_coordinates[start_index:end_index]
             y_window = y_coordinates[start_index:end_index]
@@ -824,7 +823,7 @@ class CornerDetector(CornerDetectorInterface):
         
         return corners
     
-    def _calculate_corner_strength(self, boundary_points: List[Point], point_index: int) -> float:
+    def _calculate_corner_strength(self, outline_points: List[Point], point_index: int) -> float:
         """
         Calculate a strength score (0-1) for a potential corner.
         
@@ -832,15 +831,15 @@ class CornerDetector(CornerDetectorInterface):
         1. Interior angle (larger angles are stronger corners)
         2. Local curvature contrast (corners should stand out from neighbors)
         """
-        point_count = len(boundary_points)
+        point_count = len(outline_points)
         
         # Angle component: corners have larger interior angles
-        angle = self._calculate_point_angle(boundary_points, point_index, 7)
+        angle = self._calculate_point_angle(outline_points, point_index, 7)
         angle_score = min(angle / (np.pi * 0.8), 1.0)
         
         # Curvature contrast component: corners should have higher curvature than neighbors
-        x_coordinates = np.array([point.x for point in boundary_points])
-        y_coordinates = np.array([point.y for point in boundary_points])
+        x_coordinates = np.array([point.x for point in outline_points])
+        y_coordinates = np.array([point.y for point in outline_points])
         
         local_curvature = self._calculate_local_curvature(x_coordinates, y_coordinates, point_index, 5)
         
@@ -869,27 +868,27 @@ class CornerDetector(CornerDetectorInterface):
     
     def _calculate_candidate_strengths(
         self, 
-        boundary_points: List[Point], 
+        outline_points: List[Point], 
         candidate_indices: List[int]
     ) -> Dict[int, float]:
         """Calculate strength scores for multiple candidate corners."""
         return {
-            idx: self._calculate_corner_strength(boundary_points, idx)
+            idx: self._calculate_corner_strength(outline_points, idx)
             for idx in candidate_indices
         }
     
-    def _refine_corner_position(self, boundary_points: List[Point], coarse_index: int) -> Optional[int]:
+    def _refine_corner_position(self, outline_points: List[Point], coarse_index: int) -> Optional[int]:
         """
         Refine a corner position by searching locally for the point with maximum interior angle.
         
         Args:
-            boundary_points: List of boundary points
+            outline_points: List of outline points
             coarse_index: Initial estimate of corner location
             
         Returns:
             Refined corner index, or None if no good corner found nearby
         """
-        point_count = len(boundary_points)
+        point_count = len(outline_points)
         search_radius = min(10, point_count // 20)
         
         best_index = coarse_index
@@ -898,7 +897,7 @@ class CornerDetector(CornerDetectorInterface):
         # Search within radius for point with maximum interior angle
         for offset in range(-search_radius, search_radius + 1):
             test_index = (coarse_index + offset) % point_count
-            angle = self._calculate_point_angle(boundary_points, test_index, 5)
+            angle = self._calculate_point_angle(outline_points, test_index, 5)
             
             if angle > best_angle:
                 best_angle = angle

@@ -3,13 +3,13 @@ from typing import List, Tuple, Optional
 import math
 
 from svg_to_getdp.core.entities.bezier_segment import BezierSegment
-from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.interfaces.abstractions.bezier_fitter_interface import BezierFitterInterface
 
 class BezierFitter(BezierFitterInterface):
     """
-    Fits piecewise Bézier curves to boundary points using optimized global least-squares.
+    Fits piecewise Bézier curves to outline points using optimized global least-squares.
     Handles corners as sharp discontinuities and curved regions with smooth continuity.
     """
     
@@ -17,26 +17,26 @@ class BezierFitter(BezierFitterInterface):
         self.bezier_degree = bezier_degree
         self.minimum_points_per_segment = minimum_points_per_segment
         
-    def fit_boundary_curve(self, points: List[Point], corner_indices: List[int], 
-                          color, is_closed: bool = True) -> BoundaryCurve:
+    def fit_outline(self, points: List[Point], corner_indices: List[int], 
+                          color, is_closed: bool = True) -> Outline:
         """
-        Fit piecewise Bézier curves to boundary points, treating corners as segment boundaries.
+        Fit piecewise Bézier curves to outline points, treating corners as segment interfaces.
         
         Args:
-            points: Raw boundary points to fit curves to
-            corner_indices: Indices of corner points that should be segment boundaries
-            color: Color for the resulting boundary curve
-            is_closed: Whether the curve forms a closed loop
+            points: Raw outline points to fit curves to
+            corner_indices: Indices of corner points that should be segment interfaces
+            color: Color for the resulting outline
+            is_closed: Whether the outline forms a closed loop
             
         Returns:
-            BoundaryCurve with fitted Bézier segments and corner information
+            Outline with fitted Bézier segments and corner information
             
         Raises:
             ValueError: When insufficient points are provided
         """
         cleaned_points = self._remove_consecutive_duplicate_points(points)
         if len(cleaned_points) < 3:
-            raise ValueError(f"Need at least 3 non-duplicate points for boundary curve, got {len(cleaned_points)}")
+            raise ValueError(f"Need at least 3 non-duplicate points for outline, got {len(cleaned_points)}")
             
         optimal_segment_count = self._calculate_optimal_segment_count(cleaned_points, corner_indices)
         bezier_segments = self._fit_piecewise_bezier_curves(
@@ -45,7 +45,7 @@ class BezierFitter(BezierFitterInterface):
         
         corner_points = [cleaned_points[idx] for idx in corner_indices] if corner_indices else []
         
-        return BoundaryCurve(
+        return Outline(
             bezier_segments=bezier_segments,
             corners=corner_points,
             color=color,
@@ -75,12 +75,12 @@ class BezierFitter(BezierFitterInterface):
             return self._fit_continuous_curves_without_corners(points, segment_count, is_closed)
         
         corner_regions = self._identify_corner_regions(points, corner_indices)
-        segment_boundaries = self._calculate_segment_boundaries(points, corner_indices, segment_count, is_closed)
+        segment_interfaces = self._calculate_segment_interfaces(points, corner_indices, segment_count, is_closed)
         
         fitted_segments = []
-        for segment_index in range(len(segment_boundaries) - 1):
-            start_index = segment_boundaries[segment_index]
-            end_index = segment_boundaries[segment_index + 1]
+        for segment_index in range(len(segment_interfaces) - 1):
+            start_index = segment_interfaces[segment_index]
+            end_index = segment_interfaces[segment_index + 1]
             segment_points = points[start_index:end_index + 1]
             
             if len(segment_points) < 2:
@@ -99,7 +99,7 @@ class BezierFitter(BezierFitterInterface):
             
             fitted_segments.append(fitted_segment)
         
-        self._enforce_segment_continuity(fitted_segments, segment_boundaries, corner_indices, is_closed)
+        self._enforce_segment_continuity(fitted_segments, segment_interfaces, corner_indices, is_closed)
         return fitted_segments
     
     def _fit_single_bezier_curve(self, points: List[Point]) -> BezierSegment:
@@ -181,80 +181,80 @@ class BezierFitter(BezierFitterInterface):
         
         return unique_points
 
-    def _calculate_segment_boundaries(self, points: List[Point], corner_indices: List[int],
+    def _calculate_segment_interfaces(self, points: List[Point], corner_indices: List[int],
                                    target_segment_count: int, is_closed: bool) -> List[int]:
-        """Calculate segment boundaries prioritizing corners while ensuring sufficient segmentation."""
+        """Calculate bezier segment interfaces prioritizing corners while ensuring sufficient segmentation."""
         point_count = len(points)
         
         if point_count < 2:
             return [0]
         
-        # Start with corners as primary boundaries
-        boundaries = sorted(set(corner_indices))
+        # Start with corners as primary interfaces
+        interfaces = sorted(set(corner_indices))
         
         # Always include the start point
-        if 0 not in boundaries:
-            boundaries.insert(0, 0)
+        if 0 not in interfaces:
+            interfaces.insert(0, 0)
         
         if is_closed:
-            if not boundaries:
-                boundaries = [0]
+            if not interfaces:
+                interfaces = [0]
             
-            current_segment_count = len(boundaries)
+            current_segment_count = len(interfaces)
             
             if current_segment_count < target_segment_count:
-                additional_boundaries_needed = target_segment_count - current_segment_count
-                new_boundaries = set(boundaries)
+                additional_interfaces_needed = target_segment_count - current_segment_count
+                new_interfaces = set(interfaces)
                 
-                for i in range(1, additional_boundaries_needed + 1):
-                    new_boundary_index = int((i * point_count) / (additional_boundaries_needed + 1))
-                    # Avoid boundaries too close to existing ones
-                    is_too_close = any(abs(new_boundary_index - existing) < 5 for existing in new_boundaries)
-                    if not is_too_close and new_boundary_index < point_count:
-                        new_boundaries.add(new_boundary_index)
+                for i in range(1, additional_interfaces_needed + 1):
+                    new_interface_index = int((i * point_count) / (additional_interfaces_needed + 1))
+                    # Avoid interfaces too close to existing ones
+                    is_too_close = any(abs(new_interface_index - existing) < 5 for existing in new_interfaces)
+                    if not is_too_close and new_interface_index < point_count:
+                        new_interfaces.add(new_interface_index)
                 
-                boundaries = sorted(new_boundaries)
+                interfaces = sorted(new_interfaces)
         
         else:
-            # For open curves, include the end point
-            if (point_count - 1) not in boundaries:
-                boundaries.append(point_count - 1)
+            # For open outlines, include the end point
+            if (point_count - 1) not in interfaces:
+                interfaces.append(point_count - 1)
             
-            current_segment_count = len(boundaries) - 1
+            current_segment_count = len(interfaces) - 1
             
             if current_segment_count < target_segment_count:
-                additional_boundaries_needed = target_segment_count - current_segment_count
+                additional_interfaces_needed = target_segment_count - current_segment_count
                 
                 # Find segments with largest gaps
                 segment_gaps = []
-                for i in range(len(boundaries) - 1):
-                    gap_size = boundaries[i + 1] - boundaries[i]
+                for i in range(len(interfaces) - 1):
+                    gap_size = interfaces[i + 1] - interfaces[i]
                     segment_gaps.append((gap_size, i))
                 
                 segment_gaps.sort(reverse=True)
                 
                 # Split largest gaps
-                for gap_size, gap_index in segment_gaps[:additional_boundaries_needed]:
+                for gap_size, gap_index in segment_gaps[:additional_interfaces_needed]:
                     if gap_size > 20:  # Only split substantial gaps
-                        midpoint = boundaries[gap_index] + gap_size // 2
-                        boundaries.insert(gap_index + 1, midpoint)
+                        midpoint = interfaces[gap_index] + gap_size // 2
+                        interfaces.insert(gap_index + 1, midpoint)
         
-        # Clean up boundaries
-        boundaries = [index for index in boundaries if 0 <= index < point_count]
-        boundaries = sorted(set(boundaries))
+        # Clean up interfaces
+        interfaces = [index for index in interfaces if 0 <= index < point_count]
+        interfaces = sorted(set(interfaces))
         
-        # Ensure minimum of 2 boundaries for segment creation
-        if len(boundaries) < 2:
+        # Ensure minimum of 2 interfaces for segment creation
+        if len(interfaces) < 2:
             if point_count > 1:
                 midpoint = point_count // 2
-                boundaries = [0, midpoint, point_count - 1] if not is_closed else [0, midpoint]
+                interfaces = [0, midpoint, point_count - 1] if not is_closed else [0, midpoint]
             else:
-                boundaries = [0]
+                interfaces = [0]
         
-        return boundaries
+        return interfaces
 
     def _enforce_segment_continuity(self, segments: List[BezierSegment], 
-                                  boundaries: List[int], corner_indices: List[int],
+                                  outlines: List[int], corner_indices: List[int],
                                   is_closed: bool):
         """Enforce C0 continuity at all junctions and C1 continuity only at non-corner junctions."""
         if len(segments) < 2:
@@ -263,7 +263,7 @@ class BezierFitter(BezierFitterInterface):
         for segment_index in range(len(segments) - 1):
             current_segment = segments[segment_index]
             next_segment = segments[segment_index + 1]
-            junction_index = boundaries[segment_index + 1]
+            junction_index = outlines[segment_index + 1]
             is_corner_junction = junction_index in corner_indices
             
             # Always enforce C0 continuity (position continuity)
@@ -280,7 +280,7 @@ class BezierFitter(BezierFitterInterface):
             if not is_corner_junction and self.bezier_degree == 2:
                 self._enforce_tangent_continuity(current_segment, next_segment)
         
-        # Handle closure for closed curves
+        # Handle closure for closed outlines
         if is_closed and len(segments) > 1:
             first_segment_start = segments[0].start_point
             last_segment_end = segments[-1].end_point
@@ -375,9 +375,9 @@ class BezierFitter(BezierFitterInterface):
     def _contains_interior_corner(self, start_index: int, end_index: int, 
                                  corner_indices: List[int]) -> bool:
         """
-        Check if segment contains a corner point that is not at its boundary.
+        Check if segment contains a corner point that is not at its outline.
         
-        Corner points at segment boundaries don't automatically make the segment
+        Corner points at segment interfaces don't automatically make the segment
         a corner region - they may be part of straight edges.
         """
         for corner_index in corner_indices:
@@ -646,15 +646,15 @@ class BezierFitter(BezierFitterInterface):
         point_count = len(points)
         segments = []
         
-        # Create evenly distributed segment boundaries
+        # Create evenly distributed segment interfaces
         points_per_segment = max(1, point_count // segment_count)
-        boundaries = [i * points_per_segment for i in range(segment_count)]
-        boundaries.append(point_count - 1)
+        outlines = [i * points_per_segment for i in range(segment_count)]
+        outlines.append(point_count - 1)
         
         # Fit each segment independently
         for segment_index in range(segment_count):
-            start_index = boundaries[segment_index]
-            end_index = boundaries[segment_index + 1]
+            start_index = outlines[segment_index]
+            end_index = outlines[segment_index + 1]
             segment_points = points[start_index:end_index + 1]
             
             if len(segment_points) >= 2:
@@ -680,9 +680,9 @@ class BezierFitter(BezierFitterInterface):
             if self.bezier_degree == 2:
                 self._enforce_tangent_continuity(segments[i], segments[i + 1])
         
-        # Handle closure for closed curves
+        # Handle closure for closed outlines
         if is_closed and len(segments) > 1:
-            self._ensure_curve_closure(segments)
+            self._ensure_outline_closure(segments)
             
             # Enforce C1 continuity between last and first segment
             if self.bezier_degree == 2 and len(segments) > 1:
@@ -690,8 +690,8 @@ class BezierFitter(BezierFitterInterface):
         
         return segments
 
-    def _ensure_curve_closure(self, segments: List[BezierSegment]):
-        """Ensure the first and last points of a closed curve match exactly."""
+    def _ensure_outline_closure(self, segments: List[BezierSegment]):
+        """Ensure the first and last points of a closed outline match exactly."""
         if not segments:
             return
         

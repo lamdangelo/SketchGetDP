@@ -9,20 +9,20 @@ from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.core.entities.color import Color
 
 @dataclass
-class RawBoundary:
+class RawOutline:
     """
-    Temporary data structure for raw boundary data extracted from SVG.
-    This will be converted to BoundaryCurve later after Bezier fitting.
+    Temporary data structure for raw outline data extracted from SVG.
+    This will be converted to Outline later after Bezier fitting.
     """
     points: List[Point]
     color: Color
     is_closed: bool = True
     
     def __post_init__(self):
-        """Validate the raw boundary data."""
+        """Validate the raw outline data."""
         # Allow single points for red dots, but require >=3 points for other colors
         if self.color != Color.RED and len(self.points) < 3:
-            raise ValueError(f"Raw boundary must have at least 3 points for color {self.color.name}, got {len(self.points)}")
+            raise ValueError(f"Raw outline must have at least 3 points for color {self.color.name}, got {len(self.points)}")
         elif self.color == Color.RED and len(self.points) < 1:
             raise ValueError("Red dot must have at least 1 point")
 
@@ -33,16 +33,16 @@ class SVGParserInterface(ABC):
     """
     
     @abstractmethod
-    def extract_boundaries_by_color(self, svg_file_path: str) -> Dict[Color, List[RawBoundary]]:
+    def extract_outlines_by_color(self, svg_file_path: str) -> Dict[Color, List[RawOutline]]:
         """
-        Parse SVG file and extract boundary curves grouped by color.
+        Parse SVG file and extract outlines grouped by color.
         
         Args:
             svg_file_path: Path to the SVG file
             
         Returns:
-            Dictionary mapping colors to lists of RawBoundary objects containing raw points.
-            
+            Dictionary mapping colors to lists of RawOutline objects containing raw points.
+
         Raises:
             ValueError: If the SVG file is invalid or cannot be parsed
         """

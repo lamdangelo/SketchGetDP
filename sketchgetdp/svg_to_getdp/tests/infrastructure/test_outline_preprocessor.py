@@ -1,13 +1,13 @@
 """
-Unit tests for BoundaryCurveMesher class.
+Unit tests for OutlinePreprocessor class.
 
-Tests the functionality of converting boundary curves to Gmsh geometry,
+Tests the functionality of converting outlines to Gmsh geometry,
 handling holes, physical groups, and topological relationships.
 """
 import pytest
 from unittest.mock import Mock, patch
 
-from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.core.entities.bezier_segment import BezierSegment
 from svg_to_getdp.core.entities.color import Color
@@ -18,11 +18,11 @@ from svg_to_getdp.core.entities.physical_group import (
     BOUNDARY_GAMMA,
     BOUNDARY_OUT
 )
-from svg_to_getdp.infrastructure.boundary_curve_mesher import BoundaryCurveMesher
+from sketchgetdp.svg_to_getdp.infrastructure.outline_preprocessor import OutlinePreprocessor
 
 
-class TestBoundaryCurveMesher:
-    """Test suite for BoundaryCurveMesher class."""
+class TestOutlinePreprocessor:
+    """Test suite for OutlinePreprocessor class."""
 
     # ==================== Fixtures ====================
 
@@ -70,7 +70,7 @@ class TestBoundaryCurveMesher:
     
     @pytest.fixture
     def basic_points(self):
-        """Create basic test points for constructing boundaries."""
+        """Create basic test points for constructing outlines."""
         return [
             Point(0.0, 0.0),    # Bottom-left
             Point(1.0, 0.0),    # Bottom-right
@@ -82,8 +82,8 @@ class TestBoundaryCurveMesher:
         ]
     
     @pytest.fixture
-    def square_boundary(self, basic_points):
-        """Create a square boundary with straight edges."""
+    def square_outline(self, basic_points):
+        """Create a square outline with straight edges."""
         segments = [
             BezierSegment([basic_points[0], basic_points[1]], degree=1),  # Bottom edge
             BezierSegment([basic_points[1], basic_points[2]], degree=1),  # Right edge
@@ -91,11 +91,11 @@ class TestBoundaryCurveMesher:
             BezierSegment([basic_points[3], basic_points[0]], degree=1),  # Left edge
         ]
         corners = [basic_points[0], basic_points[1], basic_points[2], basic_points[3]]
-        return BoundaryCurve(segments, corners, Color.BLUE)
+        return Outline(segments, corners, Color.BLUE)
     
     @pytest.fixture
-    def boundary_with_bezier_curves(self, basic_points):
-        """Create a boundary with both straight edges and Bézier curves."""
+    def outline_with_bezier_curves(self, basic_points):
+        """Create an outline with both straight edges and Bézier curves."""
         segments = [
             # Curved bottom edge (quadratic Bézier)
             BezierSegment([basic_points[0], basic_points[6], basic_points[1]], degree=2),
@@ -107,47 +107,47 @@ class TestBoundaryCurveMesher:
             BezierSegment([basic_points[3], basic_points[5], basic_points[0]], degree=2),
         ]
         corners = [basic_points[0], basic_points[1], basic_points[2], basic_points[3]]
-        return BoundaryCurve(segments, corners, Color.BLACK)
+        return Outline(segments, corners, Color.BLACK)
 
     # ==================== Initialization Tests ====================
 
     def test_initializes_with_empty_state(self):
-        """BoundaryCurveMesher should initialize with all internal collections empty."""
-        mesher = BoundaryCurveMesher()
+        """OutlinePreprocessor should initialize with all internal collections empty."""
+        mesher = OutlinePreprocessor()
         
         assert mesher._point_tags == {}
         assert mesher._curve_loops == {}
         assert mesher._surface_tags == {}
         assert mesher._created_points == {}
-        assert mesher._curve_tags_per_boundary == {}
+        assert mesher._curve_tags_per_outline == {}
         assert mesher._processing_order == []
         assert mesher._physical_groups_by_type['boundary'] == {}
         assert mesher._physical_groups_by_type['domain'] == {}
 
     # ==================== Basic Functionality Tests ====================
 
-    def test_raises_error_when_boundary_and_property_counts_mismatch(
-        self, mock_gmsh_factory, square_boundary
+    def test_raises_error_when_outline_and_property_counts_mismatch(
+        self, mock_gmsh_factory, square_outline
     ):
-        """Should raise ValueError when boundary curves and properties counts don't match."""
-        mesher = BoundaryCurveMesher()
+        """Should raise ValueError when outlines and properties counts don't match."""
+        mesher = OutlinePreprocessor()
         
-        boundary_curves = [square_boundary]
+        outlines = [square_outline]
         properties = [
             {"physical_groups": [DOMAIN_VA]},
             {"physical_groups": [BOUNDARY_OUT]}  # Extra property dict
         ]
         
         with pytest.raises(ValueError, match="must match"):
-            mesher.mesh_boundary_curves(mock_gmsh_factory, boundary_curves, properties)
+            mesher.preprocess_outlines(mock_gmsh_factory, outlines, properties)
 
-    def test_meshes_square_boundary_with_straight_edges(
-        self, mock_gmsh_factory, square_boundary
+    def test_meshes_square_outline_with_straight_edges(
+        self, mock_gmsh_factory, square_outline
     ):
-        """Should create geometry for a square boundary with only straight edges."""
-        mesher = BoundaryCurveMesher()
+        """Should create geometry for a square outline with only straight edges."""
+        mesher = OutlinePreprocessor()
         
-        mesher.mesh_boundary_curves(mock_gmsh_factory, [square_boundary], [{"physical_groups": [DOMAIN_VI_IRON]}])
+        mesher.preprocess_outlines(mock_gmsh_factory, [square_outline], [{"physical_groups": [DOMAIN_VI_IRON]}])
         
         # Verify geometry creation calls
         assert mock_gmsh_factory.addPoint.call_count == 4  # Four corner points
@@ -168,15 +168,14 @@ class TestBoundaryCurveMesher:
             2, [surface_tag], DOMAIN_VI_IRON.value
         )
 
-    def test_meshes_boundary_with_bezier_curves(
-        self, mock_gmsh_factory, boundary_with_bezier_curves
+    def test_preprocesses_outline_with_bezier_curves(
+        self, mock_gmsh_factory, outline_with_bezier_curves
     ):
-        """Should create geometry for boundary containing both straight and Bézier edges."""
-        mesher = BoundaryCurveMesher()
-        
-        mesher.mesh_boundary_curves(
+        """Should create geometry for outline containing both straight and Bézier edges."""
+        mesher = OutlinePreprocessor()
+        mesher.preprocess_outlines(
             mock_gmsh_factory,
-            [boundary_with_bezier_curves], 
+            [outline_with_bezier_curves], 
             [{"physical_groups": [DOMAIN_VA]}]
         )
         
@@ -198,11 +197,11 @@ class TestBoundaryCurveMesher:
 
     # ==================== Hole Handling Tests ====================
 
-    def test_meshes_outer_boundary_with_inner_hole(
-        self, mock_gmsh_factory, square_boundary
+    def test_preprocesses_outer_outline_with_inner_hole(
+        self, mock_gmsh_factory, square_outline
     ):
         """Should create outer surface containing an inner hole."""
-        # Create inner square boundary (hole)
+        # Create inner square outline (hole)
         inner_square_points = [
             Point(0.25, 0.25),
             Point(0.75, 0.25),
@@ -215,16 +214,16 @@ class TestBoundaryCurveMesher:
             BezierSegment([inner_square_points[2], inner_square_points[3]], degree=1),
             BezierSegment([inner_square_points[3], inner_square_points[0]], degree=1),
         ]
-        inner_boundary = BoundaryCurve(inner_segments, inner_square_points, Color.GREEN)
+        inner_outline = Outline(inner_segments, inner_square_points, Color.GREEN)
 
-        boundary_curves = [square_boundary, inner_boundary]
+        outlines = [square_outline, inner_outline]
         properties = [
             {"holes": [1], "physical_groups": [DOMAIN_VI_IRON]},  # Outer contains hole
             {"holes": [], "physical_groups": [DOMAIN_VI_AIR]}      # Inner is hole
         ]
 
-        mesher = BoundaryCurveMesher()
-        mesher.mesh_boundary_curves(mock_gmsh_factory, boundary_curves, properties)
+        mesher = OutlinePreprocessor()
+        mesher.preprocess_outlines(mock_gmsh_factory, outlines, properties)
 
         # Verify holes are processed first (topological ordering)
         assert mesher.get_processing_order() == [1, 0]  # Inner first, outer second
@@ -240,30 +239,30 @@ class TestBoundaryCurveMesher:
                 assert len(call_obj[0][0]) == 2  # Main loop + hole loop
                 break
 
-    def test_meshes_boundary_with_multiple_holes(
-        self, mock_gmsh_factory, square_boundary
+    def test_preprocesses_outline_with_multiple_holes(
+        self, mock_gmsh_factory, square_outline
     ):
         """Should create surface containing multiple holes."""
-        # Create two hole boundaries
+        # Create two hole outlines
         hole_one_points = [Point(0.2, 0.2), Point(0.4, 0.2), Point(0.4, 0.4), Point(0.2, 0.4)]
         hole_two_points = [Point(0.6, 0.6), Point(0.8, 0.6), Point(0.8, 0.8), Point(0.6, 0.8)]
         
         def create_square_segments(points):
             return [BezierSegment([points[i], points[(i+1)%4]], degree=1) for i in range(4)]
         
-        hole_one = BoundaryCurve(create_square_segments(hole_one_points), hole_one_points, Color.GREEN)
-        hole_two = BoundaryCurve(create_square_segments(hole_two_points), hole_two_points, Color.BLUE)
+        hole_one = Outline(create_square_segments(hole_one_points), hole_one_points, Color.GREEN)
+        hole_two = Outline(create_square_segments(hole_two_points), hole_two_points, Color.BLUE)
         
-        boundary_curves = [square_boundary, hole_one, hole_two]
+        outlines = [square_outline, hole_one, hole_two]
         properties = [
             {"holes": [1, 2], "physical_groups": [DOMAIN_VI_IRON]},           # Outer with two holes
             {"holes": [], "physical_groups": [DOMAIN_VI_AIR]},    # First hole
             {"holes": [], "physical_groups": [DOMAIN_VI_AIR]}     # Second hole
         ]
         
-        mesher = BoundaryCurveMesher()
-        mesher.mesh_boundary_curves(mock_gmsh_factory, boundary_curves, properties)
-        
+        mesher = OutlinePreprocessor()
+        mesher.preprocess_outlines(mock_gmsh_factory, outlines, properties)
+
         # Verify topological order: holes first, then outer
         processing_order = mesher.get_processing_order()
         assert set(processing_order[:2]) == {1, 2}  # Holes processed first
@@ -274,13 +273,14 @@ class TestBoundaryCurveMesher:
 
     # ==================== Physical Group Tests ====================
 
-    def test_assigns_boundary_physical_groups_to_curves(
-        self, mock_gmsh_factory, square_boundary
+    def test_assigns_boundary_physical_groups_to_outlines(
+        self, mock_gmsh_factory, square_outline
     ):
-        """Should assign boundary physical groups to 1D curve entities."""
-        mesher = BoundaryCurveMesher()
+        """Should assign boundary physical groups to 1D outline entities."""
+        preprocessor = OutlinePreprocessor()
         
-        mesher.mesh_boundary_curves(mock_gmsh_factory, [square_boundary], [{"physical_groups": [BOUNDARY_OUT]}])
+        preprocessor = OutlinePreprocessor()
+        preprocessor.preprocess_outlines(mock_gmsh_factory, [square_outline], [{"physical_groups": [BOUNDARY_OUT]}])
         
         # The line tags should be 201, 202, 203, 204 (incrementing from 200)
         expected_curve_tags = [201, 202, 203, 204]
@@ -290,15 +290,15 @@ class TestBoundaryCurveMesher:
             1, expected_curve_tags, BOUNDARY_OUT.value
         )
 
-    def test_assigns_multiple_physical_groups_to_single_boundary(
-        self, mock_gmsh_factory, square_boundary
+    def test_assigns_multiple_physical_groups_to_single_outline(
+        self, mock_gmsh_factory, square_outline
     ):
         """Should assign both domain and boundary physical groups when specified."""
-        mesher = BoundaryCurveMesher()
+        preprocessor = OutlinePreprocessor()
         
-        mesher.mesh_boundary_curves(
+        preprocessor.preprocess_outlines(
             mock_gmsh_factory,
-            [square_boundary], 
+            [square_outline], 
             [{"physical_groups": [DOMAIN_VA, BOUNDARY_GAMMA]}]
         )
         
@@ -321,63 +321,61 @@ class TestBoundaryCurveMesher:
     # ==================== Edge Case Tests ====================
 
     def test_returns_processing_order_copy_not_reference(
-        self, mock_gmsh_factory, square_boundary
+        self, mock_gmsh_factory, square_outline
     ):
         """Should return a copy of processing order to prevent external modification."""
-        mesher = BoundaryCurveMesher()
+        preprocessor = OutlinePreprocessor()
         
-        mesher.mesh_boundary_curves(mock_gmsh_factory, [square_boundary], [{"physical_groups": [DOMAIN_VA]}])
+        preprocessor.preprocess_outlines(mock_gmsh_factory, [square_outline], [{"physical_groups": [DOMAIN_VA]}])
         
-        order = mesher.get_processing_order()
+        order = preprocessor.get_processing_order()
         assert order == [0]
         
         # Modifying returned list shouldn't affect internal state
         order.append(999)
-        assert mesher.get_processing_order() == [0]
+        assert preprocessor.get_processing_order() == [0]
 
     def test_raises_error_for_non_existent_hole_reference(
-        self, mock_gmsh_factory, square_boundary
+        self, mock_gmsh_factory, square_outline
     ):
-        """Should raise error when hole index references non-existent boundary."""
-        mesher = BoundaryCurveMesher()
+        """Should raise error when hole index references non-existent outline."""
+        preprocessor = OutlinePreprocessor()
         
-        boundary_curves = [square_boundary]
+        outlines = [square_outline]
         properties = [{"holes": [999], "physical_groups": [DOMAIN_VI_IRON]}]  # Invalid hole index
         
         with pytest.raises(ValueError, match="has not been created yet"):
-            mesher.mesh_boundary_curves(mock_gmsh_factory, boundary_curves, properties)
-
+            preprocessor.preprocess_outlines(mock_gmsh_factory, outlines, properties)
     def test_raises_error_for_non_physical_group_in_list(
-        self, mock_gmsh_factory, square_boundary
+        self, mock_gmsh_factory, square_outline
     ):
         """Should raise TypeError when physical_groups contains non-PhysicalGroup objects."""
-        mesher = BoundaryCurveMesher()
+        preprocessor = OutlinePreprocessor()
         
-        boundary_curves = [square_boundary]
+        outlines = [square_outline]
         properties = [{"physical_groups": ["invalid_type"]}]
         
         with pytest.raises(TypeError, match="must be PhysicalGroup instance"):
-            mesher.mesh_boundary_curves(mock_gmsh_factory, boundary_curves, properties)
-
+            preprocessor.preprocess_outlines(mock_gmsh_factory, outlines, properties)
     # ==================== Internal Method Tests ====================
 
     def test_falls_back_to_input_order_when_topological_sort_fails(
-        self, square_boundary
+        self, square_outline
     ):
         """Should use input order when cyclic dependencies prevent topological sort."""
-        mesher = BoundaryCurveMesher()
+        preprocessor = OutlinePreprocessor()
         
-        # Create boundaries with circular dependency
-        boundaries = [square_boundary, square_boundary, square_boundary]
+        # Create outlines with circular dependency
+        outlines = [square_outline, square_outline, square_outline]
         properties = [
-            {"holes": [1], "physical_groups": [DOMAIN_VA]},    # Depends on boundary 1
-            {"holes": [0], "physical_groups": [DOMAIN_VI_IRON]},  # Depends on boundary 0 (cycle)
+            {"holes": [1], "physical_groups": [DOMAIN_VA]},    # Depends on outline 1
+            {"holes": [0], "physical_groups": [DOMAIN_VI_IRON]},  # Depends on outline 0 (cycle)
             {"physical_groups": [DOMAIN_VI_AIR]}
         ]
         
         with patch('builtins.print') as mock_print:
-            order = mesher._get_processing_order(boundaries, properties)
-            
+            order = preprocessor._get_processing_order(outlines, properties)
+
             # Verify warning was logged
             mock_print.assert_called_with(
                 "Warning: Could not determine topological order. Using input order."

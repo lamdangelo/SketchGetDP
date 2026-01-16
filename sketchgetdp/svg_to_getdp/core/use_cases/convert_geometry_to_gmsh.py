@@ -1,13 +1,13 @@
 """
 Usecase to convert geometry to Gmsh format.
-Integrates boundary curves, wires, and configuration to create a complete Gmsh model.
+Integrates outlines, wires, and configuration to create a complete Gmsh model.
 """
 
 import yaml
 from typing import List, Tuple, Dict, Any
 from pathlib import Path
 
-from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.core.entities.color import Color
 
@@ -18,8 +18,8 @@ from sketchgetdp.geometry.gmsh_toolbox import (
     show_model,
     finalize_gmsh
 )
-from svg_to_getdp.interfaces.abstractions.boundary_curve_grouper_interface import BoundaryCurveGrouperInterface as BoundaryCurveGrouper
-from svg_to_getdp.interfaces.abstractions.boundary_curve_mesher_interface import BoundaryCurveMesherInterface as BoundaryCurveMesher
+from sketchgetdp.svg_to_getdp.interfaces.abstractions.outline_grouper_interface import OutlineGrouperInterface as OutlineGrouper
+from sketchgetdp.svg_to_getdp.interfaces.abstractions.outline_preprocessor_interface import OutlinePreprocessorInterface as OutlinePreprocessor
 from svg_to_getdp.interfaces.abstractions.wire_preprocessor_interface import WirePreprocessorInterface as WirePreprocessor
 
 
@@ -32,25 +32,25 @@ class ConvertGeometryToGmsh:
     
     def __init__(
         self,
-        boundary_curve_grouper: BoundaryCurveGrouper,
-        boundary_curve_mesher: BoundaryCurveMesher,
+        outline_grouper: OutlineGrouper,
+        outline_preprocessor: OutlinePreprocessor,
         wire_preprocessor: WirePreprocessor
     ):
         """
         Initialize the use case with required dependencies.
         
         Args:
-            boundary_curve_grouper: Interface for grouping boundary curves by containment
-            boundary_curve_mesher: Interface for meshing boundary curves
+            outline_grouper: Interface for grouping outlines by containment
+            outline_preprocessor: Interface for preprocessing outlines
             wire_preprocessor: Interface for preparing wires for meshing
         """
-        self.boundary_curve_grouper = boundary_curve_grouper
-        self.boundary_curve_mesher = boundary_curve_mesher
+        self.outline_grouper = outline_grouper
+        self.outline_preprocessor = outline_preprocessor
         self.wire_preprocessor = wire_preprocessor
     
     def execute(
         self,
-        boundary_curves: List[BoundaryCurve],
+        outlines: List[Outline],
         wires: List[Tuple[Point, Color]],
         config_file_path: str,
         model_name: str = "geometry_model",
@@ -66,14 +66,14 @@ class ConvertGeometryToGmsh:
         2. Initialize Gmsh
         3. Set the mesh size from config
         4. Prepare wires
-        5. Group boundary curves with containment hierarchy
-        6. Mesh boundary curves
+        5. Group outlines with containment hierarchy
+        6. Preprocess outlines
         7. Synchronize before meshing
         8. Mesh and save
         9. Optionally show Gmsh GUI
         
         Args:
-            boundary_curves: List of BoundaryCurve objects representing domain boundaries
+            outlines: List of Outline objects representing domain boundaries
             wires: List of (Point, Color) tuples representing wires
             config_file_path: Path to YAML configuration file for wire currents and mesh settings
             model_name: Name for the Gmsh model (default: "geometry_model")
@@ -90,9 +90,9 @@ class ConvertGeometryToGmsh:
             KeyError: If required configuration is missing
         """
         # Input validation
-        if not isinstance(boundary_curves, list):
-            raise ValueError("boundary_curves must be a list")
-        
+        if not isinstance(outlines, list):
+            raise ValueError("outlines must be a list")
+
         if not isinstance(wires, list):
             raise ValueError("wires must be a list")
         
@@ -100,8 +100,8 @@ class ConvertGeometryToGmsh:
         if not config_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {config_file_path}")
         
-        if not boundary_curves:
-            print("Warning: No boundary curves provided")
+        if not outlines:
+            print("Warning: No outlines provided")
         
         # Step 1: Load configuration
         print(f"Loading configuration from: {config_file_path}")
@@ -142,22 +142,22 @@ class ConvertGeometryToGmsh:
             )
             results["wire_results"] = wire_results
             
-            # Step 5: Group boundary curves with containment hierarchy
-            print(f"Grouping {len(boundary_curves)} boundary curves...")
-            grouping_result = self.boundary_curve_grouper.group_boundary_curves(boundary_curves)
+            # Step 5: Group outlines with containment hierarchy
+            print(f"Grouping {len(outlines)} outlines...")
+            grouping_result = self.outline_grouper.group_outlines(outlines)
             results["grouping_result"] = grouping_result
             
             # Store debug data
-            results["debug_data"]["boundary_curve_grouping"] = {
-                "boundary_curves": boundary_curves,
+            results["debug_data"]["outline_grouping"] = {
+                "outlines": outlines,
                 "grouping_result": grouping_result,
-                "grouper_instance": self.boundary_curve_grouper
+                "grouper_instance": self.outline_grouper
             }
             
-            # Step 6: Mesh boundary curves
-            print("Meshing boundary curves...")
-            meshing_result = self.boundary_curve_mesher.mesh_boundary_curves(factory, boundary_curves, grouping_result)
-            results["meshing_result"] = meshing_result
+            # Step 6: Preprocess outlines
+            print("Preprocessing outlines...")
+            preprocessing_result = self.outline_preprocessor.preprocess_outlines(factory, outlines, grouping_result)
+            results["preprocessing_result"] = preprocessing_result
             
             # Step 7: Synchronize before meshing
             factory.synchronize()

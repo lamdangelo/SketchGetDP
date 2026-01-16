@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List
-from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
 
 
@@ -12,7 +12,7 @@ class CornerDetectorDebugWriter(DebugCoordinator):
     
     def write_corner_detection_debug_info(self, svg_file_path: str, 
                                           corner_debug_data: dict,
-                                          boundary_curves: List[BoundaryCurve] = None):
+                                          outlines: List[Outline] = None):
         """
         Write detailed corner detection debug information.
         """
@@ -27,9 +27,9 @@ class CornerDetectorDebugWriter(DebugCoordinator):
                 f.write("\nNO CORNER DEBUG DATA AVAILABLE\n")
                 return
             
-            # Process each boundary
+            # Process each outline
             for key, data in corner_debug_data.items():
-                self._write_boundary_corner_analysis(f, key, data, boundary_curves)
+                self._write_outline_corner_analysis(f, key, data, outlines)
         
         print(f"Corner detection debug information written to: {debug_filename}")
     
@@ -46,7 +46,7 @@ class CornerDetectorDebugWriter(DebugCoordinator):
             f.write(f"Input SVG: {svg_file_path}\n")
             f.write(f"Processed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Debug run timestamp: {self.get_shared_timestamp()}\n")
-            f.write(f"Total boundaries analyzed: {len(corner_debug_data)}\n\n")
+            f.write(f"Total outlines analyzed: {len(corner_debug_data)}\n\n")
             
             for key, data in corner_debug_data.items():
                 f.write(f"\n{'='*100}\n")
@@ -66,18 +66,18 @@ class CornerDetectorDebugWriter(DebugCoordinator):
         f.write(f"Input SVG: {svg_file_path}\n")
         f.write(f"Processed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Debug run timestamp: {self.get_shared_timestamp()}\n")
-        f.write(f"Total boundaries analyzed: {len(corner_debug_data) if corner_debug_data else 0}\n\n")
+        f.write(f"Total outlines analyzed: {len(corner_debug_data) if corner_debug_data else 0}\n\n")
     
-    def _write_boundary_corner_analysis(self, f, key: str, data: dict, boundary_curves: List[BoundaryCurve]):
-        """Write detailed analysis for a single boundary."""
+    def _write_outline_corner_analysis(self, f, key: str, data: dict, outlines: List[Outline]):
+        """Write detailed analysis for a single outline."""
         f.write(f"\n{'='*80}\n")
-        f.write(f"BOUNDARY ANALYSIS: {key}\n")
+        f.write(f"OUTLINE ANALYSIS: {key}\n")
         f.write(f"{'='*80}\n\n")
         
         # Basic info - with safety checks
         f.write(f"Basic Information:\n")
         f.write(f"  Color: {data.get('color', 'N/A')}\n")
-        f.write(f"  Boundary Index: {data.get('boundary_index', 'N/A')}\n")
+        f.write(f"  Outline Index: {data.get('outline_index', 'N/A')}\n")
         f.write(f"  Total Points: {data.get('points_count', 'N/A')}\n")
         f.write(f"  Is Closed: {data.get('is_closed', 'N/A')}\n")
         f.write(f"  Final Corners: {len(data.get('corner_indices', []))}\n\n")
@@ -85,7 +85,7 @@ class CornerDetectorDebugWriter(DebugCoordinator):
         debug_info = data.get('debug', {})
         
         if not debug_info:
-            f.write("NO DEBUG INFO AVAILABLE FOR THIS BOUNDARY\n\n")
+            f.write("NO DEBUG INFO AVAILABLE FOR THIS OUTLINE\n\n")
             return
         
         # Shape analysis
@@ -278,7 +278,7 @@ class CornerDetectorDebugWriter(DebugCoordinator):
         f.write("\n")
     
     def _write_extremely_detailed_analysis(self, f, data: dict):
-        """Write extremely detailed analysis for a boundary."""
+        """Write extremely detailed analysis for a outline."""
         debug_info = data['debug']
         
         # Write complete shape analysis

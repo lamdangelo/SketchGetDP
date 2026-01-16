@@ -1,47 +1,47 @@
 """
-Presentation layer service for visualizing Bézier curves and boundary curves.
+Presentation layer service for visualizing internal geometry.
 """
 
 import matplotlib.pyplot as plt
 import os
 from datetime import datetime
 from typing import List
-from svg_to_getdp.core.entities.boundary_curve import BoundaryCurve
+from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
 
 
 class CurveVisualizer:
-    """Presentation service for visualizing boundary curves, Bézier segments, and raw polylines."""
+    """Presentation service for visualizing outlines, Bézier segments, and raw polylines."""
     
     @staticmethod
-    def _plot_single_curve(curve: BoundaryCurve, curve_index: int, 
+    def _plot_single_outline(outline: Outline, outline_index: int, 
                         show_control_points: bool, show_corners: bool,
                         color_in_legend: dict, corner_color_in_legend: dict):
-        """Plot a single boundary curve."""
+        """Plot a single outline."""
         # Use the actual RGB values from the Color object
-        rgb = curve.color.rgb
+        rgb = outline.color.rgb
         plot_color = (rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)  # Normalize to 0-1 for matplotlib
         
-        # Sample points along the entire curve
-        t_values = [i/200 for i in range(201)]  # High resolution for smooth curves
-        curve_points = [curve.evaluate(t) for t in t_values]
+        # Sample points along the entire outline
+        t_values = [i/200 for i in range(201)]  # High resolution for smooth outlines
+        outline_points = [outline.evaluate(t) for t in t_values]
         
-        x_curve = [p.x for p in curve_points]
-        y_curve = [p.y for p in curve_points]
+        x_outline = [p.x for p in outline_points]
+        y_outline = [p.y for p in outline_points]
         
-        # Determine label for the curve (only add to legend if not already added for this color)
-        if curve.color.name not in color_in_legend:
-            label = f'{curve.color.name} Curves'
-            color_in_legend[curve.color.name] = True
+        # Determine label for the outline (only add to legend if not already added for this color)
+        if outline.color.name not in color_in_legend:
+            label = f'{outline.color.name} Outlines'
+            color_in_legend[outline.color.name] = True
         else:
             label = None
         
-        # Plot the curve itself
-        plt.plot(x_curve, y_curve, color=plot_color, linewidth=2, label=label)
+        # Plot the outline itself
+        plt.plot(x_outline, y_outline, color=plot_color, linewidth=2, label=label)
         
         # Plot control points if requested
         if show_control_points:
-            for seg_idx, segment in enumerate(curve.bezier_segments):
+            for seg_idx, segment in enumerate(outline.bezier_segments):
                 cp_x = [p.x for p in segment.control_points]
                 cp_y = [p.y for p in segment.control_points]
                 
@@ -50,14 +50,14 @@ class CurveVisualizer:
                         linewidth=1, markersize=4)
         
         # Plot corners if requested
-        if show_corners and curve.corners:
-            corner_x = [c.x for c in curve.corners]
-            corner_y = [c.y for c in curve.corners]
+        if show_corners and outline.corners:
+            corner_x = [c.x for c in outline.corners]
+            corner_y = [c.y for c in outline.corners]
             
             # Only add corner label to legend if not already added for this color
-            if curve.color.name not in corner_color_in_legend:
-                corner_label = f'{curve.color.name} Corners'
-                corner_color_in_legend[curve.color.name] = True
+            if outline.color.name not in corner_color_in_legend:
+                corner_label = f'{outline.color.name} Corners'
+                corner_color_in_legend[outline.color.name] = True
             else:
                 corner_label = None
             
@@ -66,15 +66,15 @@ class CurveVisualizer:
                     label=corner_label)
     
     @staticmethod
-    def _plot_colored_boundaries(colored_boundaries: dict):
-        """Plot colored polyline boundaries with lighter colors."""
-        # Track which colors we've already added to the legend for raw boundaries
+    def _plot_colored_outlines(colored_outlines: dict):
+        """Plot colored polyline outlines with lighter colors."""
+        # Track which colors we've already added to the legend for raw outlines
         raw_color_in_legend = {}
         raw_point_color_in_legend = {}
         
-        for color, raw_boundaries in colored_boundaries.items():
-            for i, raw_boundary in enumerate(raw_boundaries):
-                rgb = raw_boundary.color.rgb
+        for color, raw_outlines in colored_outlines.items():
+            for i, raw_outline in enumerate(raw_outlines):
+                rgb = raw_outline.color.rgb
                 
                 # Create lighter colors by blending with white
                 light_factor = 0.6  # 0.0 = original color, 1.0 = white
@@ -84,25 +84,25 @@ class CurveVisualizer:
                     (1 - light_factor) * (rgb[2] / 255.0) + light_factor
                 )
                 
-                x_points = [p.x for p in raw_boundary.points]
-                y_points = [p.y for p in raw_boundary.points]
+                x_points = [p.x for p in raw_outline.points]
+                y_points = [p.y for p in raw_outline.points]
                 
-                if raw_boundary.is_closed and len(raw_boundary.points) > 1:
-                    x_points.append(raw_boundary.points[0].x)
-                    y_points.append(raw_boundary.points[0].y)
+                if raw_outline.is_closed and len(raw_outline.points) > 1:
+                    x_points.append(raw_outline.points[0].x)
+                    y_points.append(raw_outline.points[0].y)
                 
                 # Plot the polyline with lighter styling
-                linestyle = '-' if raw_boundary.is_closed else '--'
+                linestyle = '-' if raw_outline.is_closed else '--'
                 
                 # Special handling for red dots (wires in raw form)
-                if raw_boundary.color.name == 'RED' and len(raw_boundary.points) == 1:
+                if raw_outline.color.name == 'RED' and len(raw_outline.points) == 1:
                     # Use light red for single red points
                     light_red = (1.0, 0.7, 0.7)  # Light red
                     
                     # Only add to legend once for red points
-                    if raw_boundary.color.name not in raw_point_color_in_legend:
+                    if raw_outline.color.name not in raw_point_color_in_legend:
                         label = 'Raw RED Points'
-                        raw_point_color_in_legend[raw_boundary.color.name] = True
+                        raw_point_color_in_legend[raw_outline.color.name] = True
                     else:
                         label = None
                         
@@ -111,9 +111,9 @@ class CurveVisualizer:
                 else:
                     # For polylines, use lighter colors and thinner lines
                     # Only add to legend once per color for raw polylines
-                    if raw_boundary.color.name not in raw_color_in_legend:
-                        label = f'Raw {raw_boundary.color.name} Polylines'
-                        raw_color_in_legend[raw_boundary.color.name] = True
+                    if raw_outline.color.name not in raw_color_in_legend:
+                        label = f'Raw {raw_outline.color.name} Polylines'
+                        raw_color_in_legend[raw_outline.color.name] = True
                     else:
                         label = None
                         
@@ -143,35 +143,35 @@ class CurveVisualizer:
                     markeredgewidth=3, label=label)
     
     @staticmethod
-    def save_plot_to_file(boundary_curves: List[BoundaryCurve], wires: List[tuple] = None,
-                        colored_boundaries: dict = None,
-                        filename: str = 'bezier_curves_plot.png', **kwargs):
+    def save_plot_to_file(outlines: List[Outline], wires: List[tuple] = None,
+                        colored_outlines: dict = None,
+                        filename: str = 'geometry_plot.png', **kwargs):
         """
         Save the plot to a file.
         
         Args:
-            boundary_curves: List of BoundaryCurve objects to plot
+            outlines: List of Outline objects to plot
             wires: List of (Point, Color) tuples for wires  
-            colored_boundaries: Dictionary of {color: List[RawBoundary]} objects to plot
+            colored_outlines: Dictionary of {color: List[RawOutline]} objects to plot
             filename: Output filename
-            **kwargs: Additional arguments for plot_boundary_curves
+            **kwargs: Additional arguments for plot_outlines
         """
         plt.figure(figsize=(12, 10))
         
         # Track which colors we've already added to the legend
         color_in_legend = {}
         corner_color_in_legend = {}
-        
-        # Plot each boundary curve
-        for i, curve in enumerate(boundary_curves):
-            CurveVisualizer._plot_single_curve(curve, i, 
+
+        # Plot each outline
+        for i, outline in enumerate(outlines):
+            CurveVisualizer._plot_single_outline(outline, i, 
                                             kwargs.get('show_control_points', True),
                                             kwargs.get('show_corners', True),
                                             color_in_legend, corner_color_in_legend)
         
-        # Plot colored boundaries (polylines) if requested
-        if colored_boundaries and kwargs.get('show_raw_boundaries', True):
-            CurveVisualizer._plot_colored_boundaries(colored_boundaries)
+        # Plot colored outlines (polylines) if requested
+        if colored_outlines and kwargs.get('show_raw_outlines', True):
+            CurveVisualizer._plot_colored_outlines(colored_outlines)
         
         # Plot wires
         if wires:
@@ -179,7 +179,7 @@ class CurveVisualizer:
         
         plt.grid(True, alpha=0.3)
         plt.axis('equal')
-        plt.title('Bézier Curves and Polylines from SVG Conversion')
+        plt.title('Internal Geometry from SVG Conversion')
         plt.xlabel('X coordinate')
         plt.ylabel('Y coordinate')
         plt.legend()
@@ -189,17 +189,17 @@ class CurveVisualizer:
         print(f"Geometry debug plot saved to: {filename}")
     
     @staticmethod
-    def save_plot_to_debug_directory(boundary_curves: List[BoundaryCurve], svg_file_path: str, 
-                                   wires: List[tuple] = None, colored_boundaries: dict = None,
+    def save_plot_to_debug_directory(outlines: List[Outline], svg_file_path: str, 
+                                   wires: List[tuple] = None, colored_outlines: dict = None,
                                    timestamp: str = None, **kwargs) -> str:
         """
         Save geometry plot to debug directory with timestamped filename.
         
         Args:
-            boundary_curves: List of BoundaryCurve objects to plot
+            outlines: List of Outline objects to plot
             svg_file_path: Path to the original SVG file (for naming)
             wires: List of (Point, Color) tuples for wires
-            colored_boundaries: Dictionary of {color: List[RawBoundary]} objects to plot
+            colored_outlines: Dictionary of {color: List[RawOutline]} objects to plot
             timestamp: Optional timestamp string (if None, generates new)
             **kwargs: Additional arguments for the plot
             
@@ -222,9 +222,9 @@ class CurveVisualizer:
         
         # Save the plot to the debug directory
         CurveVisualizer.save_plot_to_file(
-            boundary_curves=boundary_curves,
+            outlines=outlines,
             wires=wires,
-            colored_boundaries=colored_boundaries,
+            colored_outlines=colored_outlines,
             filename=debug_filename,
             **kwargs
         )
@@ -232,19 +232,19 @@ class CurveVisualizer:
         return debug_filename
     
     @classmethod
-    def save_plot_with_coordinator(cls, boundary_curves: List[BoundaryCurve], 
+    def save_plot_with_coordinator(cls, outlines: List[Outline],
                                  coordinator: DebugCoordinator,
                                  wires: List[tuple] = None, 
-                                 colored_boundaries: dict = None,
+                                 colored_outlines: dict = None,
                                  **kwargs) -> str:
         """
         Save plot using a DebugCoordinator for consistent naming.
         
         Args:
-            boundary_curves: List of BoundaryCurve objects to plot
+            outlines: List of Outline objects to plot
             coordinator: DebugCoordinator instance
             wires: List of (Point, Color) tuples for wires
-            colored_boundaries: Dictionary of {color: List[RawBoundary]} objects to plot
+            colored_outlines: Dictionary of {color: List[RawOutline]} objects to plot
             **kwargs: Additional arguments for the plot
             
         Returns:
@@ -254,9 +254,9 @@ class CurveVisualizer:
         
         # Save the plot to the debug directory
         cls.save_plot_to_file(
-            boundary_curves=boundary_curves,
+            outlines=outlines,
             wires=wires,
-            colored_boundaries=colored_boundaries,
+            colored_outlines=colored_outlines,
             filename=plot_filename,
             **kwargs
         )
