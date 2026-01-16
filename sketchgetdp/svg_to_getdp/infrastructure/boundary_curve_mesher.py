@@ -304,29 +304,3 @@ class BoundaryCurveMesher(BoundaryCurveMesherInterface):
             raise KeyError(f"No curve loop found for boundary curve index {idx}")
         return self._curve_loops[idx]
     
-    def get_physical_group_summary(self) -> str:
-        """
-        Generate a summary of created physical groups.
-        
-        Returns:
-            Formatted summary string
-        """
-        summary = ["Boundary Curve Physical Group Summary:"]
-        summary.append("-" * 50)
-        
-        # Boundary groups
-        boundary_count = len(self._physical_groups_by_type['boundary'])
-        summary.append(f"Boundary Groups (1D curves): {boundary_count}")
-        for pg_value, curve_tags in self._physical_groups_by_type['boundary'].items():
-            unique_tags = list(dict.fromkeys(curve_tags))
-            summary.append(f"  Tag {pg_value}: {len(unique_tags)} curves")
-        
-        # Domain groups
-        domain_count = len(self._physical_groups_by_type['domain'])
-        summary.append(f"Domain Groups (2D surfaces): {domain_count}")
-        for pg_value, surface_tags in self._physical_groups_by_type['domain'].items():
-            unique_tags = list(dict.fromkeys(surface_tags))
-            summary.append(f"  Tag {pg_value}: {len(unique_tags)} surfaces")
-        
-        summary.append("-" * 50)
-        return "\n".join(summary)

@@ -433,41 +433,6 @@ class TestWirePreprocessor:
         assert positive_wire_count == 3
         assert negative_wire_count == 3
 
-    # ==================== Summary and Reporting Tests ====================
-
-    def test_generates_summary_from_wire_results(self, preprocessor):
-        """Tests generation of human-readable summary from processed wire data."""
-        wire_processing_results = {
-            0: {
-                'point': Point(0.0, 0.0),
-                'color': Color.RED,
-                'physical_group': DOMAIN_COIL_POSITIVE,
-                'wire_name': 'wire_1',
-                'cluster_name': 'positive_cluster',
-                'wire_in_cluster_index': 0,
-                'cluster_index': 0,
-                'gmsh_point_tag': 1
-            },
-            1: {
-                'point': Point(1.0, 1.0),
-                'color': Color.RED,
-                'physical_group': DOMAIN_COIL_NEGATIVE,
-                'wire_name': 'wire_2',
-                'cluster_name': 'negative_cluster',
-                'wire_in_cluster_index': 0,
-                'cluster_index': 1,
-                'gmsh_point_tag': 2
-            }
-        }
-        
-        summary = preprocessor.get_wire_summary(wire_processing_results)
-        
-        assert "Wire Summary" in summary
-        assert "Total wires: 2" in summary
-        assert "Positive wires (+): 1" in summary
-        assert "Negative wires (-): 1" in summary
-        assert "Clusters: 2" in summary
-
     # ==================== Edge Case Tests ====================
 
     @pytest.mark.parametrize("configuration_content, wire_positions, expected_cluster_characteristics", [
