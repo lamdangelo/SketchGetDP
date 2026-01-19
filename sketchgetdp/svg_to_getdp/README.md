@@ -6,7 +6,7 @@ A sophisticated electromagnetic simulation pipeline that converts SVG sketches i
 
 SVG to GetDP is a Python-based electromagnetic simulation pipeline that processes SVG files containing electromagnetic structures and generates simulation results through a multi-stage workflow. It features:
 
-- **Three operation modes**: SVG→Gmsh, SVG→Gmsh→GetDP, or Mesh→GetDP
+- **Three operation modes**: SVG→Gmsh, SVG→Gmsh→GetDP, or Gmsh→GetDP
 - **Configurable physical properties** via YAML configuration
 - **Intelligent SVG parsing** with Bézier curve fitting and corner detection
 - **Fixed color mapping** for physical group identification
@@ -41,7 +41,7 @@ The project follows Clean Architecture principles with clear separation of conce
 ### Three Operation Modes
 1. **SVG → Gmsh**: Convert SVG sketches to Gmsh meshes
 2. **SVG → Gmsh → GetDP**: Full pipeline from SVG to simulation results
-3. **Mesh → GetDP**: Run GetDP simulation on existing meshes
+3. **Gmsh → GetDP**: Run GetDP simulation on existing meshes
 
 ### Intelligent SVG Processing
 - **Bézier curve fitting** for accurate shape representation
@@ -55,9 +55,8 @@ The project follows Clean Architecture principles with clear separation of conce
 - Configurable physical values for simulation
 
 ### Visualization & Debug
-- Interactive visualization of Bézier curves and control points
-- Debug output of intermediate processing steps
-- Plot export for documentation and analysis
+- Visualization of internal geometry
+- Debug output of intermediate processing steps via .txt files
 
 ## 📁 Project Structure
 ```
@@ -75,7 +74,9 @@ svg_to_getdp/
 ├── interfaces/ # Adapters
 │ ├── arg_parser.py # Command line interface
 │ ├── abstractions/ # Dependency interfaces
-│ └── debug/ # Debug tools
+│ ├── debug/ # Debug tools
+│ ├── mesher/ # Meshing tools
+│ └── solver/ # Solving tools
 ├── tests/ # Unit tests
 │ ├── core/ # Core layer tests
 │ └── infrastructure/ # Infrastructure tests
@@ -95,18 +96,20 @@ Configure wire currents, mesh settings, and simulation parameters in `config.yam
 # Positive current flows out of the page.
 wire_clusters:
   cluster_1:
-    wire_count: 3
+    wire_count: 6
     current_sign: 1
   cluster_2:
-    wire_count: 3
+    wire_count: 6
     current_sign: -1
-    
-# Mesh settings
+
+## mesh settings
+# Set the mesh size for Gmsh
 mesh_size: 0.1
 
-# GetDP simulation settings
+## GetDP simulation settings
+# Physical values for the simulation
 physical_values:
-  Isource: 10000 # Current source in Amperes [A]
+  Isource: 9000  # Current source in Amperes [A]
   nu_iron_linear: 1/(1000 * 4e-7 * pi)  # Iron reluctivity
 ```
 
@@ -114,7 +117,7 @@ physical_values:
 
 ### Mode 1: SVG to Gmsh Mesh
 
-Convert an SVG file to a Gmsh mesh:
+Convert an SVG file to a Gmsh mesh file:
 
 ```bash
 python -m svg_to_getdp drawing.svg --config config.yaml
@@ -122,7 +125,7 @@ python -m svg_to_getdp drawing.svg --config config.yaml
 
 ### Mode 2: Full Pipeline (SVG to Simulation)
 
-Convert SVG to mesh and run GetDP simulation:
+Convert SVG file to mesh file and run GetDP simulation:
 
 ```bash
 python -m svg_to_getdp drawing.svg --run-simulation --config config.yaml
@@ -157,19 +160,17 @@ python -m svg_to_getdp layout.svg --debug
 
 The pipeline generates the following outputs depending on the mode:
 
-### Mode 1(SVG → Gmsh)
+### Mode 1 (SVG → Gmsh)
 
 - **`.msh` file**: Gmsh mesh file with physical groups
-- **Conversion statistics**: Number of boundary curves, wires and bezier segments
 
-### Mode 2(SVG → Gmsh → GetDP)
+### Mode 2 (SVG → Gmsh → GetDP)
 
 - **`.msh` file**: Gmsh mesh file
 - **`.pro` file**: GetDP problem definition
 - **`results/` directory**: GetDP simulation results
-- **Visualization plots** (if requested)
 
-### Mode 3(Mesh → GetDP)
+### Mode 3 (Gmsh Mesh → GetDP)
 
 - **`.pro` file**: GetDP problem definition
 - **`results/` directory**: GetDP simulation results
