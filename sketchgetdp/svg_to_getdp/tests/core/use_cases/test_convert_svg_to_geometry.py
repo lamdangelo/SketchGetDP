@@ -67,9 +67,8 @@ class TestConvertSVGToGeometry:
     def mock_raw_outline_class(self):
         """Create a mock RawOutline class for testing."""
         class RawOutline:
-            def __init__(self, points, color, is_closed):
+            def __init__(self, points, is_closed):
                 self.points = points
-                self.color = color
                 self.is_closed = is_closed
         return RawOutline
     
@@ -90,64 +89,74 @@ class TestConvertSVGToGeometry:
         assert converter.corner_detector == corner_detector
         assert converter.bezier_fitter == bezier_fitter
 
-    # ==================== Basic Conversion Tests ====================
+    # ==================== Color Differentiation Tests ====================
 
-    def test_convert_simple_svg(self, converter, svg_parser, corner_detector, 
-                               bezier_fitter, triangle_points, mock_raw_outline_class):
-        """Test converting a simple SVG with one RED outline (should become a wire)."""
-        test_svg_path = "test_simple.svg"
+    def test_red_single_point_wire(self, converter, svg_parser, mock_raw_outline_class):
+        """Test RED elements with single point become wires."""
+        test_svg_path = "test_red_single.svg"
         
+        single_point = [Point(0.5, 0.5)]
         mock_raw_outline = mock_raw_outline_class(
-            points=triangle_points,
-            color=Color.RED,
+            points=single_point,
             is_closed=True
         )
         
-        svg_parser.extract_outlines_by_color.return_value = {Color.RED: [mock_raw_outline]}
+        svg_parser.extract_raw_outlines_by_color.return_value = {
+            Color.RED: [mock_raw_outline]
+        }
         
         result = converter.execute(test_svg_path)
         outlines, wires, colored_outlines, corner_debug_data = result
 
-        svg_parser.extract_outlines_by_color.assert_called_once_with(test_svg_path)
-
-        # RED elements should be converted to wires, not outlines
         assert len(outlines) == 0
         assert len(wires) == 1
+        assert wires[0][1] == Color.RED
+        assert wires[0][0] == single_point[0]
+
+    def test_red_multiple_points_wire(self, converter, svg_parser, mock_raw_outline_class):
+        """Test RED elements with multiple points become wires using first point."""
+        test_svg_path = "test_red_multiple.svg"
         
-        wire_point, wire_color = wires[0]
-        assert wire_color == Color.RED
+        multiple_points = [Point(0.5, 0.5), Point(0.6, 0.6), Point(0.7, 0.7)]
+        mock_raw_outline = mock_raw_outline_class(
+            points=multiple_points,
+            is_closed=True
+        )
         
-        # Corner detector and Bézier fitter should NOT be called for RED elements
-        corner_detector.detect_corners.assert_not_called()
-        bezier_fitter.fit_outline.assert_not_called()
-    
-    def test_convert_svg_with_corners(self, converter, svg_parser, corner_detector, 
+        svg_parser.extract_raw_outlines_by_color.return_value = {
+            Color.RED: [mock_raw_outline]
+        }
+        
+        result = converter.execute(test_svg_path)
+        outlines, wires, colored_outlines, corner_debug_data = result
+
+        assert len(outlines) == 0
+        assert len(wires) == 1
+        assert wires[0][1] == Color.RED
+        assert wires[0][0] == multiple_points[0]  # First point used for wire
+
+    def test_green_outline_processing(self, converter, svg_parser, corner_detector, 
                                      bezier_fitter, triangle_points, mock_raw_outline_class):
-        """Test converting an SVG with corners (GREEN color)."""
-        test_svg_path = "test_triangle.svg"
+        """Test GREEN elements become outlines with Bézier fitting."""
+        test_svg_path = "test_green.svg"
         
-        mock_raw_outlines = mock_raw_outline_class(
+        mock_raw_outline = mock_raw_outline_class(
             points=triangle_points,
-            color=Color.GREEN,
             is_closed=True
         )
 
-        svg_parser.extract_outlines_by_color.return_value = {Color.GREEN: [mock_raw_outlines]}
+        svg_parser.extract_raw_outlines_by_color.return_value = {
+            Color.GREEN: [mock_raw_outline]
+        }
         
         mock_corner_indices = [0, 3, 6]
         mock_debug_data = {'some': 'debug'}
         corner_detector.detect_corners.return_value = (mock_corner_indices, mock_debug_data)
         
-        mock_bezier_segment1 = Mock(spec=BezierSegment)
-        mock_bezier_segment1.control_points = [Point(0.0, 0.0), Point(0.3, 0.1), Point(0.5, 0.2)]
-        
-        mock_bezier_segment2 = Mock(spec=BezierSegment)
-        mock_bezier_segment2.control_points = [Point(0.5, 0.2), Point(0.7, 0.1), Point(1.0, 0.0)]
-        
         mock_outline = Mock(spec=Outline)
         mock_outline.color = Color.GREEN
         mock_outline.is_closed = True
-        mock_outline.bezier_segments = [mock_bezier_segment1, mock_bezier_segment2]
+        mock_outline.bezier_segments = []
         mock_outline.corners = mock_corner_indices
         
         bezier_fitter.fit_outline.return_value = mock_outline
@@ -155,110 +164,208 @@ class TestConvertSVGToGeometry:
         result = converter.execute(test_svg_path)
         outlines, wires, colored_outlines, corner_debug_data = result
         
-        corner_detector.detect_corners.assert_called_once()
-        bezier_fitter.fit_outline.assert_called_once()
-        
         assert len(outlines) == 1
+        assert len(wires) == 0
         assert outlines[0].color == Color.GREEN
         
-        assert 'green_outline_0' in corner_debug_data
-        assert corner_debug_data['green_outline_0']['color'] == 'green'
-        assert corner_debug_data['green_outline_0']['corner_indices'] == mock_corner_indices
-    
-    def test_convert_multiple_curves(self, converter, svg_parser, corner_detector, 
-                                    bezier_fitter, triangle_points, square_points, 
-                                    mock_raw_outline_class, mock_bezier_segment):
-        """Test converting SVG with multiple colored curves."""
-        test_svg_path = "test_multiple.svg"
+        # Debug data key uses lowercase color name
+        assert 'green_raw_outline_0' in corner_debug_data
+        debug_data = corner_debug_data['green_raw_outline_0']
+        assert debug_data['color'] == 'green'  # lowercase
+        assert debug_data['corner_indices'] == mock_corner_indices
+
+    def test_blue_outline_processing(self, converter, svg_parser, corner_detector,
+                                    bezier_fitter, square_points, mock_raw_outline_class):
+        """Test BLUE elements become outlines with Bézier fitting."""
+        test_svg_path = "test_blue.svg"
         
-        mock_raw_outline1 = mock_raw_outline_class(
-            points=triangle_points, 
-            color=Color.GREEN, 
+        mock_raw_outline = mock_raw_outline_class(
+            points=square_points,
             is_closed=True
         )
-        mock_raw_outline2 = mock_raw_outline_class(
-            points=square_points, 
-            color=Color.BLUE, 
-            is_closed=True
-        )
-        
-        mock_red_points = [Point(0.5, 0.5)]
-        mock_raw_outline_red = mock_raw_outline_class(
-            points=mock_red_points, 
-            color=Color.RED, 
-            is_closed=True
-        )
-        
-        svg_parser.extract_outlines_by_color.return_value = {
-            Color.GREEN: [mock_raw_outline1],
-            Color.BLUE: [mock_raw_outline2],
-            Color.RED: [mock_raw_outline_red]
+
+        svg_parser.extract_raw_outlines_by_color.return_value = {
+            Color.BLUE: [mock_raw_outline]
         }
         
-        corners1 = ([0, 3, 6], {'debug': 'data1'})
-        corners2 = ([0, 1, 2, 3], {'debug': 'data2'})
-        corner_detector.detect_corners.side_effect = [corners1, corners2]
-
-        mock_outline1 = Mock(spec=Outline)
-        mock_outline1.color = Color.GREEN
-        mock_outline1.is_closed = True
-        mock_outline1.bezier_segments = [mock_bezier_segment, mock_bezier_segment]
-        mock_outline1.corners = corners1[0]
-
-        mock_outline2 = Mock(spec=Outline)
-        mock_outline2.color = Color.BLUE
-        mock_outline2.is_closed = True
-        mock_outline2.bezier_segments = [mock_bezier_segment, mock_bezier_segment]
-        mock_outline2.corners = corners2[0]
-
-        bezier_fitter.fit_outline.side_effect = [mock_outline1, mock_outline2]
+        mock_corner_indices = [0, 1, 2, 3]
+        mock_debug_data = {'some': 'debug'}
+        corner_detector.detect_corners.return_value = (mock_corner_indices, mock_debug_data)
+        
+        mock_outline = Mock(spec=Outline)
+        mock_outline.color = Color.BLUE
+        mock_outline.is_closed = True
+        mock_outline.bezier_segments = []
+        mock_outline.corners = mock_corner_indices
+        
+        bezier_fitter.fit_outline.return_value = mock_outline
         
         result = converter.execute(test_svg_path)
         outlines, wires, colored_outlines, corner_debug_data = result
-
-        assert len(outlines) == 2
-        assert len(wires) == 1
-
-        assert outlines[0].color == Color.GREEN
-        assert outlines[0].corners == corners1[0]
-
-        assert outlines[1].color == Color.BLUE
-        assert outlines[1].corners == corners2[0]
-
-        assert wires[0][1] == Color.RED
-        assert wires[0][0] == mock_red_points[0]
         
-        assert corner_detector.detect_corners.call_count == 2
-        assert bezier_fitter.fit_outline.call_count == 2
+        assert len(outlines) == 1
+        assert len(wires) == 0
+        assert outlines[0].color == Color.BLUE
+        
+        # Debug data key uses lowercase color name
+        assert 'blue_raw_outline_0' in corner_debug_data
+        debug_data = corner_debug_data['blue_raw_outline_0']
+        assert debug_data['color'] == 'blue'  # lowercase
+        assert debug_data['corner_indices'] == mock_corner_indices
 
-        assert 'green_outline_0' in corner_debug_data
-        assert 'blue_outline_0' in corner_debug_data
+    def test_black_outline_processing(self, converter, svg_parser, corner_detector,
+                                     bezier_fitter, triangle_points, mock_raw_outline_class):
+        """Test BLACK elements become outlines with Bézier fitting."""
+        test_svg_path = "test_black.svg"
+        
+        mock_raw_outline = mock_raw_outline_class(
+            points=triangle_points,
+            is_closed=True
+        )
+
+        svg_parser.extract_raw_outlines_by_color.return_value = {
+            Color.BLACK: [mock_raw_outline]
+        }
+        
+        mock_corner_indices = [0, 3, 6]
+        mock_debug_data = {'some': 'debug'}
+        corner_detector.detect_corners.return_value = (mock_corner_indices, mock_debug_data)
+        
+        mock_outline = Mock(spec=Outline)
+        mock_outline.color = Color.BLACK
+        mock_outline.is_closed = True
+        mock_outline.bezier_segments = []
+        mock_outline.corners = mock_corner_indices
+        
+        bezier_fitter.fit_outline.return_value = mock_outline
+        
+        result = converter.execute(test_svg_path)
+        outlines, wires, colored_outlines, corner_debug_data = result
+        
+        assert len(outlines) == 1
+        assert len(wires) == 0
+        assert outlines[0].color == Color.BLACK
+        
+        # Debug data key uses lowercase color name
+        assert 'black_raw_outline_0' in corner_debug_data
+        debug_data = corner_debug_data['black_raw_outline_0']
+        assert debug_data['color'] == 'black'  # lowercase
+        assert debug_data['corner_indices'] == mock_corner_indices
+
+    def test_mixed_colors_processing(self, converter, svg_parser, corner_detector,
+                                    bezier_fitter, triangle_points, square_points, 
+                                    mock_raw_outline_class):
+        """Test processing of SVG with mixed colors."""
+        test_svg_path = "test_mixed.svg"
+        
+        # Create outlines for different colors
+        mock_green_outline = mock_raw_outline_class(
+            points=triangle_points,
+            is_closed=True
+        )
+        mock_blue_outline = mock_raw_outline_class(
+            points=square_points,
+            is_closed=True
+        )
+        mock_black_outline = mock_raw_outline_class(
+            points=triangle_points,
+            is_closed=False  # Open curve
+        )
+        mock_red_wire = mock_raw_outline_class(
+            points=[Point(0.5, 0.5)],
+            is_closed=True
+        )
+        mock_red_outline = mock_raw_outline_class(
+            points=[Point(0.2, 0.2), Point(0.8, 0.2), Point(0.5, 0.8)],  # Multiple points
+            is_closed=True
+        )
+        
+        svg_parser.extract_raw_outlines_by_color.return_value = {
+            Color.GREEN: [mock_green_outline],
+            Color.BLUE: [mock_blue_outline],
+            Color.BLACK: [mock_black_outline],
+            Color.RED: [mock_red_wire, mock_red_outline]  # Multiple RED elements
+        }
+        
+        # Setup corner detection responses
+        corners_green = ([0, 3, 6], {'debug': 'green'})
+        corners_blue = ([0, 1, 2, 3], {'debug': 'blue'})
+        corners_black = ([], {'debug': 'black'})
+        corner_detector.detect_corners.side_effect = [corners_green, corners_blue, corners_black]
+        
+        # Setup Bézier fitting responses
+        mock_green_result = Mock(spec=Outline)
+        mock_green_result.color = Color.GREEN
+        mock_green_result.is_closed = True
+        mock_green_result.bezier_segments = []
+        mock_green_result.corners = corners_green[0]
+        
+        mock_blue_result = Mock(spec=Outline)
+        mock_blue_result.color = Color.BLUE
+        mock_blue_result.is_closed = True
+        mock_blue_result.bezier_segments = []
+        mock_blue_result.corners = corners_blue[0]
+        
+        mock_black_result = Mock(spec=Outline)
+        mock_black_result.color = Color.BLACK
+        mock_black_result.is_closed = False
+        mock_black_result.bezier_segments = []
+        mock_black_result.corners = corners_black[0]
+        
+        bezier_fitter.fit_outline.side_effect = [mock_green_result, mock_blue_result, mock_black_result]
+        
+        result = converter.execute(test_svg_path)
+        outlines, wires, colored_outlines, corner_debug_data = result
+        
+        # Verify results
+        assert len(outlines) == 3  # GREEN, BLUE, BLACK
+        assert len(wires) == 2  # Two RED elements
+        
+        # Verify wires (RED elements)
+        assert wires[0][1] == Color.RED  # Single point wire
+        assert wires[0][0] == Point(0.5, 0.5)
+        
+        assert wires[1][1] == Color.RED  # Multi-point wire (uses first point)
+        assert wires[1][0] == Point(0.2, 0.2)
+        
+        # Verify debug data keys (all lowercase)
+        assert 'green_raw_outline_0' in corner_debug_data
+        assert 'blue_raw_outline_0' in corner_debug_data
+        assert 'black_raw_outline_0' in corner_debug_data
+        
+        # Corner detector should be called for GREEN, BLUE, BLACK but not RED
+        assert corner_detector.detect_corners.call_count == 3
+        
+        # Bézier fitter should be called for GREEN, BLUE, BLACK but not RED
+        assert bezier_fitter.fit_outline.call_count == 3
 
     # ==================== Edge Case Tests ====================
 
     def test_empty_svg(self, converter, svg_parser):
         """Test converting an empty SVG."""
         test_svg_path = "test_empty.svg"
-        svg_parser.extract_outlines_by_color.return_value = {}
+        svg_parser.extract_raw_outlines_by_color.return_value = {}
         
         result = converter.execute(test_svg_path)
         outlines, wires, colored_outlines, corner_debug_data = result
         
         assert len(outlines) == 0
         assert len(wires) == 0
-        svg_parser.extract_outlines_by_color.assert_called_once_with(test_svg_path)
+        svg_parser.extract_raw_outlines_by_color.assert_called_once_with(test_svg_path)
 
     def test_invalid_svg_path(self, converter, svg_parser):
         """Test handling of invalid SVG file path."""
         test_svg_path = "nonexistent.svg"
-        svg_parser.extract_outlines_by_color.side_effect = ValueError("SVG file not found")
+        svg_parser.extract_raw_outlines_by_color.side_effect = ValueError("SVG file not found")
         
         with pytest.raises(ValueError, match="SVG file not found"):
             converter.execute(test_svg_path)
         
-        svg_parser.extract_outlines_by_color.assert_called_once_with(test_svg_path)
+        svg_parser.extract_raw_outlines_by_color.assert_called_once_with(test_svg_path)
 
-    def test_open_curves(self, converter, svg_parser, corner_detector, 
+    # ==================== Open Curve Tests ====================
+
+    def test_open_curves(self, converter, svg_parser, corner_detector,
                         bezier_fitter, mock_raw_outline_class):
         """Test converting SVG with open curves."""
         test_svg_path = "test_open.svg"
@@ -269,11 +376,10 @@ class TestConvertSVGToGeometry:
         
         mock_raw_outline = mock_raw_outline_class(
             points=mock_points,
-            color=Color.GREEN,
             is_closed=False
         )
         
-        svg_parser.extract_outlines_by_color.return_value = {Color.GREEN: [mock_raw_outline]}
+        svg_parser.extract_raw_outlines_by_color.return_value = {Color.GREEN: [mock_raw_outline]}
         corner_detector.detect_corners.return_value = ([], {})
         
         mock_bezier_segment = Mock(spec=BezierSegment)
@@ -304,11 +410,10 @@ class TestConvertSVGToGeometry:
 
         mock_raw_outline = mock_raw_outline_class(
             points=triangle_points,
-            color=Color.GREEN,
             is_closed=True
         )
 
-        svg_parser.extract_outlines_by_color.return_value = {Color.GREEN: [mock_raw_outline]}
+        svg_parser.extract_raw_outlines_by_color.return_value = {Color.GREEN: [mock_raw_outline]}
         corner_detector.detect_corners.side_effect = ValueError("Corner detection failed")
         
         with pytest.raises(ValueError, match="Corner detection failed"):
@@ -321,11 +426,10 @@ class TestConvertSVGToGeometry:
         
         mock_raw_outline = mock_raw_outline_class(
             points=triangle_points,
-            color=Color.GREEN,
             is_closed=True
         )
 
-        svg_parser.extract_outlines_by_color.return_value = {Color.GREEN: [mock_raw_outline]}
+        svg_parser.extract_raw_outlines_by_color.return_value = {Color.GREEN: [mock_raw_outline]}
         corner_detector.detect_corners.return_value = ([], {})
         bezier_fitter.fit_outline.side_effect = ValueError("Bézier fitting failed")
 
