@@ -10,7 +10,7 @@ from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
 
 
-class CurveVisualizer:
+class GeometryVisualizer:
     """Presentation service for visualizing outlines, Bézier segments, and raw polylines."""
     
     @staticmethod
@@ -164,18 +164,18 @@ class CurveVisualizer:
 
         # Plot each outline
         for i, outline in enumerate(outlines):
-            CurveVisualizer._plot_single_outline(outline, i, 
+            GeometryVisualizer._plot_single_outline(outline, i, 
                                             kwargs.get('show_control_points', True),
                                             kwargs.get('show_corners', True),
                                             color_in_legend, corner_color_in_legend)
         
         # Plot colored outlines (polylines) if requested
         if colored_outlines and kwargs.get('show_raw_outlines', True):
-            CurveVisualizer._plot_colored_outlines(colored_outlines)
+            GeometryVisualizer._plot_colored_outlines(colored_outlines)
         
         # Plot wires
         if wires:
-            CurveVisualizer._plot_wires(wires)
+            GeometryVisualizer._plot_wires(wires)
         
         plt.grid(True, alpha=0.3)
         plt.axis('equal')
@@ -221,7 +221,7 @@ class CurveVisualizer:
         debug_filename = f"{debug_dir}/geometry_plot_{svg_name}_{timestamp}.png"
         
         # Save the plot to the debug directory
-        CurveVisualizer.save_plot_to_file(
+        GeometryVisualizer.save_plot_to_file(
             outlines=outlines,
             wires=wires,
             colored_outlines=colored_outlines,

@@ -86,7 +86,7 @@ def main():
                 from svg_to_getdp.interfaces.debug.svg_parser_debug_writer import SVGParserDebugWriter
                 from svg_to_getdp.interfaces.debug.corner_detector_debug_writer import CornerDetectorDebugWriter
                 from svg_to_getdp.interfaces.debug.geometry_debug_writer import GeometryDebugWriter
-                from svg_to_getdp.interfaces.debug.curve_visualizer import CurveVisualizer
+                from sketchgetdp.svg_to_getdp.interfaces.debug.geometry_visualizer import GeometryVisualizer
                 
                 # Initialize debug coordinator first
                 debug_coordinator = DebugCoordinator()
@@ -129,7 +129,7 @@ def main():
                 
                 # Generate geometry plot
                 try:
-                    plot_path = CurveVisualizer.save_plot_with_coordinator(
+                    plot_path = GeometryVisualizer.save_plot_with_coordinator(
                         outlines=outlines,
                         coordinator=debug_coordinator,
                         wires=wires,
