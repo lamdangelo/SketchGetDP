@@ -4,7 +4,7 @@ Demo: Basic usage of the Gmsh geometry construction functionalities
 Author: Laura D'Angelo 
 """
 
-from sketchgetdp.geometry import gmsh_toolbox as geo
+from sketchgetdp.mesher import gmsh_toolbox as geo
 
 def draw_rectangle(factory: geo.GeoFactory, x1: float, y1: float, x2: float, y2: float, 
                    hole_tags: list[int] = []) -> dict: 

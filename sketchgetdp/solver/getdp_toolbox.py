@@ -6,7 +6,7 @@ Author: Laura D'Angelo
 
 import gmsh 
 import numpy as np
-from sketchgetdp.geometry import gmsh_toolbox as geo
+from sketchgetdp.mesher import gmsh_toolbox as geo
 import os
 
 
