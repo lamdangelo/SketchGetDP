@@ -11,7 +11,7 @@ from svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.core.entities.color import Color
 
-from sketchgetdp.mesher.gmsh_toolbox import (
+from svg_to_getdp.interfaces.mesher.gmsh_toolbox import (
     initialize_gmsh,
     set_characteristic_mesh_length,
     mesh_and_save,

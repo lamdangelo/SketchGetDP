@@ -4,13 +4,20 @@ This module contains functions to configure, run and evaluate numerical simulati
 Author: Laura D'Angelo
 """
 
+import os
+import sys
+
+# Add the project root directory to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, project_root)
+
 import gmsh 
 import numpy as np
-from sketchgetdp.mesher import gmsh_toolbox as geo
+from svg_to_getdp.interfaces.mesher import gmsh_toolbox as geo
 import os
 
 
-def get_getdp_path(filename: str = "./../../getdp_path.txt") -> str:
+def get_getdp_path(filename: str = "./../../../../getdp_path.txt") -> str:
     """
     Returns the path for running GetDP on the respective computer.
 
@@ -112,7 +119,7 @@ def run_magnetostatic_simulation(msh_name: str, show_simulation_result: bool = T
     pro_name = "rmvp_formulation.pro"
     resolution_name = "Magnetostatic_Resolution"
     gmsh.open(pro_name)
-    getdp_path = get_getdp_path("./../../getdp_path.txt")
+    getdp_path = get_getdp_path()
     onelab_command = getdp_path + " " + pro_name + " -msh " + msh_name + " -solve " + resolution_name + " -pos"
     gmsh.onelab.run("GetDP", onelab_command)
     if show_simulation_result:

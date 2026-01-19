@@ -5,7 +5,7 @@ Use case for running GetDP magnetostatic simulations.
 import yaml
 from typing import Optional
 import numpy as np
-from sketchgetdp.solver.getdp_toolbox import (
+from svg_to_getdp.interfaces.solver.getdp_toolbox import (
     print_data_to_pro,
     run_magnetostatic_simulation,
     physical_identifiers
