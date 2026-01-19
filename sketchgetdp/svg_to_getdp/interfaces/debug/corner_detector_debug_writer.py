@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import List
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from typing import Optional
+from sketchgetdp.svg_to_getdp.infrastructure.svg_parser import RawOutline
 from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
 
 
@@ -12,9 +12,14 @@ class CornerDetectorDebugWriter(DebugCoordinator):
     
     def write_corner_detection_debug_info(self, svg_file_path: str, 
                                           corner_debug_data: dict,
-                                          outlines: List[Outline] = None):
+                                          raw_outlines_by_color: Optional[dict] = None):
         """
         Write detailed corner detection debug information.
+        
+        Args:
+            svg_file_path: Path to the SVG file
+            corner_debug_data: Debug data from corner detection
+            raw_outlines_by_color: Raw outlines organized by color (optional)
         """
         self.set_svg_file(svg_file_path)
         debug_filename = self.get_debug_filename("corner_detection_debug", ".txt")
@@ -29,7 +34,7 @@ class CornerDetectorDebugWriter(DebugCoordinator):
             
             # Process each outline
             for key, data in corner_debug_data.items():
-                self._write_outline_corner_analysis(f, key, data, outlines)
+                self._write_outline_corner_analysis(f, key, data, raw_outlines_by_color)
         
         print(f"Corner detection debug information written to: {debug_filename}")
     
@@ -68,19 +73,31 @@ class CornerDetectorDebugWriter(DebugCoordinator):
         f.write(f"Debug run timestamp: {self.get_shared_timestamp()}\n")
         f.write(f"Total outlines analyzed: {len(corner_debug_data) if corner_debug_data else 0}\n\n")
     
-    def _write_outline_corner_analysis(self, f, key: str, data: dict, outlines: List[Outline]):
-        """Write detailed analysis for a single outline."""
+    def _write_outline_corner_analysis(self, f, key: str, data: dict, raw_outlines_by_color: Optional[dict]):
+        """Write detailed analysis for a single outline using raw outlines."""
         f.write(f"\n{'='*80}\n")
-        f.write(f"OUTLINE ANALYSIS: {key}\n")
+        f.write(f"RAW OUTLINE ANALYSIS: {key}\n")
         f.write(f"{'='*80}\n\n")
         
         # Basic info - with safety checks
+        color_name = data.get('color', 'N/A')
+        outline_index = data.get('outline_index', 'N/A')
         f.write(f"Basic Information:\n")
-        f.write(f"  Color: {data.get('color', 'N/A')}\n")
-        f.write(f"  Outline Index: {data.get('outline_index', 'N/A')}\n")
+        f.write(f"  Color: {color_name}\n")
+        f.write(f"  Raw Outline Index: {outline_index}\n")
         f.write(f"  Total Points: {data.get('points_count', 'N/A')}\n")
         f.write(f"  Is Closed: {data.get('is_closed', 'N/A')}\n")
         f.write(f"  Final Corners: {len(data.get('corner_indices', []))}\n\n")
+        
+        # Try to find the corresponding raw outline
+        if raw_outlines_by_color:
+            raw_outline = self._find_raw_outline(raw_outlines_by_color, color_name, outline_index)
+            if raw_outline:
+                f.write(f"Raw Outline Information:\n")
+                f.write(f"  Number of Points: {len(raw_outline.points)}\n")
+                f.write(f"  Is Closed: {raw_outline.is_closed}\n")
+                f.write(f"  First Point: ({raw_outline.points[0].x:.6f}, {raw_outline.points[0].y:.6f})\n")
+                f.write(f"  Last Point: ({raw_outline.points[-1].x:.6f}, {raw_outline.points[-1].y:.6f})\n\n")
         
         debug_info = data.get('debug', {})
         
@@ -105,11 +122,77 @@ class CornerDetectorDebugWriter(DebugCoordinator):
         clustering_info = debug_info.get('clustering', {})
         self._write_refinement_info(f, refinement_details, clustering_info)
         
-        # Final decisions
-        self._write_final_decisions(f, debug_info.get('final_decisions', {}))
+        # Final decisions - enhanced with raw outline points if available
+        final_info = debug_info.get('final_decisions', {})
+        if raw_outlines_by_color:
+            raw_outline = self._find_raw_outline(raw_outlines_by_color, color_name, outline_index)
+            if raw_outline:
+                self._write_final_decisions_with_points(f, final_info, raw_outline)
+            else:
+                self._write_final_decisions(f, final_info)
+        else:
+            self._write_final_decisions(f, final_info)
         
         # Process steps
         self._write_process_steps(f, debug_info.get('all_steps', []))
+    
+    def _find_raw_outline(self, raw_outlines_by_color: dict, color_name: str, outline_index: int) -> Optional[RawOutline]:
+        """
+        Find a raw outline by color name and index.
+        
+        Args:
+            raw_outlines_by_color: Dictionary of raw outlines grouped by color
+            color_name: Name of the color (e.g., 'GREEN', 'BLUE')
+            outline_index: Index of the outline within that color group
+            
+        Returns:
+            RawOutline object if found, None otherwise
+        """
+        try:
+            # Convert color name to Color enum if needed
+            from svg_to_getdp.core.entities.color import Color
+            color_map = {
+                'RED': Color.RED,
+                'GREEN': Color.GREEN,
+                'BLUE': Color.BLUE,
+                'BLACK': Color.BLACK
+            }
+            
+            color = color_map.get(color_name.upper())
+            if not color or color not in raw_outlines_by_color:
+                return None
+            
+            raw_outlines = raw_outlines_by_color[color]
+            if outline_index < 0 or outline_index >= len(raw_outlines):
+                return None
+            
+            return raw_outlines[outline_index]
+            
+        except (KeyError, IndexError, AttributeError):
+            return None
+    
+    def _write_final_decisions_with_points(self, f, final_info: dict, raw_outline: RawOutline):
+        """Write final decisions section with actual point coordinates from raw outline."""
+        final_corners = final_info.get('final_corners', [])
+        corner_strengths = final_info.get('corner_strengths', {})
+        
+        f.write("FINAL DECISIONS WITH POINT COORDINATES:\n")
+        f.write(f"  Total Final Corners: {len(final_corners)}\n")
+        
+        if final_corners:
+            f.write(f"  Final Corner Indices: {sorted(final_corners)}\n\n")
+            
+            f.write(f"  Corner Details (from raw outline):\n")
+            for idx in sorted(final_corners):
+                if 0 <= idx < len(raw_outline.points):
+                    point = raw_outline.points[idx]
+                    strength = corner_strengths.get(idx, 0)
+                    f.write(f"    Point {idx:4d}: ({point.x:.6f}, {point.y:.6f}) "
+                           f"[strength={strength:.3f}]\n")
+                else:
+                    f.write(f"    Point {idx:4d}: INDEX OUT OF BOUNDS (raw outline has {len(raw_outline.points)} points)\n")
+        
+        f.write("\n")
     
     def _write_shape_analysis(self, f, shape_info: dict):
         """Write shape analysis section."""
@@ -246,7 +329,7 @@ class CornerDetectorDebugWriter(DebugCoordinator):
         f.write("\n")
     
     def _write_final_decisions(self, f, final_info: dict):
-        """Write final decisions section."""
+        """Write final decisions section (original version without point coordinates)."""
         final_corners = final_info.get('final_corners', [])
         corner_coords = final_info.get('corner_coordinates', {})
         corner_strengths = final_info.get('corner_strengths', {})

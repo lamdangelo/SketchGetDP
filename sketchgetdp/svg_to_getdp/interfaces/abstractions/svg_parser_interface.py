@@ -33,9 +33,9 @@ class SVGParserInterface(ABC):
     """
     
     @abstractmethod
-    def extract_outlines_by_color(self, svg_file_path: str) -> Dict[Color, List[RawOutline]]:
+    def extract_raw_outlines_by_color(self, svg_file_path: str) -> Dict[Color, List[RawOutline]]:
         """
-        Parse SVG file and extract outlines grouped by color.
+        Parse SVG file and extract raw_outlines grouped by color.
         
         Args:
             svg_file_path: Path to the SVG file

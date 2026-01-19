@@ -44,9 +44,9 @@ class SVGParser(SVGParserInterface):
         self.samples_per_segment = samples_per_segment
         self.points_per_unit_length = points_per_unit_length
     
-    def extract_outlines_by_color(self, svg_file_path: str) -> Dict[Color, List[RawOutline]]:
+    def extract_raw_outlines_by_color(self, svg_file_path: str) -> Dict[Color, List[RawOutline]]:
         """
-        Parse SVG file and extract outlines grouped by color.
+        Parse SVG file and extract raw_outlines grouped by color.
         
         Strategy:
         1. Use svg2paths for all non-red paths (green, blue, black)
@@ -68,11 +68,11 @@ class SVGParser(SVGParserInterface):
         
         # Parse paths from svgpathtools
         # Skip red paths here - handled separately
-        path_outlines = self._convert_paths_to_outlines(
+        path_raw_outlines = self._convert_paths_to_raw_outlines(
             paths, attributes, viewbox, svg_width, svg_height
         )
         
-        red_dots_outlines = {}
+        red_dots_raw_outlines = {}
         
         # Find all circle and ellipse elements
         for element_name in ['circle', 'ellipse']:
@@ -117,41 +117,41 @@ class SVGParser(SVGParserInterface):
                     scaled_point = self._scale_to_unit_coordinates(point, viewbox, svg_width, svg_height)
                     
                     # For red dots, we just want the center point
-                    outline = RawOutline(
+                    raw_outline = RawOutline(
                         points=[scaled_point],
                         color=color,
                         is_closed=True
                     )
                     
-                    if color not in red_dots_outlines:
-                        red_dots_outlines[color] = []
-                    red_dots_outlines[color].append(outline)
+                    if color not in red_dots_raw_outlines:
+                        red_dots_raw_outlines[color] = []
+                    red_dots_raw_outlines[color].append(raw_outline)
                     
                 except Exception as e:
                     print(f"WARNING: Failed to process {element_name} element: {e}")
                     continue
 
-        # Merge both results - path outlines (green, blue, black) and red dots
-        outlines_by_color = self._merge_outlines(path_outlines, red_dots_outlines)
+        # Merge both results - path raw_outlines (green, blue, black) and red dots
+        raw_outlines_by_color = self._merge_raw_outlines(path_raw_outlines, red_dots_raw_outlines)
         
         # Apply post-processing resampling to ensure even point distribution
-        resampled_outlines = self._resample_all_outlines(outlines_by_color)
+        resampled_raw_outlines = self._resample_all_raw_outlines(raw_outlines_by_color)
         
-        # Remove duplicate points from all outlines after resampling
-        clean_outlines = self._remove_duplicates_from_all_outlines(resampled_outlines)
+        # Remove duplicate points from all raw_outlines after resampling
+        clean_raw_outlines = self._remove_duplicates_from_all_raw_outlines(resampled_raw_outlines)
         
-        # Merge nearby outlines of the same color
-        merged_outlines = self._merge_nearby_outlines(clean_outlines, distance_threshold=0.02)
+        # Merge nearby raw_outlines of the same color
+        merged_raw_outlines = self._merge_nearby_raw_outlines(clean_raw_outlines, distance_threshold=0.02)
         
-        return merged_outlines
+        return merged_raw_outlines
     
-    def _convert_paths_to_outlines(self, paths: List[Path], attributes: List[dict],
+    def _convert_paths_to_raw_outlines(self, paths: List[Path], attributes: List[dict],
                                 viewbox: Optional[Tuple[float, float, float, float]],
                                 svg_width: float, svg_height: float) -> Dict[Color, List[RawOutline]]:
         """
-        Convert all SVG paths to outline objects grouped by color. Red paths are skipped here.
+        Convert all SVG paths to raw_outline objects grouped by color. Red paths are skipped here.
         """
-        outlines_by_color = {}
+        raw_outlines_by_color = {}
         
         for path_index, (path, attr) in enumerate(zip(paths, attributes)):
             try:
@@ -169,21 +169,21 @@ class SVGParser(SVGParserInterface):
                 
                 is_closed = self._is_path_closed(path)
                 
-                outline = RawOutline(
+                raw_outline = RawOutline(
                     points=points,
                     color=color,
                     is_closed=is_closed
                 )
                 
-                if outline.color not in outlines_by_color:
-                    outlines_by_color[outline.color] = []
-                outlines_by_color[outline.color].append(outline)
+                if raw_outline.color not in raw_outlines_by_color:
+                    raw_outlines_by_color[raw_outline.color] = []
+                raw_outlines_by_color[raw_outline.color].append(raw_outline)
                 
             except Exception as e:
                 print(f"WARNING: Failed to process path {path_index}: {e}")
                 continue
         
-        return outlines_by_color
+        return raw_outlines_by_color
     
     def _extract_color_from_style(self, style_string: str) -> Color:
         """
@@ -268,46 +268,46 @@ class SVGParser(SVGParserInterface):
         print(f"WARNING: Unsupported transform format: {transform_str}")
         return x, y
     
-    def _merge_outlines(self, outlines1: Dict[Color, List[RawOutline]], 
-                        outlines2: Dict[Color, List[RawOutline]]) -> Dict[Color, List[RawOutline]]:
+    def _merge_raw_outlines(self, raw_outlines1: Dict[Color, List[RawOutline]], 
+                        raw_outlines2: Dict[Color, List[RawOutline]]) -> Dict[Color, List[RawOutline]]:
         """
-        Merge two dictionaries of outlines.
+        Merge two dictionaries of raw_outlines.
         """
         merged = {}
-        all_colors = set(outlines1.keys()) | set(outlines2.keys())
+        all_colors = set(raw_outlines1.keys()) | set(raw_outlines2.keys())
         
         for color in all_colors:
             merged[color] = []
-            if color in outlines1:
-                merged[color].extend(outlines1[color])
-            if color in outlines2:
-                merged[color].extend(outlines2[color])
+            if color in raw_outlines1:
+                merged[color].extend(raw_outlines1[color])
+            if color in raw_outlines2:
+                merged[color].extend(raw_outlines2[color])
         
         return merged
     
-    def _resample_all_outlines(self, outlines_by_color: Dict[Color, List[RawOutline]]) -> Dict[Color, List[RawOutline]]:
+    def _resample_all_raw_outlines(self, raw_outlines_by_color: Dict[Color, List[RawOutline]]) -> Dict[Color, List[RawOutline]]:
         """
-        Apply uniform resampling to all outlines except red dots.
+        Apply uniform resampling to all raw_outlines except red dots.
         """
-        resampled_outlines = {}
+        resampled_raw_outlines = {}
         
-        for color, outlines in outlines_by_color.items():
-            resampled_outlines[color] = []
-            for outline in outlines:
+        for color, raw_outlines in raw_outlines_by_color.items():
+            resampled_raw_outlines[color] = []
+            for raw_outline in raw_outlines:
                 if color == Color.RED:
                     # Don't resample red dots (single points)
-                    resampled_outlines[color].append(outline)
+                    resampled_raw_outlines[color].append(raw_outline)
                 else:
                     # Resample polylines for even point distribution
-                    resampled_points = self._resample_polyline_uniform(outline.points)
-                    resampled_outline = RawOutline(
+                    resampled_points = self._resample_polyline_uniform(raw_outline.points)
+                    resampled_raw_outline = RawOutline(
                         points=resampled_points,
-                        color=outline.color,
-                        is_closed=outline.is_closed
+                        color=raw_outline.color,
+                        is_closed=raw_outline.is_closed
                     )
-                    resampled_outlines[color].append(resampled_outline)
+                    resampled_raw_outlines[color].append(resampled_raw_outline)
         
-        return resampled_outlines
+        return resampled_raw_outlines
     
     def _resample_polyline_uniform(self, points: List[Point]) -> List[Point]:
         """
@@ -650,84 +650,84 @@ class SVGParser(SVGParserInterface):
         flipped_y = 1.0 - normalized_y
         return Point(normalized_x, flipped_y)
 
-    def _remove_duplicates_from_all_outlines(self, outlines_by_color: Dict[Color, List[RawOutline]]) -> Dict[Color, List[RawOutline]]:
+    def _remove_duplicates_from_all_raw_outlines(self, raw_outlines_by_color: Dict[Color, List[RawOutline]]) -> Dict[Color, List[RawOutline]]:
         """
-        Remove duplicate points from all outlines after resampling.
+        Remove duplicate points from all raw_outlines after resampling.
         """
-        cleaned_outlines = {}
+        cleaned_raw_outlines = {}
         
-        for color, outlines in outlines_by_color.items():
-            cleaned_outlines[color] = []
-            for outline in outlines:
+        for color, raw_outlines in raw_outlines_by_color.items():
+            cleaned_raw_outlines[color] = []
+            for raw_outline in raw_outlines:
                 if color == Color.RED:
                     # For red dots (single points), no need to remove duplicates
-                    cleaned_outlines[color].append(outline)
+                    cleaned_raw_outlines[color].append(raw_outline)
                 else:
-                    # Remove duplicate points from polyline outlines
-                    no_consecutive_duplicate_points = self._remove_consecutive_duplicate_points(outline.points)
+                    # Remove duplicate points from polyline raw_outlines
+                    no_consecutive_duplicate_points = self._remove_consecutive_duplicate_points(raw_outline.points)
                     cleaned_points = self._remove_duplicate_end_point(no_consecutive_duplicate_points)
-                    cleaned_outline = RawOutline(
+                    cleaned_raw_outline = RawOutline(
                         points=cleaned_points,
-                        color=outline.color,
-                        is_closed=outline.is_closed
+                        color=raw_outline.color,
+                        is_closed=raw_outline.is_closed
                     )
-                    cleaned_outlines[color].append(cleaned_outline)
+                    cleaned_raw_outlines[color].append(cleaned_raw_outline)
         
-        return cleaned_outlines
+        return cleaned_raw_outlines
     
-    def _merge_nearby_outlines(self, outlines_by_color: Dict[Color, List[RawOutline]], 
+    def _merge_nearby_raw_outlines(self, raw_outlines_by_color: Dict[Color, List[RawOutline]], 
                                 distance_threshold: float = 0.02) -> Dict[Color, List[RawOutline]]:
         """
-        Merge outlines of the same color that are close to each other and not already closed.
+        Merge raw_outlines of the same color that are close to each other and not already closed.
         
         Args:
-            outlines_by_color: Dictionary of outlines grouped by color
+            raw_outlines_by_color: Dictionary of raw_outlines grouped by color
             distance_threshold: Maximum distance between endpoints to consider for merging (in unit coordinates)
             
         Returns:
-            Dictionary with merged outlines
+            Dictionary with merged raw_outlines
         """
-        merged_outlines = {}
-        for color, outlines in outlines_by_color.items():
+        merged_raw_outlines = {}
+        for color, raw_outlines in raw_outlines_by_color.items():
             if color == Color.RED:
                 # Don't merge red dots (they're single points)
-                merged_outlines[color] = outlines
+                merged_raw_outlines[color] = raw_outlines
                 continue
             
-            # Skip if only one outline or all outline are already closed
-            if len(outlines) <= 1 or all(o.is_closed for o in outlines):
-                merged_outlines[color] = outlines
+            # Skip if only one raw_outline or all raw_outline are already closed
+            if len(raw_outlines) <= 1 or all(o.is_closed for o in raw_outlines):
+                merged_raw_outlines[color] = raw_outlines
                 continue
             
-            # Create a list of open outlines to process
-            open_outlines = [o for o in outlines if not o.is_closed]
-            closed_outlines = [o for o in outlines if o.is_closed]
+            # Create a list of open raw_outlines to process
+            open_raw_outlines = [o for o in raw_outlines if not o.is_closed]
+            closed_raw_outlines = [o for o in raw_outlines if o.is_closed]
             
-            # Try to merge open outlines
-            merged = self._merge_open_outlines(open_outlines, distance_threshold)
+            # Try to merge open raw_outlines
+            merged = self._merge_open_raw_outlines(open_raw_outlines, distance_threshold)
             
-            # Combine merged outlines with closed ones
-            merged_outlines[color] = closed_outlines + merged
+            # Combine merged raw_outlines with closed ones
+            merged_raw_outlines[color] = closed_raw_outlines + merged
         
-        return merged_outlines
+        return merged_raw_outlines
     
-    def _merge_open_outlines(self, open_outlines: List[RawOutline], 
+    def _merge_open_raw_outlines(self, open_raw_outlines: List[RawOutline], 
                               distance_threshold: float) -> List[RawOutline]:
         """
-        Merge open outlines by connecting endpoints that are close together.
+        Merge open raw_outlines by connecting endpoints that are close together.
         """
-        if not open_outlines:
+        if not open_raw_outlines:
             return []
         
-        merged_outlines = []
-        processed = [False] * len(open_outlines)
+        merged_raw_outlines = []
+        processed = [False] * len(open_raw_outlines)
         
-        for i, outline in enumerate(open_outlines):
+        for i, raw_outline in enumerate(open_raw_outlines):
             if processed[i]:
                 continue
             
-            # Start a new merged outline with this one
-            current_points = outline.points.copy()
+            # Start a new merged raw_outline with this one
+            current_points = raw_outline.points.copy()
             start_point = current_points[0]
             end_point = current_points[-1]
             
@@ -738,12 +738,12 @@ class SVGParser(SVGParserInterface):
             while merged_with_something:
                 merged_with_something = False
                 
-                for j, other_outline in enumerate(open_outlines):
+                for j, other_raw_outline in enumerate(open_raw_outlines):
                     if processed[j]:
                         continue
                     
-                    other_start = other_outline.points[0]
-                    other_end = other_outline.points[-1]
+                    other_start = other_raw_outline.points[0]
+                    other_end = other_raw_outline.points[-1]
                     
                     # Check for possible connections
                     start_to_start = self._distance_between_points(start_point, other_start)
@@ -754,23 +754,23 @@ class SVGParser(SVGParserInterface):
                     min_distance = min(start_to_start, start_to_end, end_to_start, end_to_end)
                     
                     if min_distance <= distance_threshold:
-                        # Merge the outlines
+                        # Merge the raw_outlines
                         if min_distance == start_to_start:
-                            # Reverse other outline and prepend to current
-                            other_points_reversed = other_outline.points[::-1]
+                            # Reverse other raw_outline and prepend to current
+                            other_points_reversed = other_raw_outline.points[::-1]
                             current_points = other_points_reversed + current_points[1:]
                             start_point = other_end  # After reversal, start becomes end
                         elif min_distance == start_to_end:
-                            # Prepend other outline to current
-                            current_points = other_outline.points[:-1] + current_points
+                            # Prepend other raw_outline to current
+                            current_points = other_raw_outline.points[:-1] + current_points
                             start_point = other_start
                         elif min_distance == end_to_start:
-                            # Append other outline to current
-                            current_points = current_points[:-1] + other_outline.points
+                            # Append other raw_outline to current
+                            current_points = current_points[:-1] + other_raw_outline.points
                             end_point = other_end
                         elif min_distance == end_to_end:
-                            # Reverse other outline and append to current
-                            other_points_reversed = other_outline.points[::-1]
+                            # Reverse other raw_outline and append to current
+                            other_points_reversed = other_raw_outline.points[::-1]
                             current_points = current_points[:-1] + other_points_reversed
                             end_point = other_start  # After reversal, end becomes start
                         
@@ -778,7 +778,7 @@ class SVGParser(SVGParserInterface):
                         merged_with_something = True
                         break
             
-            # Check if the merged outline is now closed
+            # Check if the merged raw_outline is now closed
             is_closed = self._distance_between_points(start_point, end_point) <= distance_threshold
             
             if is_closed:
@@ -786,14 +786,14 @@ class SVGParser(SVGParserInterface):
                 if self._distance_between_points(current_points[0], current_points[-1]) > distance_threshold:
                     current_points.append(current_points[0])
             
-            merged_outline = RawOutline(
+            merged_raw_outline = RawOutline(
                 points=current_points,
-                color=outline.color,
+                color=raw_outline.color,
                 is_closed=is_closed
             )
-            merged_outlines.append(merged_outline)
+            merged_raw_outlines.append(merged_raw_outline)
         
-        return merged_outlines
+        return merged_raw_outlines
     
     def _distance_between_points(self, p1: Point, p2: Point) -> float:
         """Calculate Euclidean distance between two points."""

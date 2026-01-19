@@ -67,7 +67,7 @@ def main():
         converter = ConvertSVGToGeometry(svg_parser, corner_detector, bezier_fitter)
         
         # Execute the SVG conversion use case with debug data collection
-        outlines, wires, colored_outlines, corner_debug_data = converter.execute(args.svg_file)
+        outlines, wires, colored_raw_outlines, corner_debug_data = converter.execute(args.svg_file)
         
         # Output conversion results
         print(f"Successfully converted {len(outlines)} outlines and {len(wires)} wires:")
@@ -107,7 +107,7 @@ def main():
                 print(f"\n=== Writing SVG Parser Debug ===")
                 svg_parser_debug_writer.write_svg_parser_debug_info(
                     svg_file_path=args.svg_file,
-                    colored_outlines=colored_outlines
+                    colored_raw_outlines=colored_raw_outlines
                 )
                 
                 # Write corner detection debug info
@@ -116,7 +116,7 @@ def main():
                     corner_detector_debug_writer.write_corner_detection_debug_info(
                         svg_file_path=args.svg_file,
                         corner_debug_data=corner_debug_data,
-                        outlines=outlines
+                        raw_outlines_by_color=colored_raw_outlines
                     )
                 
                 # Write geometry debug info
@@ -133,7 +133,7 @@ def main():
                         outlines=outlines,
                         coordinator=debug_coordinator,
                         wires=wires,
-                        colored_outlines=colored_outlines,
+                        colored_raw_outlines=colored_raw_outlines,
                         show_control_points=True,
                         show_corners=True,
                         show_raw_outlines=True
