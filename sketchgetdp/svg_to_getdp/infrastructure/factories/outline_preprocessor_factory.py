@@ -25,37 +25,3 @@ class OutlinePreprocessorFactory:
         """
         return OutlinePreprocessor()
     
-    @staticmethod  
-    def create_with_precision(bezier_precision: float = 0.001) -> OutlinePreprocessorInterface:
-        """
-        Create an OutlinePreprocessor with custom precision settings.
-        
-        Args:
-            bezier_precision: Precision for Bézier curve discretization
-            
-        Returns:
-            OutlinePreprocessorInterface: A configured preprocessor instance
-        """
-        return OutlinePreprocessor(
-            bezier_precision=bezier_precision
-        )
-    
-    @staticmethod
-    def from_config_dict(config: Optional[dict] = None) -> OutlinePreprocessorInterface:
-        """
-        Create a preprocessor from a configuration dictionary.
-        
-        Args:
-            config: Dictionary with preprocessor configuration. If None, uses defaults.
-                   Expected key: 'bezier_precision'
-                   
-        Returns:
-            OutlinePreprocessorInterface: A configured preprocessor instance
-        """
-        if config is None:
-            config = {}
-        
-        precision = config.get('bezier_precision', 0.001)
-        
-        return OutlinePreprocessorFactory.create_with_precision(precision)
-    
