@@ -2,7 +2,7 @@
 Factory for creating bezier fitter instances.
 """
 
-from svg_to_getdp.infrastructure.bezier_fitter import BezierFitter
+from svg_to_getdp.infrastructure.bezier_fitting.bezier_fitter import BezierFitter
 from svg_to_getdp.interfaces.abstractions.bezier_fitter_interface import BezierFitterInterface
 
 

@@ -26,7 +26,7 @@ The project follows Clean Architecture principles with clear separation of conce
   - `factories/` - Factory classes for dependency creation
   - `svg_processing/` - SVG parsing and path extraction
   - `corner_detection/` - Corner detection for curve segmentation
-  - `bezier_fitter/` - Bézier curve fitting
+  - `bezier_fitting/` - Bézier curve fitting
   - `boundary_curve_grouper/` - Wire grouping logic
   - `boundary_curve_mesher/` - Boundary curve meshing
   - `wire_preprocessor/` - Wire preprocessing for meshing
@@ -69,7 +69,7 @@ svg_to_getdp/
 │ ├── factories/ # Factory pattern implementations
 │ ├── svg_processing/ # SVG parsing
 │ ├── corner_detection/ # Corner detection
-│ ├── bezier_fitter.py # Bézier fitting
+│ ├── bezier_fitting/ # Bézier fitting
 │ ├── boundary_curve_grouper.py # Wire grouping
 │ ├── boundary_curve_mesher.py # Boundary meshing
 │ └── wire_preprocessor # Wire preprocessing
