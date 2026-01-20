@@ -23,7 +23,8 @@ The project follows Clean Architecture principles with clear separation of conce
   - `use_cases/` - Application logic (SVG-to-Geometry conversion, Geometry-to-Gmsh conversion, GetDP simulation execution)
 
 - **`infrastructure/`** - Frameworks & drivers
-  - `svg_parser/` - SVG parsing and path extraction
+  - `factories/` - Factory classes for dependency creation
+  - `svg_processing/` - SVG parsing and path extraction
   - `corner_detector/` - Corner detection for curve segmentation
   - `bezier_fitter/` - Bézier curve fitting
   - `boundary_curve_grouper/` - Wire grouping logic
@@ -65,7 +66,8 @@ svg_to_getdp/
 │ ├── entities/ # Domain models
 │ └── use_cases/ # Application services
 ├── infrastructure/ # External concerns
-│ ├── svg_parser.py # SVG parsing
+│ ├── factories/ # Factory pattern implementations
+│ ├── svg_processing/ # SVG parsing
 │ ├── corner_detector.py # Corner detection
 │ ├── bezier_fitter.py # Bézier fitting
 │ ├── boundary_curve_grouper.py # Wire grouping
