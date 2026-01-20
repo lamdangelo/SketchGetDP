@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import os
 from datetime import datetime
 from typing import List
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
 
 

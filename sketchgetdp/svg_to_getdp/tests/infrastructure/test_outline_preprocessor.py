@@ -7,7 +7,7 @@ handling holes, physical groups, and topological relationships.
 import pytest
 from unittest.mock import Mock, patch
 
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.core.entities.bezier_segment import BezierSegment
 from svg_to_getdp.core.entities.color import Color
@@ -18,7 +18,7 @@ from svg_to_getdp.core.entities.physical_group import (
     BOUNDARY_GAMMA,
     BOUNDARY_OUT
 )
-from sketchgetdp.svg_to_getdp.infrastructure.outline_preprocessor import OutlinePreprocessor
+from svg_to_getdp.infrastructure.outline_preprocessor import OutlinePreprocessor
 
 
 class TestOutlinePreprocessor:

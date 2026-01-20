@@ -4,10 +4,10 @@ Converts Outline objects into Gmsh geometry with proper physical groups.
 """
 
 from typing import List, Dict, Any
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.core.entities.physical_group import PhysicalGroup
-from sketchgetdp.svg_to_getdp.interfaces.abstractions.outline_preprocessor_interface import OutlinePreprocessorInterface
+from svg_to_getdp.interfaces.abstractions.outline_preprocessor_interface import OutlinePreprocessorInterface
 
 class OutlinePreprocessor(OutlinePreprocessorInterface):
     """

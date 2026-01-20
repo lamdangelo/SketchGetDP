@@ -18,35 +18,23 @@ from svg_to_getdp.interfaces.mesher.gmsh_toolbox import (
     show_model,
     finalize_gmsh
 )
-from sketchgetdp.svg_to_getdp.interfaces.abstractions.outline_grouper_interface import OutlineGrouperInterface as OutlineGrouper
-from sketchgetdp.svg_to_getdp.interfaces.abstractions.outline_preprocessor_interface import OutlinePreprocessorInterface as OutlinePreprocessor
-from svg_to_getdp.interfaces.abstractions.wire_preprocessor_interface import WirePreprocessorInterface as WirePreprocessor
-
 
 class ConvertGeometryToGmsh:
     """
     Use case for converting geometry to Gmsh format.
-    
-    Follows the same dependency injection pattern as ConvertSVGToGeometry.
     """
     
-    def __init__(
-        self,
-        outline_grouper: OutlineGrouper,
-        outline_preprocessor: OutlinePreprocessor,
-        wire_preprocessor: WirePreprocessor
-    ):
+    def __init__(self):
         """
-        Initialize the use case with required dependencies.
+        Initialize the use case using factories internally.
+        """
+        from svg_to_getdp.infrastructure.factories.outline_grouper_factory import OutlineGrouperFactory
+        from svg_to_getdp.infrastructure.factories.outline_preprocessor_factory import OutlinePreprocessorFactory
+        from svg_to_getdp.infrastructure.factories.wire_preprocessor_factory import WirePreprocessorFactory
         
-        Args:
-            outline_grouper: Interface for grouping outlines by containment
-            outline_preprocessor: Interface for preprocessing outlines
-            wire_preprocessor: Interface for preparing wires for meshing
-        """
-        self.outline_grouper = outline_grouper
-        self.outline_preprocessor = outline_preprocessor
-        self.wire_preprocessor = wire_preprocessor
+        self.outline_grouper = OutlineGrouperFactory.create_default()
+        self.outline_preprocessor = OutlinePreprocessorFactory.create_default()
+        self.wire_preprocessor = WirePreprocessorFactory.create_default()
     
     def execute(
         self,

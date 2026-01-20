@@ -5,8 +5,7 @@ Defines the contract for analyzing containment relationships and assigning physi
 
 from abc import ABC, abstractmethod
 from typing import List, Dict
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
-from svg_to_getdp.core.entities.physical_group import PhysicalGroup
+from svg_to_getdp.core.entities.outline import Outline
 
 class OutlineGrouperInterface(ABC):
     """
@@ -28,3 +27,4 @@ class OutlineGrouperInterface(ABC):
             - "physical_groups": List of PhysicalGroup objects for this outline
         """
         pass
+    

@@ -8,7 +8,7 @@ import pytest
 from core.entities.point import Point
 from core.entities.bezier_segment import BezierSegment
 from core.entities.color import Color
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 
 
 class TestOutline:

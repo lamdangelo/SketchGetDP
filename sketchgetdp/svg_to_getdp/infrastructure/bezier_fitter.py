@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional
 import math
 
 from svg_to_getdp.core.entities.bezier_segment import BezierSegment
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.interfaces.abstractions.bezier_fitter_interface import BezierFitterInterface
 

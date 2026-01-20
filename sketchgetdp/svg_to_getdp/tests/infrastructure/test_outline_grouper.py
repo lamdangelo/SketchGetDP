@@ -5,7 +5,7 @@ import math
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.core.entities.color import Color
 from svg_to_getdp.core.entities.bezier_segment import BezierSegment
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.physical_group import (
     DOMAIN_VA, 
     DOMAIN_VI_IRON, 
@@ -13,7 +13,7 @@ from svg_to_getdp.core.entities.physical_group import (
     BOUNDARY_GAMMA, 
     BOUNDARY_OUT
 )
-from sketchgetdp.svg_to_getdp.infrastructure.outline_grouper import OutlineGrouper
+from svg_to_getdp.infrastructure.outline_grouper import OutlineGrouper
 
 
 # ============================================================================
@@ -253,8 +253,8 @@ class TestOutlineGrouper:
         result = OutlineGrouper.group_outlines([])
         assert result == []
     
-    @patch('sketchgetdp.svg_to_getdp.infrastructure.outline_grouper.OutlineGrouper.classify_outline_color')
-    @patch('sketchgetdp.svg_to_getdp.infrastructure.outline_grouper.OutlineGrouper.is_outline_inside_other')
+    @patch('svg_to_getdp.infrastructure.outline_grouper.OutlineGrouper.classify_outline_color')
+    @patch('svg_to_getdp.infrastructure.outline_grouper.OutlineGrouper.is_outline_inside_other')
     def test_should_detect_va_outlines_inside_vi_outlines_and_assign_boundary_gamma(
         self, mock_is_inside, mock_classify, create_square_outline
     ):
@@ -284,7 +284,7 @@ class TestOutlineGrouper:
         outlines = [vi_outline, va_outline]
         
         # Mock the containment hierarchy to show Va is inside Vi
-        with patch('sketchgetdp.svg_to_getdp.infrastructure.outline_grouper.OutlineGrouper.get_containment_hierarchy') as mock_hierarchy:
+        with patch('svg_to_getdp.infrastructure.outline_grouper.OutlineGrouper.get_containment_hierarchy') as mock_hierarchy:
             mock_hierarchy.return_value = {0: [1], 1: []}  # Vi contains Va
             
             result = OutlineGrouper.group_outlines(outlines)
@@ -300,7 +300,7 @@ class TestOutlineGrouper:
         
         # Mock containment hierarchy to create circular reference
         # Use the correct module path based on import
-        with patch('sketchgetdp.svg_to_getdp.infrastructure.outline_grouper.OutlineGrouper.get_containment_hierarchy') as mock_hierarchy:
+        with patch('svg_to_getdp.infrastructure.outline_grouper.OutlineGrouper.get_containment_hierarchy') as mock_hierarchy:
             mock_hierarchy.return_value = {0: [1], 1: [0]}  # Each contains the other
             
             with pytest.raises(ValueError, match="No outermost candidates found"):

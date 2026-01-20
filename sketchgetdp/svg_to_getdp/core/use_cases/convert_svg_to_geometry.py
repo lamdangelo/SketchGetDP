@@ -3,22 +3,26 @@ Core use case: Convert SVG to Geometry
 """
 
 from typing import List, Tuple
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.core.entities.color import Color
-from svg_to_getdp.interfaces.abstractions.svg_parser_interface import SVGParserInterface as SVGParser
-from svg_to_getdp.interfaces.abstractions.corner_detector_interface import CornerDetectorInterface as CornerDetector
-from svg_to_getdp.interfaces.abstractions.bezier_fitter_interface import BezierFitterInterface as BezierFitter
 
 class ConvertSVGToGeometry:
     """
     Use case for converting SVG sketches to outlines with Bézier representations.
     """
     
-    def __init__(self, svg_parser: SVGParser, corner_detector: CornerDetector, bezier_fitter: BezierFitter):
-        self.svg_parser = svg_parser
-        self.corner_detector = corner_detector
-        self.bezier_fitter = bezier_fitter
+    def __init__(self):
+        """
+        Initialize the converter using factories internally.
+        """
+        from svg_to_getdp.infrastructure.factories.svg_parser_factory import SvgParserFactory
+        from svg_to_getdp.infrastructure.factories.corner_detector_factory import CornerDetectorFactory
+        from svg_to_getdp.infrastructure.factories.bezier_fitter_factory import BezierFitterFactory
+        
+        self.svg_parser = SvgParserFactory.create_default()
+        self.corner_detector = CornerDetectorFactory.create_default()
+        self.bezier_fitter = BezierFitterFactory.create_default()
     
     def execute(self, svg_file_path: str) -> Tuple[List[Outline], List[Tuple[Point, Color]], dict, dict]:
         """

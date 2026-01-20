@@ -5,7 +5,7 @@ Captures processing order, created entities, and physical group assignments.
 
 import os
 from typing import List, Dict, Any
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 
 
 class OutlinePreprocessorDebugWriter:

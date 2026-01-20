@@ -14,7 +14,7 @@ import yaml
 
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.core.entities.bezier_segment import BezierSegment
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.color import Color
 from svg_to_getdp.core.entities.physical_group import (
     DOMAIN_VI_IRON,
@@ -24,37 +24,17 @@ from svg_to_getdp.core.entities.physical_group import (
     DOMAIN_COIL_NEGATIVE,
 )
 from svg_to_getdp.core.use_cases.convert_geometry_to_gmsh import ConvertGeometryToGmsh
-from sketchgetdp.svg_to_getdp.infrastructure.outline_grouper import OutlineGrouper
-from sketchgetdp.svg_to_getdp.infrastructure.outline_preprocessor import OutlinePreprocessor
-from sketchgetdp.svg_to_getdp.infrastructure.wire_preprocessor import WirePreprocessor
 
 
 class TestConvertGeometryToGmsh:
     """Test suite for ConvertGeometryToGmsh class."""
 
     # ==================== Fixtures ====================
-
-    @pytest.fixture
-    def outline_grouper(self):
-        """Create an OutlineGrouper instance for testing."""
-        return OutlineGrouper()
     
     @pytest.fixture
-    def outline_preprocessor(self):
-        """Create an OutlinePreprocessor instance for testing."""
-        return OutlinePreprocessor()
-
-    @pytest.fixture
-    def wire_preprocessor(self):
-        """Create a WirePreprocessor instance for testing."""
-        return WirePreprocessor()
-    
-    @pytest.fixture
-    def converter(self, outline_grouper, outline_preprocessor, wire_preprocessor):
+    def converter(self):
         """Create a ConvertGeometryToGmsh instance for testing."""
-        return ConvertGeometryToGmsh(
-            outline_grouper, outline_preprocessor, wire_preprocessor
-        )
+        return ConvertGeometryToGmsh()
     
     @pytest.fixture
     def temporary_configuration_file(self):
@@ -187,17 +167,12 @@ class TestConvertGeometryToGmsh:
 
     # ==================== Initialization Tests ====================
 
-    def test_initializes_with_dependencies(
-        self, outline_grouper, outline_preprocessor, wire_preprocessor
-    ):
-        """Test that converter initializes with all dependencies."""
-        converter = ConvertGeometryToGmsh(
-            outline_grouper, outline_preprocessor, wire_preprocessor
-        )
-
-        assert converter.outline_grouper == outline_grouper
-        assert converter.outline_preprocessor == outline_preprocessor
-        assert converter.wire_preprocessor == wire_preprocessor
+    def test_initializes_without_dependencies(self, converter):
+        """Test that converter initializes without parameters."""
+        assert converter is not None
+        assert hasattr(converter, 'outline_grouper')
+        assert hasattr(converter, 'outline_preprocessor')
+        assert hasattr(converter, 'wire_preprocessor')
 
     # ==================== Basic Functionality Tests ====================
 

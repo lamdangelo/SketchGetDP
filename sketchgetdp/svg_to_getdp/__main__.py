@@ -51,20 +51,7 @@ def main():
         # MODE 2 & 3: Normal processing (SVG → Gmsh)
         from svg_to_getdp.core.use_cases.convert_svg_to_geometry import ConvertSVGToGeometry
         from svg_to_getdp.core.use_cases.convert_geometry_to_gmsh import ConvertGeometryToGmsh
-        from svg_to_getdp.infrastructure.svg_parser import SVGParser
-        from svg_to_getdp.infrastructure.corner_detector import CornerDetector
-        from svg_to_getdp.infrastructure.bezier_fitter import BezierFitter
-        from sketchgetdp.svg_to_getdp.infrastructure.outline_grouper import OutlineGrouper
-        from sketchgetdp.svg_to_getdp.infrastructure.outline_preprocessor import OutlinePreprocessor
-        from svg_to_getdp.infrastructure.wire_preprocessor import WirePreprocessor
-        
-        # Initialize infrastructure services for SVG conversion
-        svg_parser = SVGParser()
-        corner_detector = CornerDetector(debug_enabled=True)  # Enable debug mode
-        bezier_fitter = BezierFitter()
-        
-        # Initialize SVG conversion use case with dependencies
-        converter = ConvertSVGToGeometry(svg_parser, corner_detector, bezier_fitter)
+        converter = ConvertSVGToGeometry()
         
         # Execute the SVG conversion use case with debug data collection
         outlines, wires, colored_raw_outlines, corner_debug_data = converter.execute(args.svg_file)
@@ -86,7 +73,7 @@ def main():
                 from svg_to_getdp.interfaces.debug.svg_parser_debug_writer import SVGParserDebugWriter
                 from svg_to_getdp.interfaces.debug.corner_detector_debug_writer import CornerDetectorDebugWriter
                 from svg_to_getdp.interfaces.debug.geometry_debug_writer import GeometryDebugWriter
-                from sketchgetdp.svg_to_getdp.interfaces.debug.geometry_visualizer import GeometryVisualizer
+                from svg_to_getdp.interfaces.debug.geometry_visualizer import GeometryVisualizer
                 
                 # Initialize debug coordinator first
                 debug_coordinator = DebugCoordinator()
@@ -162,17 +149,7 @@ def main():
         # ALWAYS perform Gmsh meshing
         print("\n=== Starting Gmsh Meshing ===")
         
-        # Initialize infrastructure services for Gmsh conversion
-        outline_grouper = OutlineGrouper()
-        outline_preprocessor = OutlinePreprocessor()
-        wire_preprocessor = WirePreprocessor()
-        
-        # Initialize Gmsh conversion use case
-        gmsh_converter = ConvertGeometryToGmsh(
-            outline_grouper=outline_grouper,
-            outline_preprocessor=outline_preprocessor,
-            wire_preprocessor=wire_preprocessor
-        )
+        gmsh_converter = ConvertGeometryToGmsh()
         
         # Determine mesh name (output filename)
         if args.mesh_name:
@@ -201,8 +178,8 @@ def main():
         if args.debug:
             try:
                 from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
-                from sketchgetdp.svg_to_getdp.interfaces.debug.outline_grouper_debug_writer import OutlineGrouperDebugWriter
-                from sketchgetdp.svg_to_getdp.interfaces.debug.outline_preprocessor_debug_writer import OutlinePreprocessorDebugWriter
+                from svg_to_getdp.interfaces.debug.outline_grouper_debug_writer import OutlineGrouperDebugWriter
+                from svg_to_getdp.interfaces.debug.outline_preprocessor_debug_writer import OutlinePreprocessorDebugWriter
                 from svg_to_getdp.interfaces.debug.wire_preprocessor_debug_writer import WirePreprocessorDebugWriter
                 
                 # Initialize debug writers with the same timestamp
@@ -232,7 +209,7 @@ def main():
                 preprocessing_debug_file = preprocessing_debug_writer.write_preprocessing_debug_info(
                     svg_file_path=args.svg_file,
                     outlines=outlines,
-                    preprocessor_instance=outline_preprocessor,
+                    preprocessor_instance=gmsh_converter.outline_preprocessor,
                     gmsh_results=gmsh_results
                 )
                 
@@ -242,7 +219,7 @@ def main():
                     svg_file_path=args.svg_file,
                     wires=wires,
                     config_file_path=str(config_file_path),
-                    wire_preprocessor_instance=wire_preprocessor,
+                    wire_preprocessor_instance=gmsh_converter.wire_preprocessor,
                     gmsh_results=gmsh_results 
                 )
                     

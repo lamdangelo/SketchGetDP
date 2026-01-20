@@ -5,7 +5,7 @@ Defines the contract for converting Outline objects into Gmsh geometry.
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 
 
 class OutlinePreprocessorInterface(ABC):
@@ -33,3 +33,4 @@ class OutlinePreprocessorInterface(ABC):
             ValueError: When number of outlines doesn't match number of property dictionaries
         """
         pass
+    

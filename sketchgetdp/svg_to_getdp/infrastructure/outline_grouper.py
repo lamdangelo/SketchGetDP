@@ -1,5 +1,5 @@
 from typing import List, Dict, Tuple
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 from svg_to_getdp.core.entities.physical_group import PhysicalGroup, DOMAIN_VA, DOMAIN_VI_IRON, DOMAIN_VI_AIR, BOUNDARY_GAMMA, BOUNDARY_OUT
 from svg_to_getdp.core.entities.point import Point
 from svg_to_getdp.interfaces.abstractions.outline_grouper_interface import OutlineGrouperInterface

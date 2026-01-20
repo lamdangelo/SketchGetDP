@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sketchgetdp.svg_to_getdp.infrastructure.svg_parser import RawOutline
+from svg_to_getdp.core.entities.raw_outline import RawOutline
 from svg_to_getdp.interfaces.debug.debug_coordinator import DebugCoordinator
 
 

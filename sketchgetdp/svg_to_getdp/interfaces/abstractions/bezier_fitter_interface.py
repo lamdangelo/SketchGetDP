@@ -6,7 +6,7 @@ Defines the contract for fitting Bézier curves to boundary point data.
 from abc import ABC, abstractmethod
 from typing import List
 from svg_to_getdp.core.entities.point import Point
-from sketchgetdp.svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.outline import Outline
 
 class BezierFitterInterface(ABC):
     """
@@ -30,3 +30,4 @@ class BezierFitterInterface(ABC):
             Outline object containing fitted Bézier segments and corner information
         """
         pass
+    

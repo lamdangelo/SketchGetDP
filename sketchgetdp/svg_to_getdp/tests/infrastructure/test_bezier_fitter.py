@@ -7,7 +7,6 @@ import math
 import numpy as np
 from unittest.mock import patch
 
-from sketchgetdp.svg_to_getdp.core.entities import color
 from svg_to_getdp.infrastructure.bezier_fitter import BezierFitter
 from svg_to_getdp.core.entities.bezier_segment import BezierSegment
 from svg_to_getdp.core.entities.point import Point
