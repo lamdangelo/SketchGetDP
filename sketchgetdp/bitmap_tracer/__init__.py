@@ -5,4 +5,4 @@ A clean architecture implementation for converting bitmap images to SVG vector g
 """
 
 __version__ = "2.0.0"
-__author__ = "CellarKid"
+__author__ = "Sarah Schleidt"

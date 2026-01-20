@@ -79,7 +79,7 @@ svg_to_getdp/
 │ ├── debug/ # Debug tools
 │ ├── mesher/ # Meshing tools
 │ └── solver/ # Solving tools
-├── tests/ # Unit tests
+├── tests/ # pytests
 │ ├── core/ # Core layer tests
 │ └── infrastructure/ # Infrastructure tests
 ├── __main__.py # Package entry point

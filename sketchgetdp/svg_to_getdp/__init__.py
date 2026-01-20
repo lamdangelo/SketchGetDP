@@ -6,4 +6,4 @@ Then running magnetostatic simulations using the RMVP formulation.
 """
 
 __version__ = "1.0.0"
-__author__ = "CellarKid"
+__author__ = "Sarah Schleidt"
