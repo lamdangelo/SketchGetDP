@@ -5,6 +5,7 @@ Debug writer for outline grouping operations.
 import os
 from typing import List, Dict
 from svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.infrastructure.outline_grouper import OutlineGrouper
 
 
 class OutlineGrouperDebugWriter:
