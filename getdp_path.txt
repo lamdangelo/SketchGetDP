@@ -1,1 +1,1 @@
-/home/laura/getdp-3.5.0/getdp-3.5.0-Linux64/bin/getdp
+/home/sarah/getdp-3.5.0-Linux64c/getdp-3.5.0-Linux64/bin/getdp

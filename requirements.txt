@@ -4,3 +4,8 @@ numpy
 Pillow
 scipy
 setuptools
+opencv-python
+svgwrite
+PyYAML
+pytest
+svgpathtools

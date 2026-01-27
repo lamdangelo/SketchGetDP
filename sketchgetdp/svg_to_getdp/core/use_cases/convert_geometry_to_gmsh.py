@@ -1,0 +1,177 @@
+"""
+Usecase to convert geometry to Gmsh format.
+Integrates outlines, wires, and configuration to create a complete Gmsh model.
+"""
+
+import yaml
+from typing import List, Tuple, Dict, Any
+from pathlib import Path
+
+from svg_to_getdp.core.entities.outline import Outline
+from svg_to_getdp.core.entities.point import Point
+from svg_to_getdp.core.entities.color import Color
+
+from svg_to_getdp.interfaces.mesher.gmsh_toolbox import (
+    initialize_gmsh,
+    set_characteristic_mesh_length,
+    mesh_and_save,
+    show_model,
+    finalize_gmsh
+)
+
+class ConvertGeometryToGmsh:
+    """
+    Use case for converting geometry to Gmsh format.
+    """
+    
+    def __init__(self):
+        """
+        Initialize the use case using factories internally.
+        """
+        from svg_to_getdp.infrastructure.factories.outline_grouper_factory import OutlineGrouperFactory
+        from svg_to_getdp.infrastructure.factories.outline_preprocessor_factory import OutlinePreprocessorFactory
+        from svg_to_getdp.infrastructure.factories.wire_preprocessor_factory import WirePreprocessorFactory
+        
+        self.outline_grouper = OutlineGrouperFactory.create_default()
+        self.outline_preprocessor = OutlinePreprocessorFactory.create_default()
+        self.wire_preprocessor = WirePreprocessorFactory.create_default()
+    
+    def execute(
+        self,
+        outlines: List[Outline],
+        wires: List[Tuple[Point, Color]],
+        config_file_path: str,
+        model_name: str = "geometry_model",
+        output_filename: str = "geometry_mesh",
+        dimension: int = 2,
+        show_gui: bool = True
+    ) -> dict:
+        """
+        Main use case to convert geometry to Gmsh format.
+        
+        Steps:
+        1. Load configuration and extract mesh size
+        2. Initialize Gmsh
+        3. Set the mesh size from config
+        4. Prepare wires
+        5. Group outlines with containment hierarchy
+        6. Preprocess outlines
+        7. Synchronize before meshing
+        8. Mesh and save
+        9. Optionally show Gmsh GUI
+        
+        Args:
+            outlines: List of Outline objects representing domain boundaries
+            wires: List of (Point, Color) tuples representing wires
+            config_file_path: Path to YAML configuration file for wire currents and mesh settings
+            model_name: Name for the Gmsh model (default: "geometry_model")
+            output_filename: Base filename for output mesh (without extension)
+            dimension: Dimension of mesh (default: 2 for 2D)
+            show_gui: Whether to open Gmsh GUI after meshing (default: True)
+            
+        Returns:
+            Dictionary containing results from all processing steps including debug data
+            
+        Raises:
+            ValueError: If input parameters are invalid
+            FileNotFoundError: If config file doesn't exist
+            KeyError: If required configuration is missing
+        """
+        # Input validation
+        if not isinstance(outlines, list):
+            raise ValueError("outlines must be a list")
+
+        if not isinstance(wires, list):
+            raise ValueError("wires must be a list")
+        
+        config_path = Path(config_file_path)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Configuration file not found: {config_file_path}")
+        
+        if not outlines:
+            print("Warning: No outlines provided")
+        
+        # Step 1: Load configuration
+        print(f"Loading configuration from: {config_file_path}")
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Extract mesh size from config (default to 0.1 if not specified)
+        mesh_size = config.get('mesh_size', 0.1)
+        print(f"Using mesh size from config: {mesh_size}")
+        
+        # Results dictionary to store outputs from each step
+        results: Dict[str, Any] = {
+            "model_name": model_name,
+            "output_filename": output_filename,
+            "mesh_size": mesh_size,
+            "dimension": dimension,
+            "config_file": config_file_path,
+            "debug_data": {}
+        }
+        
+        try:
+            # Step 2: Initialize Gmsh
+            print(f"Initializing Gmsh with model name: {model_name}")
+            factory = initialize_gmsh(model_name)
+            results["factory_initialized"] = True
+            
+            # Step 3: Set mesh size from config
+            print(f"Setting characteristic mesh length factor to: {mesh_size}")
+            set_characteristic_mesh_length(mesh_size)
+            results["mesh_size_set"] = True
+            
+            # Step 4: Prepare wires
+            print(f"Preparing {len(wires)} wires...")
+            wire_results = self.wire_preprocessor.prepare_wires(
+                factory,
+                config_file_path,
+                wires
+            )
+            results["wire_results"] = wire_results
+            
+            # Step 5: Group outlines with containment hierarchy
+            print(f"Grouping {len(outlines)} outlines...")
+            grouping_result = self.outline_grouper.group_outlines(outlines)
+            results["grouping_result"] = grouping_result
+            
+            # Store debug data
+            results["debug_data"]["outline_grouping"] = {
+                "outlines": outlines,
+                "grouping_result": grouping_result,
+                "grouper_instance": self.outline_grouper
+            }
+            
+            # Step 6: Preprocess outlines
+            print("Preprocessing outlines...")
+            preprocessing_result = self.outline_preprocessor.preprocess_outlines(factory, outlines, grouping_result)
+            results["preprocessing_result"] = preprocessing_result
+            
+            # Step 7: Synchronize before meshing
+            factory.synchronize()
+            print("Geometry synchronized in Gmsh")
+            results["geometry_synchronized"] = True
+            
+            # Step 8: Mesh and save
+            print(f"Generating {dimension}D mesh...")
+            mesh_and_save(output_filename, dimension)
+            results["mesh_generated"] = True
+            print(f"Mesh saved to: {output_filename}.msh")
+            
+            # Step 9: Show Gmsh GUI if requested
+            if show_gui:
+                print("Opening Gmsh GUI...")
+                show_model()
+                results["gui_shown"] = True
+            
+            return results
+            
+        except Exception as e:
+            print(f"Error during geometry conversion: {e}")
+            raise
+            
+        finally:
+            # Clean up Gmsh resources
+            finalize_gmsh()
+            print("Gmsh finalized")
+            

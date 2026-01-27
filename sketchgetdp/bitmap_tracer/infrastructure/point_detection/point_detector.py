@@ -1,0 +1,112 @@
+import cv2
+import numpy as np
+from typing import Optional
+from core.entities.point import Point
+
+
+class PointDetector:
+    """
+    Detects point-like contours and extracts their geometric properties.
+    
+    A point is defined as a small, compact contour that represents a discrete
+    marker rather than a continuous path. This class encapsulates the logic
+    for identifying such contours and calculating their center points.
+    """
+    
+    def __init__(self, max_area: int = 100, max_perimeter: int = 80):
+        """
+        Initialize the point detector with size thresholds.
+        
+        Args:
+            max_area: Maximum contour area to be considered a point (pixels²)
+            max_perimeter: Maximum contour perimeter to be considered a point (pixels)
+        """
+        self.max_area = max_area
+        self.max_perimeter = max_perimeter
+    
+    def set_config(self, config: dict):
+        """
+        Update detection thresholds from configuration.
+        
+        Args:
+            config: Dictionary containing point_max_area and point_max_perimeter
+        """
+        if config:
+            self.max_area = config.get('point_max_area', self.max_area)
+            self.max_perimeter = config.get('point_max_perimeter', self.max_perimeter)
+            print(f"🔧 PointDetector configured - max_area: {self.max_area}, max_perimeter: {self.max_perimeter}")
+    
+    def is_point(self, contour: np.ndarray) -> bool:
+        """
+        Determine if a contour represents a point-like shape.
+        
+        Points are small, compact contours that meet both area and perimeter
+        criteria. This prevents large or elongated shapes from being misclassified.
+        
+        Args:
+            contour: OpenCV contour array to evaluate
+            
+        Returns:
+            True if contour meets point criteria, False otherwise
+        """
+        if len(contour) < 3:
+            return False
+        
+        area = cv2.contourArea(contour)
+        perimeter = cv2.arcLength(contour, True)
+        
+        is_point = area < self.max_area and perimeter < self.max_perimeter
+        
+        if not is_point:
+            print(f"  ❌ Point criteria failed: area {area:.1f} >= {self.max_area} OR perimeter {perimeter:.1f} >= {self.max_perimeter}")
+        
+        return is_point
+    
+    def get_center(self, contour: np.ndarray) -> Optional[Point]:
+        """
+        Calculate the centroid of a contour using moment analysis.
+        
+        The centroid represents the geometric center of the contour shape.
+        This method uses OpenCV's moments calculation for accurate center detection.
+        
+        Args:
+            contour: OpenCV contour array to analyze
+            
+        Returns:
+            Point object representing the centroid, or None if calculation fails
+        """
+        if len(contour) < 3:
+            return None
+        
+        moments = cv2.moments(contour)
+        if moments["m00"] != 0:
+            center_x = int(moments["m10"] / moments["m00"])
+            center_y = int(moments["m01"] / moments["m00"])
+            return Point(center_x, center_y)
+        
+        return None
+    
+    def detect_point(self, contour: np.ndarray) -> Optional[Point]:
+        """
+        Complete point detection pipeline: identification and center calculation.
+        
+        This method combines contour evaluation and center calculation into
+        a single operation. It first verifies the contour meets point criteria,
+        then calculates and returns its center if valid.
+        
+        Args:
+            contour: OpenCV contour array to process
+            
+        Returns:
+            Point object for valid point contours, None for non-point contours
+        """
+        if not self.is_point(contour):
+            return None
+        
+        center = self.get_center(contour)
+        if center:
+            area = cv2.contourArea(contour)
+            perimeter = cv2.arcLength(contour, True)
+            print(f"  📍 Point detected: area={area:.1f}, perimeter={perimeter:.1f}, center=({center.x}, {center.y})")
+        
+        return center

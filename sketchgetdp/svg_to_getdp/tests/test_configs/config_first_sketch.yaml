@@ -1,0 +1,23 @@
+# SVG To Getdp Configuration
+
+## Wire cluster configuration
+# Clusters are identified from top to bottom, left to right
+# Each cluster has: number of wires and current direction (1 for positive, -1 for negative)
+# Positive current flows out of the page.
+wire_clusters:
+  cluster_1:
+    wire_count: 6
+    current_sign: 1
+  cluster_2:
+    wire_count: 6
+    current_sign: -1
+
+## mesh settings
+# Set the mesh size for Gmsh
+mesh_size: 0.1
+
+## GetDP simulation settings
+# Physical values for the simulation
+physical_values:
+  Isource: 9000  # Current source in Amperes [A]
+  nu_iron_linear: 1/(1000 * 4e-7 * pi)  # Iron reluctivity
