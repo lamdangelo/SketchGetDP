@@ -7,7 +7,6 @@ import sys
 import pytest
 import tempfile
 import yaml
-from unittest.mock import mock_open, patch
 
 # Add project root to Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../'))
@@ -26,28 +25,17 @@ class TestConfigLoader:
             'red_dots': 10,
             'blue_paths': 5,
             'green_paths': 8,
-            'min_area': 150,
-            'max_area_ratio': 0.8,
+            
             'point_max_area': 100,
             'point_max_perimeter': 80,
-            'closure_tolerance': 5.0,
-            'circularity_threshold': 0.01,
-            'angle_threshold': 25,
-            'min_curve_angle': 120,
-            'epsilon_factor': 0.0015,
-            'closure_threshold': 10.0,
+
             'blue_hue_range': [100, 140],
             'red_hue_range': [[0, 10], [170, 180]],
             'green_hue_range': [35, 85],
-            'color_difference_threshold': 20,
             'min_saturation': 50,
             'max_value_white': 200,
             'min_value_black': 50,
-            'point_radius': 4,
-            'stroke_width': 2,
-            'blue_color': '#0000FF',
-            'red_color': '#FF0000',
-            'green_color': '#00FF00',
+            
             'custom_setting': 'test_value'
         }
 
@@ -138,45 +126,13 @@ class TestConfigLoader:
         assert blue_paths == 0
         assert green_paths == 0
 
-    def test_get_config_value(self, temp_config_file):
-        """Test getting specific config value."""
-        loader = ConfigLoader(temp_config_file)
-        
-        value = loader.get_config_value('custom_setting')
-        assert value == 'test_value'
-        
-        default_value = loader.get_config_value('non_existent_key', 'default')
-        assert default_value == 'default'
-
-    def test_get_all_config(self, temp_config_file, sample_config_data):
-        """Test getting all configuration."""
-        loader = ConfigLoader(temp_config_file)
-        config = loader.get_all_config()
-        
-        assert isinstance(config, dict)
-        assert config['custom_setting'] == 'test_value'
-
     def test_get_contour_detection_params(self, temp_config_file):
         """Test getting contour detection parameters."""
         loader = ConfigLoader(temp_config_file)
         params = loader.get_contour_detection_params()
         
         expected_keys = [
-            'min_area', 'max_area_ratio', 'point_max_area', 
-            'point_max_perimeter', 'closure_tolerance', 'circularity_threshold'
-        ]
-        
-        for key in expected_keys:
-            assert key in params
-            assert isinstance(params[key], (int, float))
-
-    def test_get_curve_fitting_params(self, temp_config_file):
-        """Test getting curve fitting parameters."""
-        loader = ConfigLoader(temp_config_file)
-        params = loader.get_curve_fitting_params()
-        
-        expected_keys = [
-            'angle_threshold', 'min_curve_angle', 'epsilon_factor', 'closure_threshold'
+            'point_max_area', 'point_max_perimeter'
         ]
         
         for key in expected_keys:
@@ -190,67 +146,12 @@ class TestConfigLoader:
         
         expected_keys = [
             'blue_hue_range', 'red_hue_range', 'green_hue_range',
-            'color_difference_threshold', 'min_saturation', 
-            'max_value_white', 'min_value_black'
+            'min_saturation', 'max_value_white', 'min_value_black'
         ]
         
         for key in expected_keys:
             assert key in params
             assert params[key] is not None
-
-    def test_get_svg_params(self, temp_config_file):
-        """Test getting SVG parameters."""
-        loader = ConfigLoader(temp_config_file)
-        params = loader.get_svg_params()
-        
-        expected_keys = [
-            'point_radius', 'stroke_width', 'blue_color', 
-            'red_color', 'green_color'
-        ]
-        
-        for key in expected_keys:
-            assert key in params
-            assert params[key] is not None
-
-    def test_reload_config(self, temp_config_file):
-        """Test configuration reloading."""
-        loader = ConfigLoader(temp_config_file)
-        
-        # Load config first to populate cache
-        loader.load_config()
-        assert loader._config_cache is not None
-        
-        # Reload should clear cache
-        loader.reload_config()
-        assert loader._config_cache is None
-
-    def test_get_limits_alias(self, temp_config_file):
-        """Test that get_limits is an alias for get_structure_limits."""
-        loader = ConfigLoader(temp_config_file)
-        
-        limits1 = loader.get_structure_limits()
-        limits2 = loader.get_limits()
-        
-        assert limits1 == limits2
-
-    def test_set_config_override(self, temp_config_file):
-        """Test setting configuration overrides."""
-        loader = ConfigLoader(temp_config_file)
-        
-        # Load config first
-        original_value = loader.get_config_value('custom_setting')
-        
-        # Set override
-        loader.set_config_override('custom_setting', 'overridden_value')
-        
-        # Check that override is applied
-        overridden_value = loader.get_config_value('custom_setting')
-        assert overridden_value == 'overridden_value'
-        assert overridden_value != original_value
-        
-        # Check that override is in the overrides dict
-        assert 'custom_setting' in loader._overrides
-        assert loader._overrides['custom_setting'] == 'overridden_value'
 
     def test_apply_overrides_internal(self, temp_config_file):
         """Test internal _apply_overrides method."""
@@ -297,18 +198,3 @@ class TestConfigLoader:
         
         # Should return empty dict if default file doesn't exist
         assert config == {}
-
-    def test_multiple_overrides(self, temp_config_file):
-        """Test multiple configuration overrides."""
-        loader = ConfigLoader(temp_config_file)
-        
-        # Set multiple overrides
-        loader.set_config_override('setting1', 'value1')
-        loader.set_config_override('setting2', 'value2')
-        loader.set_config_override('custom_setting', 'final_value')
-        
-        config = loader.get_all_config()
-        
-        assert config['setting1'] == 'value1'
-        assert config['setting2'] == 'value2'
-        assert config['custom_setting'] == 'final_value'

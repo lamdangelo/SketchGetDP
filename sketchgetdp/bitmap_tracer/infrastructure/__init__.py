@@ -17,7 +17,6 @@ Dependencies:
 """
 
 from .image_processing import *
-from .shape_processing import *
 from .configuration import *
 from .point_detection import *
 
@@ -26,9 +25,6 @@ __all__ = [
     "ContourDetector",
     "ColorAnalyzer", 
     "ContourClosureService",
-    
-    # Shape processing components
-    "ShapeProcessor",
     
     # Configuration components
     "ConfigLoader",

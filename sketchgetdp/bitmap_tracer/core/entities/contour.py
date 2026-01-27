@@ -82,7 +82,7 @@ class Contour:
     @classmethod
     def from_numpy_contour(cls, contour: np.ndarray, tolerance: float = 5.0) -> 'Contour':
         """
-        Converts OpenCV contour format to our domain representation.
+        Converts OpenCV contour format to domain representation.
         The tolerance parameter controls how close endpoints must be to consider the contour closed.
         """
         if len(contour) == 0:
@@ -99,8 +99,6 @@ class Contour:
         end_point = points[-1]
         closure_gap = start_point.distance_to(end_point)
         
-        # KEY FIX: Check if the contour was explicitly closed by the closure service
-        # If the first and last points are identical, it's definitely closed
         points_are_identical = (start_point.x == end_point.x and start_point.y == end_point.y)
         
         # Consider contour closed if either:
@@ -108,7 +106,6 @@ class Contour:
         # 2. Points are identical (explicit closure by closure service)
         is_closed = closure_gap <= tolerance or points_are_identical
         
-        # If points are identical but gap > tolerance, use 0 gap (it's perfectly closed)
         actual_closure_gap = 0.0 if points_are_identical else closure_gap
         
         # Debug output to verify closure detection
@@ -181,3 +178,4 @@ class Contour:
         """String representation for debugging."""
         status = "CLOSED" if self.is_closed else "OPEN"
         return f"Contour(points={len(self.points)}, {status}, area={self.area:.1f}, gap={self.closure_gap:.2f}px)"
+    

@@ -58,30 +58,6 @@ class CurveFitter:
         
         return path_data
     
-    def simplify(self, contour: np.ndarray, epsilon_factor: float = 0.0015) -> Optional[np.ndarray]:
-        """
-        Reduce contour complexity using Douglas-Peucker algorithm.
-        
-        Contour simplification removes redundant points while preserving
-        the essential shape structure. This improves rendering performance
-        and reduces file size without significant quality loss.
-        
-        Args:
-            contour: OpenCV contour array to simplify
-            epsilon_factor: Simplification tolerance relative to contour length
-            
-        Returns:
-            Simplified contour array, or None if simplification fails
-        """
-        if len(contour) < 3:
-            return None
-        
-        contour_length = cv2.arcLength(contour, True)
-        epsilon = epsilon_factor * contour_length
-        simplified_contour = cv2.approxPolyDP(contour, epsilon, True)
-        
-        return simplified_contour if len(simplified_contour) >= 3 else None
-    
     def _simplify_contour(self, contour: np.ndarray, epsilon_factor: float) -> Optional[np.ndarray]:
         """
         Apply contour simplification with length-adaptive tolerance.

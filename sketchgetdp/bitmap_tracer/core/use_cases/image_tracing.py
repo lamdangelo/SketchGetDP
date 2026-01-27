@@ -1,8 +1,7 @@
 import numpy as np
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional
 from core.entities.point import Point
 from core.entities.contour import Contour
-from core.entities.color import ColorCategory
 
 
 class ImageTracingUseCase:
@@ -27,7 +26,7 @@ class ImageTracingUseCase:
         """
         try:
             print("🔍 Detecting contours...")
-            # Detect contours from the image - this now returns a List[Contour]
+            # Detect contours from the image
             contours = self.detect_contours(image_data)
             print(f"📐 Found {len(contours)} contours")
             
@@ -110,106 +109,22 @@ class ImageTracingUseCase:
         print("⚠️  No contour detector available - returning empty list")
         return []
 
-    def ensure_contour_closure(self, contour: Contour, tolerance: float = 5.0) -> Contour:
-        """
-        Guarantees the contour forms a mathematically closed loop.
-        
-        Vector paths require closed contours for proper rendering. This method
-        checks the distance between start and end points and closes the gap
-        if it exceeds the tolerance threshold.
-        
-        Args:
-            contour: The contour to check for closure
-            tolerance: Maximum allowed gap between start and end points in pixels
-            
-        Returns:
-            Closed contour ready for vector path generation
-        """
-        return contour
-
-    def fit_curves_to_contour(self, contour: Contour, 
-                            angle_threshold: float = 25,
-                            min_curve_angle: float = 120) -> Optional[str]:
-        """
-        Converts bitmap contour to optimized SVG path data using hybrid fitting.
-        
-        Employs a smart approach that uses straight lines for sharp angles and 
-        bezier curves for gentle curves. This preserves shape accuracy while 
-        minimizing points and ensuring smooth rendering.
-        
-        Args:
-            contour: The contour to convert to vector path
-            angle_threshold: Angle in degrees below which lines are used instead of curves
-            min_curve_angle: Minimum angle required for curve consideration
-            
-        Returns:
-            SVG path data string if successful, None if contour cannot be converted
-        """
-        if len(contour.points) < 3:
-            return None
-        
-        closed_contour = self.ensure_contour_closure(contour)
-        return None
-
     def detect_points(self, contour: Contour, config: dict = None) -> Optional[Point]:
         """
         Identifies if a contour represents a point marker rather than a path.
         """
-        if self.point_detector:
-            # Pass configuration to the point detector
-            if config and hasattr(self.point_detector, 'set_config'):
-                self.point_detector.set_config(config)
-            
-            # Convert our Contour entity to numpy format for the point detector
-            numpy_contour = np.array([[[point.x, point.y]] for point in contour.points], dtype=np.int32)
-            
-            # Use the correct method name: detect_point
-            point = self.point_detector.detect_point(numpy_contour)
-            
-            if point:
-                print(f"  📍 Point detected at ({point.x}, {point.y})")
-            else:
-                print(f"  ❌ Point NOT detected - area: {contour.area:.1f}, perimeter: {contour.perimeter:.1f}, points: {len(contour.points)}")
-            
-            return point
+        if config and hasattr(self.point_detector, 'set_config'):
+            self.point_detector.set_config(config)
         
-        # Fallback logic (shouldn't be needed if point_detector is working)
-        print("⚠️  Using fallback point detection")
-        if len(contour.points) < 3:
-            return None
+        numpy_contour = np.array([[[point.x, point.y]] for point in contour.points], dtype=np.int32)
+        point = self.point_detector.detect_point(numpy_contour)
         
-        area = contour.area
-        perimeter = contour.perimeter
-        
-        # Use config thresholds if provided, otherwise use defaults
-        if config:
-            point_max_area = config.get('point_max_area', 2000)
-            point_max_perimeter = config.get('point_max_perimeter', 165)
+        if point:
+            print(f"  📍 Point detected at ({point.x}, {point.y})")
         else:
-            point_max_area = 2000
-            point_max_perimeter = 165
+            print(f"  ❌ Point NOT detected - area: {contour.area:.1f}, perimeter: {contour.perimeter:.1f}, points: {len(contour.points)}")
         
-        print(f"  🔍 Point detection fallback - area: {area:.1f}, perimeter: {perimeter:.1f}, thresholds: area<{point_max_area}, perimeter<{point_max_perimeter}")
-        
-        if area < point_max_area and perimeter < point_max_perimeter:
-            center = contour.get_center()
-            if center:
-                print(f"  ✅ Point detected via fallback at ({center.x}, {center.y})")
-                return Point(x=center.x, y=center.y)
-        
-        return None
-
-    def get_contour_center(self, contour: Contour) -> Optional[Tuple[float, float]]:
-        """
-        Calculates the geometric center point of a contour.
-        
-        The center is computed using moment analysis, providing the centroid
-        of the shape. This is used for point marker placement and spatial analysis.
-        
-        Returns:
-            (x, y) coordinates of the center, or None if cannot be calculated
-        """
-        return contour.center
+        return point
     
     def _convert_to_contour_entity(self, raw_contour) -> Contour:
         """
@@ -221,5 +136,5 @@ class ImageTracingUseCase:
         Returns:
             Contour entity with points and calculated properties
         """
-        # Use the existing class method that properly handles closure detection
         return Contour.from_numpy_contour(raw_contour)
+    

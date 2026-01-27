@@ -44,31 +44,30 @@ class ConfigRepository(ABC):
         pass
     
     @abstractmethod
-    def get_config_value(self, key: str, default: Any = None) -> Any:
+    def get_contour_detection_params(self) -> Dict[str, Any]:
         """
-        Retrieve a specific configuration value by key.
+        Retrieve parameters for contour detection and filtering.
         
-        This method provides type-safe access to individual configuration
-        parameters with fallback to default values.
+        These parameters control how contours are detected and filtered
+        during image processing.
         
-        Args:
-            key: Configuration parameter name to retrieve
-            default: Value to return if key is not found in configuration
-            
         Returns:
-            Configuration value for the specified key, or default if not found
+            Dictionary containing contour detection parameters such as
+            maximum area and perimeter thresholds
         """
         pass
     
     @abstractmethod
-    def get_all_config(self) -> Dict[str, Any]:
+    def get_color_detection_params(self) -> Dict[str, Any]:
         """
-        Retrieve complete configuration as a dictionary.
+        Retrieve parameters for color categorization in HSV space.
         
-        Useful for debugging, logging, or when multiple related configuration
-        values need to be accessed together.
+        These parameters define the hue ranges and thresholds for
+        identifying different colors in the image.
         
         Returns:
-            Dictionary containing all configuration key-value pairs
+            Dictionary containing color detection parameters including
+            hue ranges for red, blue, green, and saturation/value thresholds
         """
         pass
+    

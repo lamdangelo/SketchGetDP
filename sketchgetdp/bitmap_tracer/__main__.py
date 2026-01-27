@@ -1,8 +1,5 @@
 """
-Bitmap Tracer Application - Clean Architecture Entry Point
-
-This module provides a clean command-line interface to the bitmap tracing
-functionality using the clean architecture implementation.
+Bitmap Tracer Application - Entry Point
 
 The application converts bitmap images to SVG vector graphics through a structured
 process of contour detection, color analysis, and vector path generation.
@@ -11,7 +8,6 @@ process of contour detection, color analysis, and vector path generation.
 import sys
 import os
 import argparse
-from pathlib import Path
 
 from interfaces.controllers.tracing_controller import TracingController
 
@@ -31,9 +27,9 @@ def find_config_file(config_path: str) -> str:
     from pathlib import Path
     
     search_paths = [
-        Path(config_path),  # User-specified path
-        Path.cwd() / config_path,  # Current working directory
-        Path(__file__).parent / config_path,  # Package directory (where main.py lives)
+        Path(config_path),                      # User-specified path
+        Path.cwd() / config_path,               # Current working directory
+        Path(__file__).parent / config_path,    # Package directory (where main.py lives)
     ]
     
     for path in search_paths:
@@ -42,16 +38,13 @@ def find_config_file(config_path: str) -> str:
             return str(path)
     
     print(f"⚠️  Configuration file not found: {config_path}, using defaults")
-    return config_path  # Return original if not found anywhere
+    return config_path                          # Return original if not found anywhere
 
 
 def validate_input_file_exists(file_path: str) -> None:
     """
     Validates that the specified file exists and is readable.
-    
-    This validation prevents the application from attempting to process
-    non-existent files and provides clear error messages to the user.
-    
+        
     Args:
         file_path: Absolute or relative path to the file to validate.
         
@@ -120,10 +113,7 @@ def parse_command_line_arguments() -> argparse.Namespace:
 
 def execute_tracing_pipeline(input_path: str, output_path: str, config_path: str) -> bool:
     """
-    Executes the complete bitmap-to-SVG tracing pipeline using clean architecture.
-    
-    This function uses the TracingController to orchestrate the workflow
-    through the clean architecture layers.
+    Executes the complete bitmap-to-SVG tracing pipeline.
     
     Args:
         input_path: Path to source bitmap image.
@@ -134,7 +124,6 @@ def execute_tracing_pipeline(input_path: str, output_path: str, config_path: str
         True if SVG was generated successfully, False otherwise.
     """
     try:
-        # Create the tracing controller - this is the entry point to clean architecture
         controller = TracingController()
         
         # Execute the tracing workflow
@@ -156,9 +145,6 @@ def log_application_startup(arguments: argparse.Namespace) -> None:
     """
     Logs application startup parameters for user verification.
     
-    Clear startup logging helps users verify that the application
-    is processing the correct files with the intended configuration.
-    
     Args:
         arguments: Parsed command-line arguments containing execution parameters.
     """
@@ -174,9 +160,6 @@ def log_application_result(success: bool, output_path: str = "") -> None:
     """
     Logs the final result of the tracing operation.
     
-    Clear success/failure messaging provides immediate feedback
-    to users about the outcome of the operation.
-    
     Args:
         success: True if tracing completed successfully, False otherwise.
         output_path: Path to the generated SVG file (on success).
@@ -189,10 +172,9 @@ def log_application_result(success: bool, output_path: str = "") -> None:
 
 def main() -> None:
     """
-    Main entry point for the Bitmap Tracer command-line application.
+    Entry point for the Bitmap Tracer.
     
-    This function orchestrates the complete application workflow using
-    the clean architecture implementation:
+    This function orchestrates the complete application workflow:
     1. Parse and validate command-line arguments
     2. Verify input file existence and accessibility
     3. Execute the tracing pipeline via TracingController

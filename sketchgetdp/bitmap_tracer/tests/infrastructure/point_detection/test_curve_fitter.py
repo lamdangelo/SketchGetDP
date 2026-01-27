@@ -51,17 +51,6 @@ class TestCurveFitter:
         assert curve_fitter.angle_threshold == 25
         assert curve_fitter.min_curve_angle == 120
 
-    def test_simplify_reduces_points_while_preserving_shape(self, curve_fitter, simple_contour):
-        """Simplification improves performance without quality loss."""
-        simplified = curve_fitter.simplify(simple_contour)
-        assert simplified is not None
-        assert len(simplified) >= 3
-
-    def test_simplify_rejects_contours_with_insufficient_points(self, curve_fitter):
-        """Minimum 3 points required to form a valid shape."""
-        insufficient_contour = np.array([[[0, 0]], [[1, 1]]], dtype=np.int32)
-        assert curve_fitter.simplify(insufficient_contour) is None
-
     def test_fit_curve_generates_valid_svg_path(self, curve_fitter, simple_contour):
         """SVG path must be properly formatted for rendering."""
         path_data = curve_fitter.fit_curve(simple_contour)

@@ -72,18 +72,34 @@ bitmap_tracer/
 │   ├── presenters/         # Output formatting
 │   └── gateways/           # External interfaces
 ├── __main__.py             # Python module entry point
-├── main.py                 # General entry point
 └── config.yaml            # Configuration
 ```
 
 ## ⚙️ Configuration
 
-Configure the number of structures to keep for each color in `config.yaml`:
+Configure the tracing behavior in `config.yaml`:
 
 ```yaml
-red_dots: 10      # Maximum number of red points to keep
-blue_paths: 5     # Maximum number of blue paths to keep  
-green_paths: 8    # Maximum number of green paths to keep
+## Structure Limits
+# Maximum number of structures to keep for each color category after filtering.
+# Structures are sorted by area (largest first) and only the top N are kept.
+red_dots: 1    # Maximum red points to preserve
+blue_paths: 1   # Maximum blue paths to preserve  
+green_paths: 1  # Maximum green paths to preserve
+
+## Contour Detection Parameters
+# Control how contours are detected and filtered from the source image.
+point_max_area: 2000     # Maximum area for a contour to be classified as a point
+point_max_perimeter: 1000 # Maximum perimeter for point classification
+
+## Color Detection Parameters
+# Define thresholds for categorizing colors in the source image.
+blue_hue_range: [100, 140]         # HSV hue range for blue color detection
+red_hue_range: [[0, 10], [170, 180]] # HSV hue ranges for red color detection
+green_hue_range: [35, 85]          # HSV hue range for green color detection
+min_saturation: 50                 # Minimum saturation to avoid classifying as white
+max_value_white: 200               # Maximum value above which colors are considered white
+min_value_black: 50                # Minimum value below which colors are considered black
 ```
 
 ## 🛠️ Usage

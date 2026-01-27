@@ -23,7 +23,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from infrastructure.image_processing.contour_detector import ContourDetector
 from infrastructure.image_processing.color_analyzer import ColorAnalyzer
 from infrastructure.point_detection.point_detector import PointDetector
-from infrastructure.shape_processing.shape_processor import ShapeProcessor
 from core.entities.color import Color
 from core.use_cases.image_tracing import ImageTracingUseCase
 from core.use_cases.structure_filtering import StructureFilteringUseCase
@@ -49,8 +48,7 @@ class TracingController:
                 image_loader: Optional[ImageLoader] = None,
                 contour_detector: Optional[ContourDetector] = None,
                 color_analyzer: Optional[ColorAnalyzer] = None,
-                point_detector: Optional[PointDetector] = None,
-                shape_processor: Optional[ShapeProcessor] = None):
+                point_detector: Optional[PointDetector] = None):
         """
         Initialize controller with dependencies.
         
@@ -64,7 +62,6 @@ class TracingController:
             contour_detector: Detects contours in loaded images
             color_analyzer: Analyzes and categorizes colors in contours
             point_detector: Identifies point-like structures in contours
-            shape_processor: Processes and filters geometric shapes
         """
         # Import concrete implementations here to avoid circular imports
         from infrastructure.configuration.config_loader import ConfigLoader
@@ -75,7 +72,6 @@ class TracingController:
         self.contour_detector = contour_detector or ContourDetector()
         self.color_analyzer = color_analyzer or ColorAnalyzer()
         self.point_detector = point_detector or PointDetector()
-        self.shape_processor = shape_processor or ShapeProcessor()
         
         # Use cases encapsulate business rules and workflow logic
         self.image_tracing_use_case = ImageTracingUseCase(
@@ -84,9 +80,7 @@ class TracingController:
             point_detector=self.point_detector
         )
         
-        self.structure_filtering_use_case = StructureFilteringUseCase(
-            shape_processor=self.shape_processor
-        )
+        self.structure_filtering_use_case = StructureFilteringUseCase()
 
     def trace_image(self, 
                    image_path: str, 
@@ -118,12 +112,6 @@ class TracingController:
             - statistics: Counts of different structure types processed
             - metadata: Additional information about the operation
             - error: Description of failure (when success is False)
-            
-        Example:
-            >>> controller = TracingController()
-            >>> result = controller.trace_image("input.jpg", "output.svg")
-            >>> if result['success']:
-            ...     print(f"Generated {result['statistics']['total_structures']} structures")
         """
         try:
             print(f"⚡ Starting image tracing: {image_path}")
@@ -161,62 +149,6 @@ class TracingController:
             print(f"❌ {error_message}")
             return self._create_error_response(error_message)
 
-    def trace_image_with_defaults(self, image_path: str) -> Dict[str, Any]:
-        """
-        Convenience method for tracing with default output path and configuration.
-        
-        This method provides a simplified interface for common use cases
-        where default settings are acceptable.
-        
-        Args:
-            image_path: Filesystem path to source bitmap image
-            
-        Returns:
-            Same structure as trace_image() method
-            
-        Example:
-            >>> controller = TracingController()
-            >>> result = controller.trace_image_with_defaults("simple_shape.jpg")
-        """
-        output_path = os.path.splitext(image_path)[0] + ".svg"
-        return self.trace_image(image_path, output_path)
-
-    def get_tracing_status(self) -> Dict[str, Any]:
-        """
-        Provide system status and capability information.
-        
-        This method supports system monitoring and discovery by
-        revealing what operations and formats are supported.
-        
-        Returns:
-            Dictionary containing:
-            - status: Current operational status
-            - capabilities: Supported formats and features
-            - dependencies: Status of required components
-            
-        Example:
-            >>> status = controller.get_tracing_status()
-            >>> if status['dependencies']['image_loader']:
-            ...     print("Image loading is available")
-        """
-        return {
-            'status': 'ready',
-            'capabilities': {
-                'image_formats': ['jpg', 'jpeg', 'png', 'bmp'],
-                'output_format': 'svg',
-                'color_categories': ['red', 'blue', 'green'],
-                'structure_types': ['points', 'paths']
-            },
-            'dependencies': {
-                'config_repository': self.config_repository is not None,
-                'image_loader': self.image_loader is not None,
-                'contour_detector': self.contour_detector is not None,
-                'color_analyzer': self.color_analyzer is not None,
-                'point_detector': self.point_detector is not None,
-                'shape_processor': self.shape_processor is not None
-            }
-        }
-
     def _load_configuration(self, config_path: Optional[str]) -> Optional[Dict]:
         """Load configuration from repository."""
         config = self.config_repository.load_config(config_path)
@@ -236,7 +168,7 @@ class TracingController:
             # Get dimensions from the image array
             width, height = self.image_loader.get_image_dimensions(image_array)
             
-            # Create the proper dictionary structure with metadata
+            # Create the dictionary structure with metadata
             image_data = {
                 'image_array': image_array,
                 'image_path': image_path,
@@ -279,7 +211,7 @@ class TracingController:
             True if SVG was generated successfully, False otherwise
         """
         try:
-            # Create SVGPresenter with the actual image dimensions
+            # Create SVGPresenter with the image dimensions
             presenter = SVGPresenter(
                 output_path=output_path,
                 width=image_data['width'],
@@ -431,3 +363,4 @@ class TracingController:
             },
             'metadata': {}
         }
+        

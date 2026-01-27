@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from typing import List, Dict
+from typing import List
 from dataclasses import dataclass
 
 
@@ -113,62 +113,4 @@ class ContourClosureService:
         start_point = contour[0][0]
         end_point = contour[-1][0]
         return np.linalg.norm(start_point - end_point)
-    
-    def create_closed_contour_object(self, contour: np.ndarray, tolerance: float = 5.0) -> ClosedContour:
-        """
-        Creates a ClosedContour object with comprehensive closure analysis.
         
-        Factory method that bundles contour points with closure metadata
-        in an immutable data structure. This provides a clean interface
-        for passing contour information between system components.
-        
-        Args:
-            contour: numpy array of contour points to analyze
-            tolerance: Closure tolerance threshold in pixels
-            
-        Returns:
-            ClosedContour instance containing points and closure metadata
-        """
-        closure_gap = self.calculate_closure_gap(contour)
-        is_closed = closure_gap <= tolerance
-        closed_points = self.ensure_closure(contour, tolerance)
-        
-        return ClosedContour(
-            points=[point[0] for point in closed_points],
-            is_closed=is_closed,
-            closure_gap=closure_gap
-        )
-    
-    def analyze_contour_closure(self, contour: np.ndarray) -> Dict:
-        """
-        Performs comprehensive closure analysis on a contour.
-        
-        Provides a complete set of metrics for contour quality assessment,
-        useful for debugging, filtering, and quality control in the
-        image processing pipeline.
-        
-        Args:
-            contour: numpy array of contour points to analyze
-            
-        Returns:
-            Dictionary containing comprehensive contour metrics:
-            - is_closed: Closure status boolean
-            - closure_gap: Distance between endpoints
-            - area: Contour area in pixels
-            - perimeter: Contour perimeter length
-            - point_count: Number of points in contour
-            - needs_closure: Whether explicit closure is recommended
-        """
-        closure_gap = self.calculate_closure_gap(contour)
-        is_closed = self.is_closed(contour)
-        area = cv2.contourArea(contour)
-        perimeter = cv2.arcLength(contour, True)
-        
-        return {
-            'is_closed': is_closed,
-            'closure_gap': closure_gap,
-            'area': area,
-            'perimeter': perimeter,
-            'point_count': len(contour),
-            'needs_closure': closure_gap > 5.0 and not is_closed
-        }

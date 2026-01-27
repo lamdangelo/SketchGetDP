@@ -131,83 +131,7 @@ class TestSVGPresenter:
         
         assert result is True
         assert os.path.exists(temp_output_path)
-    
-    def test_get_elements_count(self, basic_presenter):
-        """Returned counter copy prevents external mutation."""
-        point = Point(100, 150)
-        color = Mock()
-        color.categorize.return_value = (ColorCategory.RED, "#FF0000")
-        color.to_hex.return_value = "#FF0000"
-        basic_presenter.add_point(point, color)
-        
-        counts = basic_presenter.get_elements_count()
-        
-        # Modify copy to verify original unchanged
-        counts['points'] = 999
-        assert basic_presenter.elements_count['points'] == 1
-    
-    def test_create_point_marker(self, basic_presenter):
-        """Marker definition enables consistent point rendering."""
-        marker = basic_presenter.create_point_marker(100, 150, 5)
-        
-        assert marker['cx'] == 100
-        assert marker['cy'] == 150
-        assert marker['r'] == 5
-    
-    def test_add_smart_curve_path_straight_lines(self, basic_presenter):
-        """Straight segments use lines to minimize file size."""
-        points = [(0, 0), (10, 0), (20, 0), (30, 0)]
-        color = Mock()
-        color.categorize.return_value = (ColorCategory.BLUE, "#0000FF")
-        
-        path_data = basic_presenter.add_smart_curve_path(points, color, is_closed=False)
-        
-        assert "L" in path_data  # Line commands preferred for straightness
-    
-    def test_add_smart_curve_path_insufficient_points(self, basic_presenter):
-        """Path generation requires minimum 3 points for curvature analysis."""
-        points = [(0, 0), (10, 0)]
-        color = Mock()
-        color.categorize.return_value = (ColorCategory.BLUE, "#0000FF")
-        
-        path_data = basic_presenter.add_smart_curve_path(points, color)
-        
-        assert path_data is None
-    
-    def test_calculate_segment_angle_straight(self, basic_presenter):
-        """Zero angle indicates perfect straightness."""
-        previous_point = (0, 0)
-        current_point = (10, 0)
-        next_point = (20, 0)
-        
-        angle = basic_presenter._calculate_segment_angle(
-            previous_point, current_point, next_point
-        )
-        
-        assert angle == 0.0
-    
-    def test_calculate_segment_angle_right_angle(self, basic_presenter):
-        """90-degree angles trigger curve generation."""
-        previous_point = (0, 0)
-        current_point = (10, 0)
-        next_point = (10, 10)
-        
-        angle = basic_presenter._calculate_segment_angle(
-            previous_point, current_point, next_point
-        )
-        
-        assert abs(angle - 90.0) < 1.0
-    
-    def test_vector_operations(self, basic_presenter):
-        """Vector math enables angle-based curve detection."""
-        vector = basic_presenter._create_vector((0, 0), (3, 4))
-        magnitude = basic_presenter._calculate_vector_magnitude((3, 4))
-        normalized = basic_presenter._normalize_vector((3, 4), 5.0)
-        
-        assert vector == (3, 4)
-        assert magnitude == 5.0
-        assert abs(normalized[0] - 0.6) < 0.001
-    
+
     def test_path_stroke_color_mapping(self, basic_presenter):
         """Categorized colors map to consistent stroke values."""
         blue_color = Mock()
@@ -264,3 +188,4 @@ class TestSVGPresenter:
         path_data = basic_presenter._convert_contour_to_path_data(empty_contour)
         
         assert path_data == ""
+        

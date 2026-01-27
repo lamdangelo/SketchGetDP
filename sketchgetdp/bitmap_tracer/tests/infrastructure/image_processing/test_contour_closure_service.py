@@ -71,52 +71,9 @@ class TestContourClosureService:
         gap = service.calculate_closure_gap(too_small_contour)
         assert gap == float('inf')
 
-    def test_create_closed_contour_object_for_closed_contour(self, service, perfectly_closed_contour):
-        contour_object = service.create_closed_contour_object(perfectly_closed_contour, tolerance=5.0)
-        
-        assert isinstance(contour_object, ClosedContour)
-        assert contour_object.is_closed == True
-        assert contour_object.closure_gap == pytest.approx(0.0)
-        assert len(contour_object.points) == len(perfectly_closed_contour)
-
-    def test_create_closed_contour_object_for_open_contour(self, service, obviously_open_contour):
-        contour_object = service.create_closed_contour_object(obviously_open_contour, tolerance=5.0)
-        
-        assert isinstance(contour_object, ClosedContour)
-        assert contour_object.is_closed == False
-        assert contour_object.closure_gap > 5.0
-        assert len(contour_object.points) == len(obviously_open_contour) + 1
-
-    def test_analyze_contour_closure_provides_comprehensive_metrics(self, service, perfectly_closed_contour):
-        analysis = service.analyze_contour_closure(perfectly_closed_contour)
-        
-        assert analysis['is_closed'] == True
-        assert analysis['closure_gap'] == pytest.approx(0.0)
-        assert analysis['point_count'] == 5
-        assert analysis['needs_closure'] == False
-        assert analysis['area'] > 0
-        assert analysis['perimeter'] > 0
-
-    def test_analyze_contour_closure_identifies_open_contours(self, service, obviously_open_contour):
-        analysis = service.analyze_contour_closure(obviously_open_contour)
-        
-        assert analysis['is_closed'] == False
-        assert analysis['closure_gap'] > 5.0
-        assert analysis['needs_closure'] == True
-
-    def test_analyze_contour_closure_handles_small_contours(self, service, too_small_contour):
-        analysis = service.analyze_contour_closure(too_small_contour)
-        
-        assert analysis['is_closed'] == False
-        assert analysis['closure_gap'] == float('inf')
-        assert analysis['point_count'] == 2
-
     def test_all_methods_handle_empty_contour(self, service):
         empty_contour = np.array([], dtype=np.float32).reshape(0, 1, 2)
         
         assert len(service.ensure_closure(empty_contour)) == 0
         assert service.is_closed(empty_contour) == False
         assert service.calculate_closure_gap(empty_contour) == float('inf')
-        
-        analysis = service.analyze_contour_closure(empty_contour)
-        assert analysis['point_count'] == 0

@@ -44,3 +44,4 @@ class PointData:
     def to_point(self) -> Point:
         """Extracts the basic spatial information when full metadata isn't needed."""
         return Point(self.x, self.y)
+    

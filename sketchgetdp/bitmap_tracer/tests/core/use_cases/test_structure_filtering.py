@@ -1,214 +1,218 @@
-import sys
-import os
-
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../'))
-sys.path.insert(0, project_root)
-
+# test_structure_filtering.py
 import pytest
 from unittest.mock import Mock, patch
-
-from core.entities.contour import Contour
 from core.use_cases.structure_filtering import StructureFilteringUseCase
+
+
+# Mock Contour class for testing
+class MockContour:
+    def __init__(self, area: float, perimeter: float = 10.0):
+        self.area = area
+        self.perimeter = perimeter
 
 
 class TestStructureFilteringUseCase:
     
-    @pytest.fixture
-    def use_case(self):
-        """Fixture providing the use case instance with mocked shape processor."""
-        mock_shape_processor = Mock()
-        return StructureFilteringUseCase(shape_processor=mock_shape_processor)
+    def setup_method(self):
+        self.use_case = StructureFilteringUseCase()
     
-    @pytest.fixture
-    def use_case_no_processor(self):
-        """Fixture providing the use case instance without shape processor."""
-        return StructureFilteringUseCase()
-    
-    @pytest.fixture
-    def mock_contours(self):
-        """Fixture providing mock contours of different sizes."""
-        small = Mock(spec=Contour)
-        small.area = 50.0
-        small.perimeter = 25.0
-        
-        medium = Mock(spec=Contour)
-        medium.area = 200.0
-        medium.perimeter = 50.0
-        
-        large = Mock(spec=Contour)
-        large.area = 500.0
-        large.perimeter = 80.0
-        
-        return small, medium, large
-    
-    @pytest.fixture
-    def sample_structures(self):
-        """Fixture providing sample structures for testing."""
-        return {
-            'red_points': ['red1', 'red2', 'red3', 'red4'],
-            'blue_structures': ['blue1', 'blue2', 'blue3'],
-            'green_structures': ['green1', 'green2']
+    def test_execute_basic_filtering(self):
+        """Test basic filtering with limits"""
+        structures = {
+            'red_points': ['r1', 'r2', 'r3', 'r4', 'r5'],
+            'blue_structures': ['b1', 'b2', 'b3'],
+            'green_structures': ['g1', 'g2']
         }
-
-    def test_init_with_shape_processor(self, use_case):
-        assert use_case.shape_processor is not None
-
-    def test_init_without_shape_processor(self, use_case_no_processor):
-        assert use_case_no_processor.shape_processor is None
-
-    @pytest.mark.parametrize("config,expected_red,expected_blue,expected_green", [
-        ({'red_dots': 2, 'blue_paths': 1, 'green_paths': 3}, 2, 1, 2),
-        ({'red_dots': 0, 'blue_paths': 0, 'green_paths': 0}, 4, 3, 2),
-        ({}, 4, 3, 2),
-    ])
-    def test_execute_applies_config_limits(self, use_case, sample_structures, config, 
-                                         expected_red, expected_blue, expected_green):
-        with patch('builtins.print'):
-            result = use_case.execute(sample_structures, config)
-
-        assert len(result['red_points']) == expected_red
-        assert len(result['blue_structures']) == expected_blue
-        assert len(result['green_structures']) == expected_green
-
-    def test_execute_empty_structures(self, use_case):
-        structures = {'red_points': [], 'blue_structures': [], 'green_structures': []}
-        config = {'red_dots': 5, 'blue_paths': 5, 'green_paths': 5}
-
-        result = use_case.execute(structures, config)
-
-        assert result['red_points'] == []
-        assert result['blue_structures'] == []
+        config = {'red_dots': 3, 'blue_paths': 2, 'green_paths': 1}
+        
+        result = self.use_case.execute(structures, config)
+        
+        assert len(result['red_points']) == 3
+        assert len(result['blue_structures']) == 2
+        assert len(result['green_structures']) == 1
+    
+    def test_execute_within_limits(self):
+        """Test when structures are already within limits"""
+        structures = {
+            'red_points': ['r1', 'r2'],
+            'blue_structures': ['b1'],
+            'green_structures': []
+        }
+        config = {'red_dots': 5, 'blue_paths': 3, 'green_paths': 2}
+        
+        result = self.use_case.execute(structures, config)
+        
+        assert result['red_points'] == ['r1', 'r2']
+        assert result['blue_structures'] == ['b1']
         assert result['green_structures'] == []
-
-    def test_execute_handles_malformed_input_gracefully(self, use_case):
-        structures = {'invalid_key': 'invalid_value'}
-        config = {'invalid_config': 'value'}
-
-        with patch('builtins.print'), patch('traceback.print_exc') as mock_traceback:
-            result = use_case.execute(structures, config)
-
-        expected = {'red_points': [], 'blue_structures': [], 'green_structures': []}
-        assert result == expected
-        mock_traceback.assert_not_called()
-
-    def test_execute_partial_structures_applies_limits_to_present_keys(self, use_case):
-        structures = {'red_points': ['red1', 'red2'], 'invalid_key': 'invalid_value'}
+    
+    def test_execute_zero_limits(self):
+        """Test with zero limits (should not filter)"""
+        structures = {
+            'red_points': ['r1', 'r2'],
+            'blue_structures': ['b1'],
+            'green_structures': ['g1']
+        }
+        config = {'red_dots': 0, 'blue_paths': 0, 'green_paths': 0}
+        
+        result = self.use_case.execute(structures, config)
+        
+        assert len(result['red_points']) == 2
+        assert len(result['blue_structures']) == 1
+        assert len(result['green_structures']) == 1
+    
+    def test_execute_missing_keys(self):
+        """Test with missing structure or config keys"""
+        structures = {'red_points': ['r1', 'r2']}  # Missing others
         config = {'red_dots': 1}
-
-        with patch('builtins.print'):
-            result = use_case.execute(structures, config)
-
-        assert len(result['red_points']) == 1
-        assert result['blue_structures'] == []
-        assert result['green_structures'] == []
-
-    def test_execute_returns_original_structures_on_exception(self, use_case):
-        class FaultyStructures:
-            def get(self, key, default=None):
-                raise Exception("Simulated error")
-
-        structures = FaultyStructures()
-        config = {'red_dots': 1, 'blue_paths': 1, 'green_paths': 1}
-
-        with patch('builtins.print') as mock_print, patch('traceback.print_exc') as mock_traceback:
-            result = use_case.execute(structures, config)
-
-        assert result == structures
-        mock_print.assert_called_with("❌ Structure filtering error: Simulated error")
-        mock_traceback.assert_called_once()
-
-    @pytest.mark.parametrize("structures,max_count,expected", [
-        ([(100.0, 'large'), (50.0, 'medium'), (10.0, 'small'), (5.0, 'tiny')], 2, 2),
-        ([(100.0, 'struct1'), (50.0, 'struct2')], 0, 0),
-        ([(100.0, 'struct1'), (50.0, 'struct2')], 5, 2),
-    ])
-    def test_filter_structures_by_area_limits_count(self, use_case, structures, max_count, expected):
-        result = use_case.filter_structures_by_area(structures, max_count)
-        assert len(result) == expected
-
-    @pytest.mark.parametrize("contours,min_area,max_area,expected_count", [
-        (['small', 'medium', 'large'], 100.0, 300.0, 1),
-        (['small', 'large'], 1000.0, 2000.0, 0),
-        ([], 100.0, 300.0, 0),
-    ])
-    def test_filter_contours_by_size_keeps_contours_in_range(self, use_case, mock_contours, 
-                                                           contours, min_area, max_area, expected_count):
-        # Map string references to actual mock contours
-        contour_map = {
-            'small': mock_contours[0],
-            'medium': mock_contours[1], 
-            'large': mock_contours[2]
-        }
-        contour_list = [contour_map[c] for c in contours]
         
-        result = use_case.filter_contours_by_size(contour_list, min_area, max_area)
-        assert len(result) == expected_count
-
-    def test_filter_by_circularity_keeps_contours_above_threshold(self, use_case):
-        high_circularity = Mock(spec=Contour)
-        high_circularity.area = 78.54
-        high_circularity.perimeter = 31.42
+        result = self.use_case.execute(structures, config)
         
-        low_circularity = Mock(spec=Contour)
-        low_circularity.area = 100.0
-        low_circularity.perimeter = 100.0
+        assert result['red_points'] == ['r1']
+        assert 'blue_structures' in result
+        assert 'green_structures' in result
+    
+    def test_filter_structures_by_area_basic(self):
+        """Test basic area filtering"""
+        structures = [
+            (100.0, 'large'),
+            (50.0, 'medium'),
+            (25.0, 'small'),
+            (10.0, 'tiny')
+        ]
         
-        contours = [high_circularity, low_circularity]
-        min_circularity = 0.8
-
-        result = use_case.filter_by_circularity(contours, min_circularity)
-
+        result = self.use_case.filter_structures_by_area(structures, max_count=2)
+        
+        assert len(result) == 2
+        assert result[0][0] == 100.0  # Largest area
+        assert result[1][0] == 50.0   # Second largest
+    
+    def test_filter_structures_by_area_no_limit(self):
+        """Test area filtering with high limit"""
+        structures = [
+            (100.0, 'large'),
+            (50.0, 'medium')
+        ]
+        
+        result = self.use_case.filter_structures_by_area(structures, max_count=10)
+        
+        assert len(result) == 2
+    
+    def test_filter_structures_by_area_zero_limit(self):
+        """Test area filtering with zero limit"""
+        structures = [
+            (100.0, 'large'),
+            (50.0, 'medium')
+        ]
+        
+        result = self.use_case.filter_structures_by_area(structures, max_count=0)
+        
+        assert len(result) == 0
+    
+    def test_filter_contours_by_size_basic(self):
+        """Test basic size filtering of contours"""
+        contours = [
+            MockContour(area=25.0),
+            MockContour(area=50.0),
+            MockContour(area=75.0),
+            MockContour(area=100.0)
+        ]
+        
+        result = self.use_case.filter_contours_by_size(
+            contours, min_area=50.0, max_area=75.0
+        )
+        
+        assert len(result) == 2
+        assert all(50.0 <= c.area <= 75.0 for c in result)
+    
+    def test_filter_contours_by_size_boundary(self):
+        """Test size filtering with boundary values"""
+        contours = [
+            MockContour(area=50.0),  # Exactly min
+            MockContour(area=75.0),  # Exactly max
+            MockContour(area=49.9),  # Just below min
+            MockContour(area=75.1)   # Just above max
+        ]
+        
+        result = self.use_case.filter_contours_by_size(
+            contours, min_area=50.0, max_area=75.0
+        )
+        
+        assert len(result) == 2
+    
+    def test_filter_by_circularity_basic(self):
+        """Test basic circularity filtering"""
+        # Perfect circle: area = πr², perimeter = 2πr
+        # For r=5: area ≈ 78.54, perimeter ≈ 31.42
+        contours = [
+            MockContour(area=78.54, perimeter=31.42),  # High circularity (~1.0)
+            MockContour(area=10.0, perimeter=100.0),   # Low circularity (~0.013)
+        ]
+        
+        result = self.use_case.filter_by_circularity(contours, min_circularity=0.5)
+        
         assert len(result) == 1
-        assert result[0] == high_circularity
-
-    def test_filter_by_circularity_handles_zero_perimeter(self, use_case):
-        zero_perimeter_contour = Mock(spec=Contour)
-        zero_perimeter_contour.area = 100.0
-        zero_perimeter_contour.perimeter = 0.0
+        assert result[0].area == 78.54
+    
+    def test_filter_by_circularity_default(self):
+        """Test circularity filtering with default threshold"""
+        contours = [
+            MockContour(area=10.0, perimeter=50.0),   # Circularity ~0.05
+            MockContour(area=5.0, perimeter=100.0),   # Circularity ~0.006 (below default)
+        ]
         
-        contours = [zero_perimeter_contour]
-        min_circularity = 0.1
-
-        result = use_case.filter_by_circularity(contours, min_circularity)
-
-        assert result == []
-
-    @pytest.mark.parametrize("descending,expected_order", [
-        (True, ['large', 'medium', 'small']),
-        (False, ['small', 'medium', 'large']),
-    ])
-    def test_sort_contours_by_area(self, use_case, mock_contours, descending, expected_order):
-        # Create a list in mixed order
-        contours = [mock_contours[0], mock_contours[2], mock_contours[1]]  # small, large, medium
+        result = self.use_case.filter_by_circularity(contours)
         
-        result = use_case.sort_contours_by_area(contours, descending=descending)
+        # Default min_circularity is 0.01
+        assert len(result) == 1
+    
+    def test_sort_contours_by_area_descending(self):
+        """Test sorting contours by area (largest first)"""
+        contours = [
+            MockContour(area=25.0),
+            MockContour(area=100.0),
+            MockContour(area=50.0)
+        ]
         
-        # Map expected order string to actual mock contours
-        order_map = {
-            'small': mock_contours[0],
-            'medium': mock_contours[1],
-            'large': mock_contours[2]
-        }
-        expected_result = [order_map[name] for name in expected_order]
+        result = self.use_case.sort_contours_by_area(contours, descending=True)
         
-        assert result == expected_result
-
-    def test_sort_contours_by_area_empty_list(self, use_case):
-        result = use_case.sort_contours_by_area([], descending=True)
-        assert result == []
-
-    def test_filter_top_level_contours_placeholder(self, use_case, mock_contours):
-        contours = [mock_contours[0], mock_contours[1]]
-        hierarchy_data = Mock()
-
-        result = use_case.filter_top_level_contours(contours, hierarchy_data)
-
-        assert result == contours
-
-    def test_categorize_structures_by_color_placeholder(self, use_case, mock_contours):
-        contours = [mock_contours[0], mock_contours[1]]
-        original_image = Mock()
-
-        result = use_case.categorize_structures_by_color(contours, original_image)
-
-        assert result == {}
+        assert result[0].area == 100.0
+        assert result[1].area == 50.0
+        assert result[2].area == 25.0
+    
+    def test_sort_contours_by_area_ascending(self):
+        """Test sorting contours by area (smallest first)"""
+        contours = [
+            MockContour(area=100.0),
+            MockContour(area=25.0),
+            MockContour(area=50.0)
+        ]
+        
+        result = self.use_case.sort_contours_by_area(contours, descending=False)
+        
+        assert result[0].area == 25.0
+        assert result[1].area == 50.0
+        assert result[2].area == 100.0
+    
+    def test_sort_contours_by_area_empty(self):
+        """Test sorting empty contour list"""
+        contours = []
+        
+        result = self.use_case.sort_contours_by_area(contours, descending=True)
+        
+        assert len(result) == 0
+    
+    @patch('builtins.print')
+    def test_execute_exception_handling(self, mock_print):
+        """Test exception handling in execute method"""
+        # Create a structure that will cause an error when trying to get length
+        bad_structures = Mock()
+        bad_structures.get.return_value = None
+        
+        config = {'red_dots': 5}
+        
+        # Should not raise exception, should return original structures
+        result = self.use_case.execute(bad_structures, config)
+        
+        assert result == bad_structures
+        mock_print.assert_called()

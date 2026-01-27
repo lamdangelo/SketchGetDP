@@ -156,23 +156,6 @@ class TestColorAnalyzer:
             result = self.analyzer.categorize(self.mock_contour, image)
             assert result == "red"
 
-    def test_categorize_with_numpy_contour(self):
-        """Test categorize method with numpy contour"""
-        image = np.zeros((100, 100, 3), dtype=np.uint8)
-        numpy_contour = np.array([[10, 10], [20, 20], [30, 30]], dtype=np.float32)
-        
-        with patch.object(self.analyzer, 'get_dominant_color', return_value="#0000FF"):
-            result = self.analyzer.categorize(numpy_contour, image)
-            assert result == "blue"
-
-    def test_categorize_with_empty_contour(self):
-        """Test categorize method with empty contour"""
-        image = np.zeros((100, 100, 3), dtype=np.uint8)
-        empty_contour = np.array([])
-        
-        result = self.analyzer.categorize(empty_contour, image)
-        assert result is None
-
     def test_categorize_no_dominant_color(self):
         """Test categorize method when no dominant color is found"""
         image = np.zeros((100, 100, 3), dtype=np.uint8)
@@ -188,19 +171,6 @@ class TestColorAnalyzer:
         with patch.object(self.analyzer, 'get_dominant_color', return_value="#00FF00"):
             result = self.analyzer.categorize(self.mock_contour, image)
             assert result == "green"
-
-    def test_analyze_contour_color(self):
-        """Test analyze_contour_color method"""
-        image = np.zeros((100, 100, 3), dtype=np.uint8)
-        contour = np.array([[10, 10], [20, 20], [30, 30], [10, 10]], dtype=np.int32)
-        
-        with patch.object(self.analyzer, 'get_dominant_color', return_value="#FF0000"):
-            result = self.analyzer.analyze_contour_color(contour, image)
-            
-            assert result['dominant_color'] == "#FF0000"
-            assert 'contour_area' in result
-            assert 'contour_points' in result
-            assert result['contour_points'] == 4
 
     def test_hsv_color_conversion_blue(self):
         """Test HSV conversion for blue color"""

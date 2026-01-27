@@ -5,14 +5,10 @@ from core.entities.contour import Contour
 class StructureFilteringUseCase:
     """Applies business rules for filtering and prioritizing image structures."""
 
-    def __init__(self, shape_processor=None):
+    def __init__(self):
         """
-        Initialize use case with required dependencies.
-        
-        Args:
-            shape_processor: Service for processing and filtering shapes
+        Initialize use case.
         """
-        self.shape_processor = shape_processor
 
     def execute(self, structures: Dict[str, Any], config: Dict) -> Dict[str, Any]:
         """
@@ -47,14 +43,10 @@ class StructureFilteringUseCase:
                 print(f"  🟢 Limiting green paths from {len(green_structures)} to {max_green_paths}")
                 green_structures = green_structures[:max_green_paths]
             
-            # TEMPORARY: Skip shape processing entirely to get basic SVG output
-            print("  ⏭️  Skipping shape processing (using raw contours)")
-            
-            # Just use the raw contours without processing
             filtered_structures = {
                 'red_points': red_points,
-                'blue_structures': blue_structures,  # Raw contours
-                'green_structures': green_structures  # Raw contours
+                'blue_structures': blue_structures,
+                'green_structures': green_structures
             }
             
             total_filtered = len(red_points) + len(blue_structures) + len(green_structures)
@@ -123,21 +115,6 @@ class StructureFilteringUseCase:
         
         return filtered_contours
 
-    def filter_top_level_contours(self, 
-                                 contours: List[Contour], 
-                                 hierarchy_data: Any) -> List[Contour]:
-        """
-        Isolates top-level contours while excluding nested child contours.
-        
-        In contour hierarchies, child contours often represent holes or details
-        within parent shapes. This filtering ensures only primary structures
-        are processed for vectorization.
-        
-        Returns:
-            Top-level contours without nested children
-        """
-        return contours
-
     def filter_by_circularity(self, 
                             contours: List[Contour], 
                             min_circularity: float = 0.01) -> List[Contour]:
@@ -180,18 +157,3 @@ class StructureFilteringUseCase:
             Contours sorted by area
         """
         return sorted(contours, key=lambda c: c.area, reverse=descending)
-
-    def categorize_structures_by_color(self, 
-                                     contours: List[Contour], 
-                                     original_image) -> Dict[str, List[Tuple[float, Contour]]]:
-        """
-        Organizes contours into color categories for independent processing.
-        
-        Different color categories (red, blue, green) have distinct processing
-        rules and output requirements. This categorization enables color-specific
-        filtering and rendering strategies.
-        
-        Returns:
-            Dictionary mapping color categories to lists of (area, contour) pairs
-        """
-        return {}

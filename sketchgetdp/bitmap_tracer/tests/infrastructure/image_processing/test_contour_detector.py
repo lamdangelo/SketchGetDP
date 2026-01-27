@@ -3,7 +3,7 @@ import sys
 import pytest
 import cv2
 import numpy as np
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../'))
@@ -62,45 +62,6 @@ class TestContourDetector:
         if contours is not None:
             for contour in contours:
                 assert len(contour) >= 3  # Minimum points for closed shape
-
-    def test_preprocess_returns_original_and_binary_images(self, contour_detector, sample_image_data):
-        original_img, processed_img = contour_detector.preprocess(sample_image_data)
-        
-        assert original_img is not None
-        assert processed_img is not None
-        assert len(original_img.shape) == 3  # BGR
-        assert len(processed_img.shape) == 2  # Binary
-
-    def test_preprocess_returns_none_for_empty_image_data(self, contour_detector, empty_image_data):
-        original_img, processed_img = contour_detector.preprocess(empty_image_data)
-        assert original_img is None
-        assert processed_img is None
-
-    @patch.object(ContourDetector, 'detect')
-    def test_detect_with_closure_analysis_returns_analysis_reports(self, mock_detect, contour_detector, sample_image_data, mock_contours):
-        contours, hierarchy = mock_contours
-        mock_detect.return_value = (tuple(contours), hierarchy)
-        
-        mock_analysis = {
-            'is_closed': True,
-            'closure_gap': 0.0,
-            'area': 6400.0,
-            'point_count': 4
-        }
-        contour_detector.closure_service.analyze_contour_closure = Mock(return_value=mock_analysis)
-        
-        result_contours, result_hierarchy, closure_reports = contour_detector.detect_with_closure_analysis(sample_image_data)
-        
-        assert result_contours is not None
-        assert result_hierarchy is not None
-        assert len(closure_reports) == len(contours)
-        assert closure_reports[0] == mock_analysis
-
-    def test_detect_with_closure_analysis_handles_no_contours(self, contour_detector, empty_image_data):
-        contours, hierarchy, closure_reports = contour_detector.detect_with_closure_analysis(empty_image_data)
-        assert contours is None
-        assert hierarchy is None
-        assert closure_reports == []
 
     def test_image_processing_creates_valid_binary_images(self, contour_detector, sample_image_data):
         img = sample_image_data['image_array']

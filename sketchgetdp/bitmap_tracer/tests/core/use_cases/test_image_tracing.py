@@ -1,7 +1,6 @@
 import pytest
 import numpy as np
-from unittest.mock import Mock, MagicMock, patch
-from typing import List, Dict, Optional
+from unittest.mock import Mock, patch
 import sys
 import os
 
@@ -229,36 +228,6 @@ class TestImageTracingUseCase:
         
         assert contours == []
     
-    def test_ensure_contour_closure(self, use_case):
-        """Test contour closure method (currently returns the same contour)"""
-        contour = Mock(spec=Contour)
-        
-        result = use_case.ensure_contour_closure(contour, tolerance=5.0)
-        
-        assert result == contour
-    
-    def test_fit_curves_to_contour_insufficient_points(self, use_case):
-        """Test curve fitting with insufficient contour points"""
-        contour = Mock(spec=Contour)
-        contour.points = [Point(1, 1), Point(2, 2)]
-        
-        result = use_case.fit_curves_to_contour(contour)
-        
-        assert result is None
-    
-    def test_fit_curves_to_contour_sufficient_points(self, use_case):
-        """Test curve fitting with sufficient contour points"""
-        contour = Mock(spec=Contour)
-        contour.points = [Point(1, 1), Point(2, 2), Point(3, 1)]
-        
-        with patch.object(use_case, 'ensure_contour_closure') as mock_closure:
-            mock_closure.return_value = contour
-            
-            result = use_case.fit_curves_to_contour(contour)
-        
-        assert result is None
-        mock_closure.assert_called_once_with(contour)
-    
     def test_detect_points_with_detector(self, use_case, mock_dependencies):
         """Test point detection using the point detector service"""
         contour = Mock(spec=Contour)
@@ -276,7 +245,7 @@ class TestImageTracingUseCase:
         mock_dependencies['point_detector'].set_config.assert_called_once_with(config)
         mock_dependencies['point_detector'].detect_point.assert_called_once()
     
-    def test_detect_points_with_detector_no_config(self, use_case, mock_dependencies):
+    def test_detect_points_with_no_config(self, use_case, mock_dependencies):
         """Test point detection without providing config"""
         contour = Mock(spec=Contour)
         contour.points = [Point(10, 10), Point(20, 10), Point(15, 20)]
@@ -292,127 +261,6 @@ class TestImageTracingUseCase:
         mock_dependencies['point_detector'].set_config.assert_not_called()
         mock_dependencies['point_detector'].detect_point.assert_called_once()
     
-    def test_detect_points_fallback_success(self):
-        """Test fallback point detection when point detector is not available"""
-        use_case = ImageTracingUseCase()
-        
-        contour = Mock(spec=Contour)
-        contour.points = [Point(10, 10), Point(20, 10), Point(15, 20)]
-        contour.area = 50.0  # Below threshold
-        contour.perimeter = 30.0  # Below threshold
-        contour.get_center.return_value = Point(15, 13.3)
-        
-        config = {
-            'point_max_area': 2000,
-            'point_max_perimeter': 165
-        }
-        
-        result = use_case.detect_points(contour, config)
-        
-        assert result.x == 15
-        assert result.y == 13.3
-        contour.get_center.assert_called_once()
-    
-    def test_detect_points_fallback_area_too_large(self):
-        """Test fallback point detection when area exceeds threshold"""
-        use_case = ImageTracingUseCase()
-        
-        contour = Mock(spec=Contour)
-        contour.points = [Point(10, 10), Point(20, 10), Point(15, 20)]
-        contour.area = 3000.0  # Above threshold
-        contour.perimeter = 30.0  # Below threshold
-        contour.get_center.return_value = Point(15, 13.3)
-        
-        config = {
-            'point_max_area': 2000,
-            'point_max_perimeter': 165
-        }
-        
-        result = use_case.detect_points(contour, config)
-        
-        assert result is None
-    
-    def test_detect_points_fallback_perimeter_too_large(self):
-        """Test fallback point detection when perimeter exceeds threshold"""
-        use_case = ImageTracingUseCase()
-        
-        contour = Mock(spec=Contour)
-        contour.points = [Point(10, 10), Point(20, 10), Point(15, 20)]
-        contour.area = 50.0  # Below threshold
-        contour.perimeter = 200.0  # Above threshold
-        contour.get_center.return_value = Point(15, 13.3)
-        
-        config = {
-            'point_max_area': 2000,
-            'point_max_perimeter': 165
-        }
-        
-        result = use_case.detect_points(contour, config)
-        
-        assert result is None
-    
-    def test_detect_points_fallback_insufficient_points(self):
-        """Test fallback point detection with insufficient contour points"""
-        use_case = ImageTracingUseCase()
-        
-        contour = Mock(spec=Contour)
-        contour.points = [Point(10, 10), Point(20, 10)]
-        contour.area = 50.0
-        contour.perimeter = 30.0
-        
-        config = {
-            'point_max_area': 2000,
-            'point_max_perimeter': 165
-        }
-        
-        result = use_case.detect_points(contour, config)
-        
-        assert result is None
-        contour.get_center.assert_not_called()
-    
-    def test_detect_points_fallback_no_center(self):
-        """Test fallback point detection when contour has no center"""
-        use_case = ImageTracingUseCase()
-        
-        contour = Mock(spec=Contour)
-        contour.points = [Point(10, 10), Point(20, 10), Point(15, 20)]
-        contour.area = 50.0  # Below threshold
-        contour.perimeter = 30.0  # Below threshold
-        contour.get_center.return_value = None
-        
-        config = {
-            'point_max_area': 2000,
-            'point_max_perimeter': 165
-        }
-        
-        result = use_case.detect_points(contour, config)
-        
-        assert result is None
-    
-    def test_detect_points_fallback_default_config(self):
-        """Test fallback point detection using default config values"""
-        use_case = ImageTracingUseCase()
-        
-        contour = Mock(spec=Contour)
-        contour.points = [Point(10, 10), Point(20, 10), Point(15, 20)]
-        contour.area = 50.0  # Below default threshold
-        contour.perimeter = 30.0  # Below default threshold
-        contour.get_center.return_value = Point(15, 13.3)
-        
-        result = use_case.detect_points(contour)
-        
-        assert result.x == 15
-        assert result.y == 13.3
-    
-    def test_get_contour_center(self, use_case):
-        """Test getting contour center coordinates"""
-        contour = Mock(spec=Contour)
-        contour.center = (15.5, 25.5)
-        
-        result = use_case.get_contour_center(contour)
-        
-        assert result == (15.5, 25.5)
-    
     def test_convert_to_contour_entity(self, use_case):
         """Test conversion of raw contour to Contour entity"""
         raw_contour = np.array([[[10, 10]], [[20, 10]], [[15, 20]]], dtype=np.int32)
@@ -425,3 +273,4 @@ class TestImageTracingUseCase:
         
         assert result == mock_contour
         MockContour.from_numpy_contour.assert_called_once_with(raw_contour)
+        

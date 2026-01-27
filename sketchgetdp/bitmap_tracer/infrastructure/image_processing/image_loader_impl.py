@@ -85,3 +85,4 @@ class OpenCVImageLoader(ImageLoader):
             return False
             
         return True
+    

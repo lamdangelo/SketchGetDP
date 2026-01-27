@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from typing import List, Tuple, Optional, Dict
+from typing import Tuple, Optional, Dict
 from .contour_closure_service import ContourClosureService
 
 
@@ -57,8 +57,8 @@ class ContourDetector:
         
         # Extract contours with hierarchy to preserve parent-child relationships
         contours, hierarchy = cv2.findContours(cleaned, cv2.RETR_TREE, cv2.CHAIN_APPROX_TC89_KCOS)
-        
-        # ENSURE ALL CONTOURS ARE CLOSED - THIS IS THE KEY FIX
+
+        # Ensure all contours are closed
         closed_contours = []
         for i, contour in enumerate(contours):
             # Use the closure service to guarantee this contour is closed
@@ -79,68 +79,3 @@ class ContourDetector:
         
         print(f"✅ Found {len(closed_contours)} total contours (all ensured closed)")
         return tuple(closed_contours), hierarchy
-    
-    def preprocess(self, image_data: Dict) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-        """
-        Prepares an image for contour detection by applying preprocessing transformations.
-        
-        Args:
-            image_data: Dictionary containing 'image_array' with the image data
-            
-        Returns:
-            Tuple containing:
-            - Original BGR image as numpy array (or None if loading fails)
-            - Preprocessed binary image ready for contour detection (or None if loading fails)
-        """
-        img = image_data.get('image_array')
-        if img is None:
-            return None, None
-        
-        # Convert to single channel for thresholding operations
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
-        # Dual thresholding strategy for comprehensive feature capture
-        binary1 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                       cv2.THRESH_BINARY_INV, 15, 5)
-        
-        _, binary2 = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-        
-        # Merge thresholding results
-        combined = cv2.bitwise_or(binary1, binary2)
-        
-        # Morphological cleaning to reduce noise and improve contour quality
-        kernel = np.ones((3,3), np.uint8)
-        cleaned = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel, iterations=2)
-        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, kernel, iterations=1)
-        
-        return img, cleaned
-    
-    def detect_with_closure_analysis(self, image_data: Dict) -> Tuple[Optional[tuple], Optional[np.ndarray], List[Dict]]:
-        """
-        Enhanced detection with detailed closure analysis for debugging and quality control.
-        
-        Args:
-            image_data: Dictionary containing 'image_array' with the image data
-            
-        Returns:
-            Tuple containing:
-            - Tuple of closed contours
-            - Contour hierarchy
-            - List of closure analysis reports for each contour
-        """
-        contours, hierarchy = self.detect(image_data)
-        
-        if contours is None:
-            return None, None, []
-        
-        # Generate detailed closure analysis for each contour
-        closure_reports = []
-        for i, contour in enumerate(contours):
-            analysis = self.closure_service.analyze_contour_closure(contour)
-            closure_reports.append(analysis)
-            
-            status = "CLOSED" if analysis['is_closed'] else "OPEN"
-            print(f"  📊 Contour {i+1}: {status}, gap: {analysis['closure_gap']:.2f}px, "
-                  f"area: {analysis['area']:.1f}, points: {analysis['point_count']}")
-        
-        return contours, hierarchy, closure_reports

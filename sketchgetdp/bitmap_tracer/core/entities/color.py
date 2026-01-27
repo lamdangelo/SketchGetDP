@@ -25,8 +25,7 @@ class Color:
     b: int
     g: int
     r: int
-    
-    # Standardized output colors ensure consistent SVG appearance
+
     CATEGORY_HEX_COLORS = {
         ColorCategory.BLUE: "#0000FF",
         ColorCategory.RED: "#FF0000", 
@@ -34,15 +33,15 @@ class Color:
     }
     
     def to_bgr_tuple(self) -> Tuple[int, int, int]:
-        """OpenCV and most image processing libraries use BGR format."""
+        """BGR format for image processing libraries."""
         return (self.b, self.g, self.r)
     
     def to_rgb_tuple(self) -> Tuple[int, int, int]:
-        """Standard RGB format for web and most graphics applications."""
+        """Standard RGB format for web and graphics applications."""
         return (self.r, self.g, self.b)
     
     def to_hex(self) -> str:
-        """Hex format required for SVG color attributes."""
+        """Hex format for SVG color attributes."""
         return f"#{self.r:02x}{self.g:02x}{self.b:02x}".upper()
     
     def categorize(self) -> Tuple[ColorCategory, Optional[str]]:
@@ -111,3 +110,4 @@ class Color:
         blue = int(hex_code[4:6], 16)
         
         return cls(b=blue, g=green, r=red)
+    

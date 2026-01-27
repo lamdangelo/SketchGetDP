@@ -77,7 +77,7 @@ class ColorAnalyzer:
         if (blue_low <= hue <= blue_high) or (b > g + 20 and b > r + 20):
             return ColorCategory.BLUE, "#0000FF"
         
-        # Red classification - handle the two red ranges in HSV
+        # Red classification
         for red_low, red_high in self.red_hue_ranges:
             if red_low <= hue <= red_high:
                 return ColorCategory.RED, "#FF0000"
@@ -205,9 +205,8 @@ class ColorAnalyzer:
 
     def categorize(self, contour, image: np.ndarray) -> Optional[str]:
         """
-        MAIN INTERFACE METHOD - Updated to handle Contour entities properly
+        MAIN INTERFACE METHOD - Categorizes the dominant color of a contour.
         """
-        # Handle both Contour entities and legacy numpy arrays
         if hasattr(contour, 'to_numpy'):
             # It's a Contour entity - convert to numpy for OpenCV processing
             contour_points = contour.to_numpy()
@@ -219,10 +218,6 @@ class ColorAnalyzer:
             contour_points = np.array([[point.x, point.y] for point in contour.points], dtype=np.float32).reshape(-1, 1, 2)
             print(f"🔍 ColorAnalyzer.categorize() called with Contour entity: {len(contour.points)} points, area: {contour.area:.1f}")
             print(f"🔍 Manual numpy shape: {contour_points.shape}, dtype: {contour_points.dtype}")
-        else:
-            # It's a numpy array (legacy support)
-            contour_points = contour
-            print(f"🔍 ColorAnalyzer.categorize() called with numpy contour: {len(contour)} points")
         
         # Check if contour_points is valid
         if contour_points is None or len(contour_points) == 0:
@@ -243,28 +238,3 @@ class ColorAnalyzer:
         else:
             print(f"❌ No dominant color found, got: {hex_color}")
             return None
-
-    def analyze_contour_color(self, contour: np.ndarray, image: np.ndarray) -> Dict:
-        """
-        Performs comprehensive color analysis on a contour.
-        
-        Provides a complete color profile for a contour including dominant color
-        and geometric properties. Useful for debugging and quality analysis.
-        
-        Args:
-            contour: numpy array of contour points to analyze
-            image: source BGR image for color sampling
-            
-        Returns:
-            Dictionary containing:
-            - dominant_color: Hex code of dominant stroke color
-            - contour_area: Geometric area of the contour
-            - contour_points: Number of points in the contour
-        """
-        dominant_color = self.get_dominant_color(contour, image)
-        
-        return {
-            'dominant_color': dominant_color,
-            'contour_area': cv2.contourArea(contour),
-            'contour_points': len(contour)
-        }

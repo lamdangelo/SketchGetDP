@@ -114,27 +114,6 @@ class TestPointDetector:
              patch.object(cv2, 'arcLength', return_value=30):
             
             assert self.detector.detect_point(contour) is None
-    
-    def test_get_contour_center(self):
-        """Provide center calculation without point validation"""
-        contour = np.array([[[0, 0]], [[8, 0]], [[8, 8]], [[0, 8]]], dtype=np.int32)
-        
-        center = self.detector.get_contour_center(contour)
-        
-        assert center.x == 4  # Useful for larger shapes beyond points
-        assert center.y == 4
-    
-    def test_create_point_marker(self):
-        """Generate SVG-compatible representation for rendering"""
-        center = Point(10, 15)
-        marker = self.detector.create_point_marker(center, radius=5)
-        
-        assert marker == {
-            'type': 'circle',
-            'cx': 10,
-            'cy': 15,
-            'r': 5
-        }
 
 
 class TestPointDetectorIntegration:
