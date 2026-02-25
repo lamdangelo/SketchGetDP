@@ -1,6 +1,6 @@
 # Bitmap Tracer
 
-A sophisticated image-to-SVG tracing application that converts bitmap images into clean, scalable vector graphics with intelligent color categorization and structure filtering.
+A image-to-SVG tracing application that converts bitmap images into clean, scalable vector graphics with intelligent color categorization and structure filtering.
 
 ## 🎯 Overview
 
@@ -11,27 +11,6 @@ Bitmap Tracer is a Python-based tool that analyzes bitmap images and converts th
 - **Configurable structure filtering** to keep only the most important elements
 - **Point detection** for small, compact shapes
 - **Automatic contour closure** ensuring all paths form complete loops
-
-## 🏗️ Architecture
-
-The project follows Clean Architecture principles with clear separation of concerns:
-
-### Core Layers
-
-- **`core/`** - Enterprise business rules
-  - `entities/` - Domain models (Point, Contour, Color)
-  - `use_cases/` - Application logic (Image Tracing, Structure Filtering)
-
-- **`infrastructure/`** - Frameworks & drivers
-  - `image_processing/` - Contour detection, color analysis, closure services
-  - `svg_generation/` - SVG creation and shape processing
-  - `configuration/` - Config loading and management
-  - `point_detection/` - Point detection and curve fitting
-
-- **`interfaces/`** - Interface adapters
-  - `controllers/` - Application flow control
-  - `presenters/` - Output formatting (SVG presentation)
-  - `gateways/` - External interfaces (image loading, config access)
 
 ## 🚀 Key Features
 
@@ -59,20 +38,23 @@ The project follows Clean Architecture principles with clear separation of conce
 
 ```
 bitmap_tracer/
-├── core/                    # Business logic
-│   ├── entities/           # Domain models
-│   └── use_cases/          # Application services
-├── infrastructure/          # External concerns
-│   ├── image_processing/   # Computer vision
-│   ├── svg_generation/     # Vector output
-│   ├── configuration/      # Config management
-│   └── point_detection/    # Point analysis
-├── interfaces/             # Adapters
-│   ├── controllers/        # Flow control
-│   ├── presenters/         # Output formatting
-│   └── gateways/           # External interfaces
-├── __main__.py             # Python module entry point
-└── config.yaml            # Configuration
+├── core/                   # Core logic
+│   ├── entities/           # Point, Contour, Color models
+│   └── use_cases/          # Tracing and filtering workflows
+├── infrastructure/         # Technical Implementations
+│   ├── image_processing/   # OpenCV contour detection
+│   ├── svg_generation/     # Creates SVG output
+│   ├── configuration/      # Loads config.yaml
+│   └── point_detection/    # Identifies small shapes
+├── interfaces/             # Connects components
+│   ├── controllers/        # Orchestrates the workflow
+│   ├── presenters/         # Formats output
+│   └── gateways/           # Handles external input
+├── tests/                  # Pytests
+├── __main__.py             # Entry point
+├── config.yaml             # Your settings
+├── pytest.ini              # Pytest initialization
+└── README.md               # This documentation
 ```
 
 ## ⚙️ Configuration
@@ -104,19 +86,10 @@ min_value_black: 50                # Minimum value below which colors are consid
 
 ## 🛠️ Usage
 
-The Bitmap Tracer can be run from the command line in two ways:
-
-### From the sketchgetdp directory as a python module:
+From the sketchgetdp directory:
 ```bash
 python -m bitmap_tracer <path_to_image>
 ```
-
-### From the bitmap_tracer directory:
-```bash
-python main.py <path_to_image>
-```
-
-Where `<path_to_image>` is the path to the bitmap image you want to convert to SVG.
 
 The application will automatically:
 - Load configuration from `config.yaml`
@@ -138,12 +111,3 @@ The tracer generates SVG files with:
 - NumPy - Numerical computations
 - svgwrite - SVG generation
 - PyYAML - Configuration parsing
-
-## 🎨 Use Cases
-
-- Converting hand-drawn sketches to vector graphics
-- Processing technical diagrams and schematics
-- Creating scalable versions of bitmap artwork
-- Extracting structured information from images
-
-The Bitmap Tracer excels at transforming complex bitmap images into clean, manageable vector representations while preserving the essential structure and color information.

@@ -4,38 +4,13 @@ A sophisticated electromagnetic simulation pipeline that converts SVG sketches i
 
 ## 🎯 Overview
 
-SVG to GetDP is a Python-based electromagnetic simulation pipeline that processes SVG files containing electromagnetic structures and generates simulation results through a multi-stage workflow. It features:
+SVG to GetDP is a Python-based electromagnetic simulation pipeline that processes non-freehand drawn SVG files containing electromagnetic structures and generates simulation results through a multi-stage workflow. It features:
 
 - **Three operation modes**: SVG→Gmsh, SVG→Gmsh→GetDP, or Gmsh→GetDP
 - **Configurable physical properties** via YAML configuration
 - **Intelligent SVG parsing** with Bézier curve fitting and corner detection
 - **Fixed color mapping** for physical group identification
 - **Automatic wire grouping** and boundary curve meshing
-
-## 🏗️ Architecture
-
-The project follows Clean Architecture principles with clear separation of concerns:
-
-### Core Layers
-
-- **`core/`** - Enterprise business rules
-  - `entities/` - Domain models (Point, Color, BezierSegment, BoundaryCurve, PhysicalGroup)
-  - `use_cases/` - Application logic (SVG-to-Geometry conversion, Geometry-to-Gmsh conversion, GetDP simulation execution)
-
-- **`infrastructure/`** - Frameworks & drivers
-  - `factories/` - Factory classes for dependency creation
-  - `svg_processing/` - SVG parsing and path extraction
-  - `corner_detection/` - Corner detection for curve segmentation
-  - `bezier_fitting/` - Bézier curve fitting
-  - `boundary_curve_grouper/` - Wire grouping logic
-  - `boundary_curve_mesher/` - Boundary curve meshing
-  - `wire_preprocessor/` - Wire preprocessing for meshing
-
-- **`interfaces/`** - Interface adapters
-  - `controllers/` - Application flow control
-  - `arg_parser/` - Command line argument parsing
-  - `abstractions/` - Interfaces for dependency inversion
-  - `debug/` - Internal visualization and debug output
 
 ## 🚀 Key Features
 
@@ -59,32 +34,40 @@ The project follows Clean Architecture principles with clear separation of conce
 - Visualization of internal geometry
 - Debug output of intermediate processing steps via .txt files
 
+## How It Works
+
+1. **Parse SVG** – Reads paths and identifies colors (Blue = wires, Green = iron, Red = boundaries)
+2. **Detect corners** – Breaks paths at sharp angles for better curve fitting
+3. **Fit Bézier curves** – Creates smooth mathematical representations
+4. **Preprocess wires and outlines** – Preprocesses wires and outlines for meshing with Gmsh
+5. **Generate mesh** – Creates a Gmsh mesh with physical groups
+6. **Run simulation** – Executes GetDP to solve the electromagnetic problem
+
 ## 📁 Project Structure
 ```
 svg_to_getdp/
-├── core/ # Business logic
-│ ├── entities/ # Domain models
-│ └── use_cases/ # Application services
-├── infrastructure/ # External concerns
-│ ├── factories/ # Factory pattern implementations
-│ ├── svg_processing/ # SVG parsing
-│ ├── corner_detection/ # Corner detection
-│ ├── bezier_fitting/ # Bézier fitting
-│ ├── boundary_curve_grouper.py # Wire grouping
-│ ├── boundary_curve_mesher.py # Boundary meshing
-│ └── wire_preprocessor # Wire preprocessing
-├── interfaces/ # Adapters
-│ ├── arg_parser.py # Command line interface
-│ ├── abstractions/ # Dependency interfaces
-│ ├── debug/ # Debug tools
-│ ├── mesher/ # Meshing tools
-│ └── solver/ # Solving tools
-├── tests/ # pytests
-│ ├── core/ # Core layer tests
-│ └── infrastructure/ # Infrastructure tests
-├── __main__.py # Package entry point
-├── config.yaml # Configuration file
-└── rmvp_formulation.pro # GetDP configuration file
+├── core/                         # Core logic
+│ ├── entities/                   # Point, color, outline, etc.
+│ └── use_cases/                  # Conversion workflows
+├── infrastructure/               # Technical Implementations
+│ ├── factories/                  # Creates objects
+│ ├── svg_processing/             # Parses SVG files
+│ ├── corner_detection/           # Finds path corners
+│ ├── bezier_fitting/             # Fits curves to paths
+│ ├── outline_grouper.py          # Groups outlines for preprocessing
+│ ├── outline_preprocessor.py     # Preprocesses outlines for Gmsh
+│ ├── wire_preprocessor.py        # Preprocesses wires for Gmsh
+├── interfaces/                   # Connectors
+│ ├── arg_parser.py               # Command-line interface
+│ ├── abstractions/               # Dependency interfaces
+│ ├── debug/                      # Debugging tools
+│ ├── mesher/                     # Gmsh integration
+│ └── solver/                     # GetDP integration
+├── tests/                        # pytests
+├── __main__.py                   # Entry point
+├── config.yaml                   # Your settings
+├── pytest.ini                    # Pytest initialization
+└── README.md                     # This documentation
 ```
 
 ## ⚙️ Configuration
@@ -122,7 +105,7 @@ physical_values:
 Convert an SVG file to a Gmsh mesh file:
 
 ```bash
-python -m svg_to_getdp drawing.svg --config config.yaml
+python -m svg_to_getdp <path_to_svg> --config <path_to_config>
 ```
 
 ### Mode 2: Full Pipeline (SVG to Simulation)
@@ -130,7 +113,7 @@ python -m svg_to_getdp drawing.svg --config config.yaml
 Convert SVG file to mesh file and run GetDP simulation:
 
 ```bash
-python -m svg_to_getdp drawing.svg --run-simulation --config config.yaml
+python -m svg_to_getdp <path_to_svg> --run-simulation --config <path_to_config>
 ```
 
 ### Mode 3: Simulation Only (Existing Mesh)
@@ -138,7 +121,7 @@ python -m svg_to_getdp drawing.svg --run-simulation --config config.yaml
 Run GetDP simulation on an existing mesh file:
 
 ```bash
-python -m svg_to_getdp --simulation-only existing_mesh.msh --config config.yaml
+python -m svg_to_getdp --simulation-only <path_to_msh> --config <path_to_config>
 ```
 
 ### Additional Options
@@ -149,13 +132,13 @@ python -m svg_to_getdp --simulation-only existing_mesh.msh --config config.yaml
 ### Examples
 ```bash
 # Generate mesh with custom name and no GUI
-python -m svg_to_getdp sketch.svg --mesh-name my_design --no-gui
+python -m svg_to_getdp <path_to_svg> --mesh-name my_design --no-gui
 
 # Full pipeline with custom config
-python -m svg_to_getdp circuit.svg --config custom_config.yaml --run-simulation
+python -m svg_to_getdp <path_to_svg> --config custom_config.yaml --run-simulation
 
 # Get debug output
-python -m svg_to_getdp layout.svg --debug
+python -m svg_to_getdp <path_to_svg> --debug
 ```
 
 ## 📊 Output
@@ -164,9 +147,13 @@ The pipeline generates the following outputs depending on the mode:
 
 ### Mode 1 (SVG → Gmsh)
 
+Inside the sketchgetdp directory inside SketchGetDP:
+
 - **`.msh` file**: Gmsh mesh file with physical groups
 
 ### Mode 2 (SVG → Gmsh → GetDP)
+
+Inside the sketchgetdp directory inside SketchGetDP:
 
 - **`.msh` file**: Gmsh mesh file
 - **`.pro` file**: GetDP problem definition
@@ -174,17 +161,32 @@ The pipeline generates the following outputs depending on the mode:
 
 ### Mode 3 (Gmsh Mesh → GetDP)
 
+Inside the sketchgetdp directory inside SketchGetDP:
+
 - **`.pro` file**: GetDP problem definition
 - **`results/` directory**: GetDP simulation results
 
+### Debug Output
+
+Inside the debug subdirectory of the sketchgetdp directory inside SketchGetDP:
+
+- **`svg_parser_debug_[filename]_[timestamp].txt` file**: SVG Processing Debug output
+- **`corner_detection_debug_[filename]_[timestamp].txt` file**: Corner Detection Debug output
+- **`geometry_debug_[filename]_[timestamp].txt` file**: Internal Geometry Representation Debug output
+- **`geometry_plot_[filename]_[timestamp].png` file**: Internal Geometry Representation Plot
+- **`wire_preprocessor_debug_[filename]_[timestamp].txt` file**: Wire Preprocessing Debug output
+- **`outline_grouping_debug_[filename]_[timestamp].txt` file**: Outline Grouping Debug output
+- **`outline_preprocessing_debug_[filename]_[timestamp].txt` file**: Outline Preprocessing Debug output
+
+
 ## 🔧 Dependencies
 
-- **NumPy** - Numerical computations
-- **svgpathtools** - SVG parsing and path manipulation
-- **PyYAML** - Configuration parsing
-- **Gmsh** - Meshing engine (external dependency)
-- **GetDP** - Finite element solver (external dependency)
-- **matplotlib** - Visualization (optional)
+- **NumPy** - Numerical calculations
+- **svgpathtools** - SVG parsing
+- **PyYAML** - Configuration
+- **Gmsh** - Meshing engine (external)
+- **GetDP** - Finite element solver (external)
+- **matplotlib** - Visualization (optional, for debugging)
 
 ## 🎨 Use Cases
 
@@ -192,5 +194,3 @@ The pipeline generates the following outputs depending on the mode:
 - **Educational Tool**: Visualize electromagnetic field distributions from simple drawings
 - **Design validation**: Quickly test electromagnetic structures before detailed CAD modeling
 - **Mesh generation**: Create quality meshes from vector graphics for various Finite Element Analysis applications
-
-The SVG to GetDP pipeline excels at transforming intuitive SVG sketches into detailed electromagnetic simulations, bridging the gap between conceptual design and numerical analysis while maintaining configurability and reproducability.
